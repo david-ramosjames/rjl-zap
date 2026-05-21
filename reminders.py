@@ -3,7 +3,7 @@ import threading
 import time
 
 import storage
-from config import REMINDER_CHECK_INTERVAL_SECONDS, REMINDER_INTERVAL_HOURS
+from config import NOTIFY_GROUP_MENTION, REMINDER_CHECK_INTERVAL_SECONDS, REMINDER_INTERVAL_HOURS
 
 log = logging.getLogger(__name__)
 
@@ -29,11 +29,12 @@ def _tick(client) -> None:
             storage.mark_workflow_complete(wf["id"])
             continue
         bullets = "\n".join(f"• {i['item_text']}" for i in open_items)
+        mention = f"{NOTIFY_GROUP_MENTION} " if NOTIFY_GROUP_MENTION else ""
         client.chat_postMessage(
             channel=wf["channel_id"],
             thread_ts=wf["parent_ts"],
             text=(
-                f":alarm_clock: Reminder — {len(open_items)} item(s) still need to be calendared:\n"
+                f":alarm_clock: {mention}Reminder — {len(open_items)} item(s) still need to be calendared:\n"
                 f"{bullets}"
             ),
         )

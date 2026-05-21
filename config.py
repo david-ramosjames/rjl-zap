@@ -54,3 +54,11 @@ COMPLETION_REPLY = "COMPLETE"
 
 REMINDER_INTERVAL_HOURS = float(os.getenv("REMINDER_INTERVAL_HOURS", "24"))
 REMINDER_CHECK_INTERVAL_SECONDS = int(os.getenv("REMINDER_CHECK_INTERVAL_SECONDS", "300"))
+
+# Optional Slack user group to @-mention in reminders (e.g. @legalassistants).
+# Set NOTIFY_GROUP_ID to the group's Slack ID (find it: right-click the group name
+# in Slack → Copy link — the ID looks like S12345678).
+# Set NOTIFY_GROUP_NAME to the display name shown after the @.
+_group_id = os.getenv("NOTIFY_GROUP_ID", "")
+_group_name = os.getenv("NOTIFY_GROUP_NAME", "legalassistants")
+NOTIFY_GROUP_MENTION = f"<!subteam^{_group_id}|{_group_name}>" if _group_id else ""
