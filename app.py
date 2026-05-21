@@ -19,21 +19,14 @@ app = App(token=os.environ["SLACK_BOT_TOKEN"])
 def _find_trigger(text: str) -> TriggerConfig | None:
     lowered = text.lower()
     for t in TRIGGERS.values():
-        if t.phrase in lowered and t.required_emoji in text:
+        if t.phrase in lowered:
             return t
     return None
 
 
-@app.event("message")
-def handle_message(event, client):
-    if event.get("subtype") in {"message_changed", "bot_message", "message_deleted"}:
-        return
-    if event.get("bot_id"):
-        return
+@app.event("app_mention")
+def handle_app_mention(event, client):
     text = event.get("text") or ""
-    if not text:
-        return
-
     parent_ts = event.get("thread_ts")
     is_top_level = not parent_ts or parent_ts == event.get("ts")
 
@@ -41,9 +34,19 @@ def handle_message(event, client):
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
-            return
+        else:
+            client.chat_postMessage(
+                channel=event["channel"],
+                thread_ts=event["ts"],
+                text=(
+                    "I didn't recognize a calendaring trigger in that message. "
+                    "Try mentioning me with one of: "
+                    + ", ".join(f"`{t.phrase}`" for t in TRIGGERS.values())
+                ),
+            )
+        return
 
-    if parent_ts and COMPLETION_REPLY.lower() in text.lower():
+    if COMPLETION_REPLY.lower() in text.lower():
         wf = storage.workflow_by_thread(event["channel"], parent_ts)
         if wf and not wf.get("completed_at"):
             storage.force_complete_workflow(wf["id"])
@@ -76,7 +79,7 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
         thread_ts=parent_ts,
         text=(
             f"React :{COMPLETION_EMOJI}: on each item above when done, "
-            f"or reply `{COMPLETION_REPLY}` to close the checklist."
+            f"or reply by mentioning me with `{COMPLETION_REPLY}` to close the checklist."
         ),
     )
 

@@ -6,8 +6,7 @@ from typing import Dict, List
 @dataclass
 class TriggerConfig:
     name: str
-    phrase: str            # case-insensitive substring match against message text
-    required_emoji: str    # must appear in the same message — gates false positives
+    phrase: str            # case-insensitive substring match against the @-mention text
     announcement: str      # parent message posted as a thread reply
     items: List[str]       # checklist items, each posted as its own thread reply
 
@@ -16,7 +15,6 @@ TRIGGERS: Dict[str, TriggerConfig] = {
     "answer_filed": TriggerConfig(
         name="answer_filed",
         phrase="answer filed",
-        required_emoji=":gavel:",
         announcement=":rotating_light: *Answer filed detected* — starting calendaring checklist",
         items=[
             ":date: Calendar Initial Disclosures",
@@ -28,7 +26,6 @@ TRIGGERS: Dict[str, TriggerConfig] = {
     "discovery_received": TriggerConfig(
         name="discovery_received",
         phrase="discovery requests received",
-        required_emoji=":mag:",
         announcement=":rotating_light: *Discovery requests received* — starting calendaring checklist",
         items=[
             ":date: Calendar 30-day response deadline",
@@ -39,7 +36,6 @@ TRIGGERS: Dict[str, TriggerConfig] = {
     "scheduling_order": TriggerConfig(
         name="scheduling_order",
         phrase="scheduling order agreed",
-        required_emoji=":calendar:",
         announcement=":rotating_light: *Scheduling order agreed* — starting calendaring checklist",
         items=[
             ":date: Calendar discovery cutoff",
