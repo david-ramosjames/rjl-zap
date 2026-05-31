@@ -70,6 +70,124 @@ MEDIATION = MediationConfig(
     ],
 )
 
+_H = 3600       # seconds in an hour
+_D = 86400      # seconds in a day
+
+DISBURSEMENT_MASTER_CHECKLIST = """:hourglass_flowing_sand: *30-Day Disbursement Workflow Started* — {mentions}
+
+*📋 Phase 1 — Case Settlement*
+• Confirm settlement amount and authority
+• Obtain signed settlement agreement
+• Send settlement confirmation to all parties
+
+*🏥 Phase 2 — Medical Bills & Reductions*
+• Gather all outstanding medical bills
+• Request reductions from providers
+• Confirm final lien amounts
+
+*📝 Phase 3 — Drafting & Release*
+• Draft settlement release
+• Obtain client signature on release
+• Send executed release to defense counsel
+
+*💰 Phase 4 — Funding*
+• Confirm receipt of settlement funds
+• Issue checks for liens and expenses
+• Confirm all deposits cleared
+
+*💵 Phase 5 — Disbursement*
+• Reconcile all expenses
+• Prepare final disbursement statement
+• Disburse net proceeds to client
+
+React ✅ on each phase above as it is completed."""
+
+
+@dataclass
+class DisbursementConfig:
+    phrase: str
+    # (delay_seconds, message_text) — {mentions} replaced with team extracted from channel topic
+    sequence: List[Tuple[float, str]] = field(default_factory=list)
+
+
+DISBURSEMENT = DisbursementConfig(
+    phrase="start disbursement",
+    sequence=[
+        # Times are cumulative from trigger
+        (30 * 60, (
+            ":hourglass_flowing_sand: *Disbursement Overview* — {mentions}\n\n"
+            "The 30-day disbursement clock is running. Here's a quick summary of what needs to happen:\n"
+            "• Phase 1 (now): Lock in settlement details\n"
+            "• Phase 2 (~Day 1): Gather and negotiate medical bills\n"
+            "• Phase 3 (~Day 7): Draft and execute release\n"
+            "• Phase 4 (~Day 14): Fund and issue checks\n"
+            "• Phase 5 (~Day 21–30): Final disbursement to client\n\n"
+            "Tag me with `COMPLETE` in this thread when everything is done."
+        )),
+        (3 * _H, (
+            ":no_entry: *Action needed — {mentions}*\n\n"
+            "• Cancel any outstanding orders related to this case\n"
+            "• Begin gathering all invoices, liens, and expense records\n"
+            "• Confirm settlement authority is in place"
+        )),
+        (22 * _H, (
+            ":hospital: *Medical Bills Check-In — {mentions}*\n\n"
+            "• Have all medical bills been collected?\n"
+            "• Have reduction requests been sent to providers?\n"
+            "• Any outstanding liens that need follow-up?"
+        )),
+        (24 * _H, (
+            ":handshake: *Case Settlement Confirmation — {mentions}*\n\n"
+            "• Is the settlement amount confirmed and agreed?\n"
+            "• Has the signed settlement agreement been received?\n"
+            "• Has confirmation gone to all parties?"
+        )),
+        (3 * _D, (
+            ":scissors: *Reductions Update — {mentions}*\n\n"
+            "• Status on medical bill reductions?\n"
+            "• Have all lien holders responded?\n"
+            "• Are final lien amounts confirmed?"
+        )),
+        (7 * _D, (
+            ":pen: *Release Signatures — {mentions}*\n\n"
+            "• Has the settlement release been drafted?\n"
+            "• Has the client signed the release?\n"
+            "• Has the executed release been sent to defense counsel?"
+        )),
+        (14 * _D, (
+            ":moneybag: *Funding & Check Issuance — {mentions}*\n\n"
+            "• Have settlement funds been received?\n"
+            "• Have checks been issued for liens and expenses?\n"
+            "• Have all deposits cleared?"
+        )),
+        (17 * _D, (
+            ":bank: *Deposit Confirmation — {mentions}*\n\n"
+            "• Confirm all checks have been deposited and cleared\n"
+            "• Any outstanding items before final disbursement?"
+        )),
+        (21 * _D, (
+            ":receipt: *Expense Reconciliation — {mentions}*\n\n"
+            "• Reconcile all case expenses\n"
+            "• Prepare the final disbursement statement\n"
+            "• Review with supervising attorney before disbursing to client"
+        )),
+        (30 * _D, (
+            ":rotating_light: *30-Day Disbursement Deadline — {mentions}*\n\n"
+            "Today is the target completion date. Please confirm:\n"
+            "• Net proceeds have been disbursed to the client\n"
+            "• Final disbursement statement is signed\n"
+            "• File is ready to close\n\n"
+            "Reply `@Jamie COMPLETE` in this thread to close out the workflow."
+        )),
+    ],
+)
+
+# Slack user IDs allowed to trigger the disbursement workflow (comma-separated)
+_raw_auth = os.getenv("DISBURSEMENT_AUTHORIZED_USER_IDS", "")
+DISBURSEMENT_AUTHORIZED_USER_IDS: set[str] = {
+    uid.strip() for uid in _raw_auth.split(",") if uid.strip()
+}
+
 # Reaction name (no colons) that marks an individual item complete
 COMPLETION_EMOJI = "white_check_mark"
 

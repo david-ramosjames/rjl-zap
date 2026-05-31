@@ -10,7 +10,11 @@ import re
 
 import reminders
 import storage
-from config import COMPLETION_EMOJI, COMPLETION_REPLY, MEDIATION, TRIGGERS, TriggerConfig
+from config import (
+    COMPLETION_EMOJI, COMPLETION_REPLY,
+    DISBURSEMENT, DISBURSEMENT_AUTHORIZED_USER_IDS, DISBURSEMENT_MASTER_CHECKLIST,
+    MEDIATION, TRIGGERS, TriggerConfig,
+)
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -37,11 +41,17 @@ def handle_app_mention(event, client):
         if MEDIATION.phrase in text.lower():
             _start_mediation(client, event["channel"], event["ts"], text)
             return
+        if DISBURSEMENT.phrase in text.lower():
+            _start_disbursement(client, event["channel"], event["ts"], event.get("user", ""))
+            return
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
         else:
-            all_phrases = [f"`{MEDIATION.phrase}`"] + [f"`{t.phrase}`" for t in TRIGGERS.values()]
+            all_phrases = (
+                [f"`{MEDIATION.phrase}`", f"`{DISBURSEMENT.phrase}`"]
+                + [f"`{t.phrase}`" for t in TRIGGERS.values()]
+            )
             client.chat_postMessage(
                 channel=event["channel"],
                 thread_ts=event["ts"],
@@ -94,6 +104,54 @@ def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> Non
 
     storage.create_workflow(channel, parent_ts, "mediation_checklist", [])
     log.info("started mediation workflow channel=%s parent_ts=%s participants=%s", channel, parent_ts, participants)
+
+
+def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> None:
+    if DISBURSEMENT_AUTHORIZED_USER_IDS and user_id not in DISBURSEMENT_AUTHORIZED_USER_IDS:
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=parent_ts,
+            text=":no_entry: Sorry, you're not authorized to start the disbursement workflow.",
+        )
+        log.warning("unauthorized disbursement attempt by user=%s", user_id)
+        return
+
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
+
+    # Read channel topic to extract team member mentions
+    try:
+        info = client.conversations_info(channel=channel)
+        topic = info["channel"]["topic"]["value"] or ""
+    except Exception:
+        topic = ""
+        log.debug("could not fetch channel topic", exc_info=True)
+
+    bot_id = client.auth_test()["user_id"]
+    mentioned = re.findall(r"<@([A-Z0-9]+)>", topic)
+    participants = [uid for uid in mentioned if uid != bot_id][:3]
+    mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
+
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=parent_ts,
+        text=DISBURSEMENT_MASTER_CHECKLIST.format(mentions=mention_str),
+    )
+
+    now = time.time()
+    for delay, template in DISBURSEMENT.sequence:
+        storage.schedule_message(
+            channel_id=channel,
+            thread_ts=parent_ts,
+            send_after=now + delay,
+            text=template.format(mentions=mention_str),
+        )
+
+    storage.create_workflow(channel, parent_ts, "disbursement", [])
+    log.info(
+        "started disbursement workflow channel=%s parent_ts=%s triggered_by=%s participants=%s",
+        channel, parent_ts, user_id, participants,
+    )
 
 
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:
