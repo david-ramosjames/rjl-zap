@@ -635,38 +635,68 @@
       </div>
     </div>
 
-    <!-- Communication Log -->
+    <!-- Recent Contact -->
     <div class="cmd-card">
       <div class="cmd-header" style="background:#ecfeff;color:#155e75">
-        <i class="bi bi-mailbox"></i> Communication Log
+        <i class="bi bi-chat-dots"></i> Recent Contact
       </div>
       <div class="cmd-body">
-        <p>Logs any out-of-band client communication to a Google Sheet — emails, texts, letters, mail, and faxes. The bot detects the type from the message, parses the case number from the channel name, and appends a row to the configured spreadsheet.</p>
+        <p>Logs any client interaction to the Recent Contact Google Sheet — emails, texts, calls, voicemails, letters, mail, faxes, and in-person visits. Use this any time you've reached out to or heard from a client.</p>
 
-        <div class="cmd-grid">
+        <div class="type-label">Format</div>
+        <div class="type-this">@RJL-zap recent contact &lt;type&gt; - &lt;details&gt;</div>
+
+        <div class="cmd-grid mt-3">
           <div>
             <div class="type-label">Email</div>
-            <div class="type-this">@RJL-zap email Re: discovery responses</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact email - Re: discovery responses</div>
+          </div>
+          <div>
+            <div class="type-label">Phone Call</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact call - discussed depo prep, 15 min</div>
+          </div>
+          <div>
+            <div class="type-label">In-Person Visit</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact visit - client came in to sign release</div>
+          </div>
+          <div>
+            <div class="type-label">Voicemail</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact voicemail - left vm re: settlement offer</div>
           </div>
           <div>
             <div class="type-label">Text Message</div>
-            <div class="type-this">@RJL-zap texted client re: depo prep</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact text - confirmed appt tomorrow 10am</div>
           </div>
           <div>
             <div class="type-label">Letter / Mail / Fax</div>
-            <div class="type-this">@RJL-zap mailed signed release</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact mail - sent signed release</div>
           </div>
         </div>
 
         <div class="what-happens mt-3">
-          <strong>One row gets appended with:</strong>
+          <strong>Accepted types:</strong> <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">email</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">text</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">call</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">voicemail</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">letter</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">mail</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">fax</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">visit</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">other</code>
+          <br>
+          Synonyms also work — e.g. <em>called</em>, <em>texted</em>, <em>spoke with</em>, <em>met with</em>, <em>dropped by</em>, <em>left vm</em>.
+        </div>
+
+        <div class="what-happens mt-3">
+          <strong>Row schema:</strong>
           <ul class="mt-1 mb-0">
             <li>Timestamp (UTC)</li>
             <li>Slack channel name &amp; ID</li>
             <li>Case number &amp; case name (parsed from channel name, e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">smith-john-12345</code>)</li>
-            <li>Type (email / text / letter / mail / fax)</li>
-            <li>Subject / note (cleaned text)</li>
+            <li>Type (canonical: email / text / call / voicemail / letter / mail / fax / visit / other)</li>
+            <li>Details (the text after the type)</li>
             <li>Full original Slack message</li>
+            <li>Logged by (the person who typed the command)</li>
           </ul>
         </div>
 
@@ -826,14 +856,14 @@
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq-comms">
-        How does the communication log work?
+        How does Recent Contact work?
         <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq-comms" class="collapse">
         <div class="faq-a">
-          Mention @RJL-zap in any case channel and include one of the words <em>email</em>, <em>text</em>, <em>texted</em>, <em>letter</em>, <em>mail</em>, <em>mailed</em>, or <em>fax</em> along with a quick note (subject line, what was sent, etc).
-          The bot detects the type from the message, parses the case number from the channel name (expects <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">case-name-12345</code> format), and appends a row to the Google Sheet configured in admin settings.
-          Note: explicit workflow phrases like <em>case setup</em> or <em>mediation checklist</em> take priority — if your message contains one of those, the communication log will not fire.
+          Type <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact &lt;type&gt; - &lt;details&gt;</code> in any case channel.
+          The bot parses the type, parses the case number from the channel name (expects <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">case-name-12345</code> format), and appends a row to the Google Sheet configured in admin settings.
+          The "- " separator is optional — `recent contact call discussed depo prep` works too. If you type <em>recent contact</em> without a recognized type, the bot replies with usage instructions in the thread.
         </div>
       </div>
     </div>

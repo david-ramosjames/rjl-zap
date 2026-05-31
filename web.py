@@ -61,17 +61,17 @@ SETTINGS = [
         "help": "How often to nudge on open checklist items. Default: 24.",
     },
     {
-        "key": "comms_log_spreadsheet_id",
-        "label": "Communication Log — Google Sheet ID",
-        "help": "Spreadsheet ID for logging emails/texts/letters/faxes. "
+        "key": "recent_contact_spreadsheet_id",
+        "label": "Recent Contact — Google Sheet ID",
+        "help": "Spreadsheet ID for logging client contacts (emails, calls, visits, etc). "
                 "Found in the sheet URL between /d/ and /edit. Requires the "
                 "GOOGLE_SERVICE_ACCOUNT_JSON env var and the sheet shared with "
                 "the service account email.",
     },
     {
-        "key": "comms_log_sheet_name",
-        "label": "Communication Log — Tab Name",
-        "help": "Worksheet tab name within the spreadsheet. Default: comms_log "
+        "key": "recent_contact_sheet_name",
+        "label": "Recent Contact — Tab Name",
+        "help": "Worksheet tab name within the spreadsheet. Default: Recent Contact "
                 "(auto-created with headers if it doesn't exist).",
     },
 ]

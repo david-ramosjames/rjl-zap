@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-import comms_log
+import recent_contact
 import reminders
 import storage
 import web
@@ -37,28 +37,58 @@ def _ids_from_config(key: str) -> list[str]:
     return [uid.strip() for uid in raw.split(",") if uid.strip()]
 
 
-def _log_communication(client, event: dict, comm_type: str) -> None:
+_CONTACT_ICONS = {
+    "email":     ":email:",
+    "text":      ":speech_balloon:",
+    "voicemail": ":studio_microphone:",
+    "call":      ":telephone_receiver:",
+    "letter":    ":envelope:",
+    "mail":      ":mailbox:",
+    "fax":       ":fax:",
+    "visit":     ":handshake:",
+    "other":     ":pencil:",
+}
+
+_RECENT_CONTACT_USAGE = (
+    ":information_source: *Recent Contact* — log a client interaction to the tracker.\n"
+    "Format: `@RJL-zap recent contact <type> - <details>`\n"
+    "Types: `email`, `text`, `call`, `voicemail`, `letter`, `mail`, `fax`, `visit`, `other`\n\n"
+    "Examples:\n"
+    "• `@RJL-zap recent contact email - Re: discovery responses sent`\n"
+    "• `@RJL-zap recent contact call - 15 min, discussed depo prep`\n"
+    "• `@RJL-zap recent contact visit - client came in to sign release`\n"
+    "• `@RJL-zap recent contact voicemail - left vm re: settlement offer`"
+)
+
+
+def _log_recent_contact(client, event: dict) -> None:
     channel = event["channel"]
     parent_ts = event["ts"]
-    if not storage.get_config("comms_log_spreadsheet_id").strip():
+    text = event.get("text") or ""
+
+    contact_type, details = recent_contact.parse(text)
+    if not contact_type:
+        client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=_RECENT_CONTACT_USAGE)
+        return
+
+    if not storage.get_config("recent_contact_spreadsheet_id").strip():
         client.chat_postMessage(
             channel=channel,
             thread_ts=parent_ts,
             text=(
-                ":warning: I detected a *" + comm_type + "* to log, but the "
-                "communication log spreadsheet isn't configured yet. "
-                "Ask an admin to set it on the help page."
+                f":warning: Got a *{contact_type}* to log, but the Recent Contact "
+                f"spreadsheet isn't configured yet. Ask an admin to set it on the help page."
             ),
         )
         return
 
-    comms_log.log_communication_async(client, event, comm_type)
-    icon = {"email": ":email:", "text": ":speech_balloon:", "letter": ":envelope:",
-            "mail": ":mailbox:", "fax": ":fax:"}.get(comm_type, ":pencil:")
+    recent_contact.log_contact_async(client, event, contact_type, details)
+    icon = _CONTACT_ICONS.get(contact_type, ":pencil:")
+    summary = f" — _{details}_" if details else ""
     client.chat_postMessage(
         channel=channel,
         thread_ts=parent_ts,
-        text=f"{icon} Logged *{comm_type}* to the communication tracker.",
+        text=f"{icon} Logged *{contact_type}*{summary}",
     )
 
 
@@ -76,7 +106,8 @@ def _post_help(client, channel: str, parent_ts: str) -> None:
             f"• `@RJL-zap attorney intro @attorney` — 72-hour client contact reminder\n"
             f"• `@RJL-zap case setup @person` — intake document checklist\n"
             f"• `@RJL-zap new case` — notify the case assignee\n"
-            f"• `@RJL-zap email|text|letter|mail|fax ...` — log client communication to the tracker\n"
+            f"• `@RJL-zap recent contact <type> - <details>` — log a client interaction\n"
+            f"   types: email, text, call, voicemail, letter, mail, fax, visit, other\n"
         ),
     )
 
@@ -102,6 +133,11 @@ def handle_app_mention(event, client):
         if stripped in HELP_PHRASES or any(stripped.startswith(p) for p in HELP_PHRASES):
             _post_help(client, event["channel"], event["ts"])
             return
+
+        if recent_contact.is_recent_contact(lowered):
+            _log_recent_contact(client, event)
+            return
+
         if MEDIATION.phrase in lowered:
             _start_mediation(client, event["channel"], event["ts"], text)
             return
@@ -132,11 +168,6 @@ def handle_app_mention(event, client):
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
-            return
-
-        comm_type = comms_log.detect_comm_type(text)
-        if comm_type:
-            _log_communication(client, event, comm_type)
             return
 
         all_phrases = (
