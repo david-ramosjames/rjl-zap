@@ -1,20 +1,20 @@
 import logging
 import os
+import re
 import time
+import threading
 
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-import re
-
 import reminders
 import storage
+import web
 from config import (
-    ATTORNEY_INTRO, ATTORNEY_INTRO_ESCALATION_IDS,
-    CASE_SETUP, CASE_SETUP_ESCALATION_IDS,
+    ATTORNEY_INTRO, CASE_SETUP,
     COMPLETION_EMOJI, COMPLETION_REPLY,
-    DISBURSEMENT, DISBURSEMENT_AUTHORIZED_USER_IDS, DISBURSEMENT_MASTER_CHECKLIST,
+    DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
     FollowUpConfig,
     MEDIATION, TRIGGERS, TriggerConfig,
 )
@@ -24,6 +24,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("calendar-bot")
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+
+def _ids_from_config(key: str) -> list[str]:
+    raw = storage.get_config(key)
+    return [uid.strip() for uid in raw.split(",") if uid.strip()]
 
 
 def _find_trigger(text: str) -> TriggerConfig | None:
@@ -51,13 +56,15 @@ def handle_app_mention(event, client):
         if ATTORNEY_INTRO.phrase in lowered:
             _start_followup_workflow(
                 client, event["channel"], event["ts"], text,
-                ATTORNEY_INTRO, ATTORNEY_INTRO_ESCALATION_IDS, "attorney_intro",
+                ATTORNEY_INTRO, _ids_from_config("attorney_intro_escalation_user_ids"),
+                "attorney_intro",
             )
             return
         if CASE_SETUP.phrase in lowered:
             _start_followup_workflow(
                 client, event["channel"], event["ts"], text,
-                CASE_SETUP, CASE_SETUP_ESCALATION_IDS, "case_setup",
+                CASE_SETUP, _ids_from_config("case_setup_escalation_user_ids"),
+                "case_setup",
             )
             return
         trigger = _find_trigger(text)
@@ -90,7 +97,7 @@ def handle_app_mention(event, client):
             client.chat_postMessage(
                 channel=event["channel"],
                 thread_ts=parent_ts,
-                text=":tada: All calendaring items marked complete. Closing checklist.",
+                text=":tada: All items marked complete. Closing checklist.",
             )
 
 
@@ -98,7 +105,6 @@ def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> Non
     if storage.workflow_by_thread(channel, parent_ts):
         return
 
-    # Extract all <@UXXXXXXX> mentions except the bot itself
     bot_id = client.auth_test()["user_id"]
     mentioned = re.findall(r"<@([A-Z0-9]+)>", raw_text)
     participants = [uid for uid in mentioned if uid != bot_id]
@@ -124,11 +130,13 @@ def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> Non
         )
 
     storage.create_workflow(channel, parent_ts, "mediation_checklist", [])
-    log.info("started mediation workflow channel=%s parent_ts=%s participants=%s", channel, parent_ts, participants)
+    log.info("started mediation workflow channel=%s parent_ts=%s participants=%s",
+             channel, parent_ts, participants)
 
 
 def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> None:
-    if DISBURSEMENT_AUTHORIZED_USER_IDS and user_id not in DISBURSEMENT_AUTHORIZED_USER_IDS:
+    authorized = _ids_from_config("disbursement_authorized_user_ids")
+    if authorized and user_id not in authorized:
         client.chat_postMessage(
             channel=channel,
             thread_ts=parent_ts,
@@ -140,7 +148,6 @@ def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> N
     if storage.workflow_by_thread(channel, parent_ts):
         return
 
-    # Read channel topic to extract team member mentions
     try:
         info = client.conversations_info(channel=channel)
         topic = info["channel"]["topic"]["value"] or ""
@@ -169,10 +176,8 @@ def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> N
         )
 
     storage.create_workflow(channel, parent_ts, "disbursement", [])
-    log.info(
-        "started disbursement workflow channel=%s parent_ts=%s triggered_by=%s participants=%s",
-        channel, parent_ts, user_id, participants,
-    )
+    log.info("started disbursement workflow channel=%s parent_ts=%s triggered_by=%s participants=%s",
+             channel, parent_ts, user_id, participants)
 
 
 def _start_followup_workflow(
@@ -255,10 +260,8 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
     )
 
     storage.create_workflow(channel, parent_ts, trigger.name, item_records)
-    log.info(
-        "started workflow channel=%s parent_ts=%s trigger=%s items=%d",
-        channel, parent_ts, trigger.name, len(item_records),
-    )
+    log.info("started workflow channel=%s parent_ts=%s trigger=%s items=%d",
+             channel, parent_ts, trigger.name, len(item_records))
 
 
 @app.event("reaction_added")
@@ -293,13 +296,14 @@ def _maybe_finalize(client, workflow_id: int) -> None:
     client.chat_postMessage(
         channel=wf["channel_id"],
         thread_ts=wf["parent_ts"],
-        text=":tada: All calendaring items complete. Nice work!",
+        text=":tada: All items complete. Nice work!",
     )
 
 
 def main() -> None:
     storage.init_db()
     reminders.start_reminder_loop(app.client)
+    threading.Thread(target=web.start, daemon=True).start()
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
 

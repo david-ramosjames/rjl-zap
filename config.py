@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
@@ -182,13 +181,6 @@ DISBURSEMENT = DisbursementConfig(
     ],
 )
 
-# Slack user IDs allowed to trigger the disbursement workflow (comma-separated)
-_raw_auth = os.getenv("DISBURSEMENT_AUTHORIZED_USER_IDS", "")
-DISBURSEMENT_AUTHORIZED_USER_IDS: set[str] = {
-    uid.strip() for uid in _raw_auth.split(",") if uid.strip()
-}
-
-
 @dataclass
 class FollowUpConfig:
     """Generic config for workflows that post a task, then escalate if no 'done' reply."""
@@ -199,11 +191,6 @@ class FollowUpConfig:
     initial_delay_seconds: float
     check_delay_seconds: float    # when to check for done and maybe escalate
 
-
-_atty_escalation_raw = os.getenv("ATTORNEY_INTRO_ESCALATION_USER_IDS", "")
-ATTORNEY_INTRO_ESCALATION_IDS: List[str] = [
-    uid.strip() for uid in _atty_escalation_raw.split(",") if uid.strip()
-]
 
 ATTORNEY_INTRO = FollowUpConfig(
     phrase="attorney intro",
@@ -222,11 +209,6 @@ ATTORNEY_INTRO = FollowUpConfig(
         "{{escalation}}Please follow up urgently."
     ),
 )
-
-_case_setup_escalation_raw = os.getenv("CASE_SETUP_ESCALATION_USER_IDS", "")
-CASE_SETUP_ESCALATION_IDS: List[str] = [
-    uid.strip() for uid in _case_setup_escalation_raw.split(",") if uid.strip()
-]
 
 CASE_SETUP = FollowUpConfig(
     phrase="case setup",
@@ -248,19 +230,6 @@ CASE_SETUP = FollowUpConfig(
     ),
 )
 
-# Reaction name (no colons) that marks an individual item complete
 COMPLETION_EMOJI = "white_check_mark"
-
-# Thread reply text that force-closes the entire checklist
 COMPLETION_REPLY = "COMPLETE"
-
-REMINDER_INTERVAL_HOURS = float(os.getenv("REMINDER_INTERVAL_HOURS", "24"))
-REMINDER_CHECK_INTERVAL_SECONDS = int(os.getenv("REMINDER_CHECK_INTERVAL_SECONDS", "300"))
-
-# Optional Slack user group to @-mention in reminders (e.g. @legalassistants).
-# Set NOTIFY_GROUP_ID to the group's Slack ID (find it: right-click the group name
-# in Slack → Copy link — the ID looks like S12345678).
-# Set NOTIFY_GROUP_NAME to the display name shown after the @.
-_group_id = os.getenv("NOTIFY_GROUP_ID", "")
-_group_name = os.getenv("NOTIFY_GROUP_NAME", "legalassistants")
-NOTIFY_GROUP_MENTION = f"<!subteam^{_group_id}|{_group_name}>" if _group_id else ""
+REMINDER_CHECK_INTERVAL_SECONDS = 300

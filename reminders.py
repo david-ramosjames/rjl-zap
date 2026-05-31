@@ -3,7 +3,7 @@ import threading
 import time
 
 import storage
-from config import NOTIFY_GROUP_MENTION, REMINDER_CHECK_INTERVAL_SECONDS, REMINDER_INTERVAL_HOURS
+from config import REMINDER_CHECK_INTERVAL_SECONDS
 
 log = logging.getLogger(__name__)
 
@@ -59,21 +59,26 @@ def _tick(client) -> None:
             log.exception("failed to send scheduled message id=%s", msg["id"])
 
     # Periodic reminders for open reaction-tracked checklists
-    cutoff = now - REMINDER_INTERVAL_HOURS * 3600
+    reminder_hours = float(storage.get_config("reminder_interval_hours", default="24"))
+    cutoff = now - reminder_hours * 3600
+    group_id = storage.get_config("notify_group_id")
+    group_name = storage.get_config("notify_group_name", default="legalassistants")
+    notify_mention = f"<!subteam^{group_id}|{group_name}> " if group_id else ""
+
+    skip_triggers = {"mediation_checklist", "disbursement", "attorney_intro", "case_setup"}
     for wf in storage.open_workflows_due_for_reminder(cutoff):
-        if wf["trigger_name"] == "mediation_checklist":
+        if wf["trigger_name"] in skip_triggers:
             continue
         open_items = storage.workflow_open_items(wf["id"])
         if not open_items:
             storage.mark_workflow_complete(wf["id"])
             continue
         bullets = "\n".join(f"• {i['item_text']}" for i in open_items)
-        mention = f"{NOTIFY_GROUP_MENTION} " if NOTIFY_GROUP_MENTION else ""
         client.chat_postMessage(
             channel=wf["channel_id"],
             thread_ts=wf["parent_ts"],
             text=(
-                f":alarm_clock: {mention}Reminder — {len(open_items)} item(s) still need to be calendared:\n"
+                f":alarm_clock: {notify_mention}Reminder — {len(open_items)} item(s) still need to be calendared:\n"
                 f"{bullets}"
             ),
         )

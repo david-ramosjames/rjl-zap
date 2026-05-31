@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     done_keyword TEXT
 );
 
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, send_after);
 """
@@ -201,3 +206,29 @@ def mark_scheduled_sent(message_id: int) -> None:
             "UPDATE scheduled_messages SET sent_at = ? WHERE id = ?",
             (time.time(), message_id),
         )
+
+
+def get_config(key: str, env_fallback: str = "", default: str = "") -> str:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()
+        if row and row["value"]:
+            return row["value"]
+    if env_fallback:
+        import os
+        return os.getenv(env_fallback, default)
+    return default
+
+
+def set_config(key: str, value: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO config (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+def get_all_config() -> dict:
+    with connect() as conn:
+        rows = conn.execute("SELECT key, value FROM config").fetchall()
+        return {r["key"]: r["value"] for r in rows}
