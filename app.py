@@ -27,10 +27,31 @@ log = logging.getLogger("calendar-bot")
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 
+HELP_PHRASES = ("help", "faq", "commands", "how do i use", "what can you do", "what do you do")
+FAQ_URL = os.getenv("FAQ_URL", "https://rjl-zap.up.railway.app/")
+
 
 def _ids_from_config(key: str) -> list[str]:
     raw = storage.get_config(key)
     return [uid.strip() for uid in raw.split(",") if uid.strip()]
+
+
+def _post_help(client, channel: str, parent_ts: str) -> None:
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=parent_ts,
+        text=(
+            f":book: *RJL-zap — Quick Help*\n"
+            f"Full command reference, examples, and FAQ are on the help page:\n"
+            f"<{FAQ_URL}|{FAQ_URL}>\n\n"
+            f"*Common commands:*\n"
+            f"• `@RJL-zap answer filed` — calendar checklist for an answer\n"
+            f"• `@RJL-zap mediation checklist @people` — mediation prep + follow-ups\n"
+            f"• `@RJL-zap attorney intro @attorney` — 72-hour client contact reminder\n"
+            f"• `@RJL-zap case setup @person` — intake document checklist\n"
+            f"• `@RJL-zap new case` — notify the case assignee\n"
+        ),
+    )
 
 
 def _find_trigger(text: str) -> TriggerConfig | None:
@@ -49,6 +70,11 @@ def handle_app_mention(event, client):
 
     if is_top_level:
         lowered = text.lower()
+        # Strip the bot's own @-mention so phrases like "help" don't collide with user names
+        stripped = re.sub(r"<@[A-Z0-9]+>", "", lowered).strip()
+        if stripped in HELP_PHRASES or any(stripped.startswith(p) for p in HELP_PHRASES):
+            _post_help(client, event["channel"], event["ts"])
+            return
         if MEDIATION.phrase in lowered:
             _start_mediation(client, event["channel"], event["ts"], text)
             return
@@ -98,7 +124,8 @@ def handle_app_mention(event, client):
                 thread_ts=event["ts"],
                 text=(
                     "I didn't recognize a trigger in that message. "
-                    "Try mentioning me with one of: " + ", ".join(all_phrases)
+                    "Try mentioning me with one of: " + ", ".join(all_phrases) +
+                    f"\n\nOr type `@RJL-zap help` — full reference at <{FAQ_URL}|{FAQ_URL}>"
                 ),
             )
         return
