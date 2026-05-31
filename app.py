@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+import comms_log
 import reminders
 import storage
 import web
@@ -36,6 +37,31 @@ def _ids_from_config(key: str) -> list[str]:
     return [uid.strip() for uid in raw.split(",") if uid.strip()]
 
 
+def _log_communication(client, event: dict, comm_type: str) -> None:
+    channel = event["channel"]
+    parent_ts = event["ts"]
+    if not storage.get_config("comms_log_spreadsheet_id").strip():
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=parent_ts,
+            text=(
+                ":warning: I detected a *" + comm_type + "* to log, but the "
+                "communication log spreadsheet isn't configured yet. "
+                "Ask an admin to set it on the help page."
+            ),
+        )
+        return
+
+    comms_log.log_communication_async(client, event, comm_type)
+    icon = {"email": ":email:", "text": ":speech_balloon:", "letter": ":envelope:",
+            "mail": ":mailbox:", "fax": ":fax:"}.get(comm_type, ":pencil:")
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=parent_ts,
+        text=f"{icon} Logged *{comm_type}* to the communication tracker.",
+    )
+
+
 def _post_help(client, channel: str, parent_ts: str) -> None:
     client.chat_postMessage(
         channel=channel,
@@ -50,6 +76,7 @@ def _post_help(client, channel: str, parent_ts: str) -> None:
             f"• `@RJL-zap attorney intro @attorney` — 72-hour client contact reminder\n"
             f"• `@RJL-zap case setup @person` — intake document checklist\n"
             f"• `@RJL-zap new case` — notify the case assignee\n"
+            f"• `@RJL-zap email|text|letter|mail|fax ...` — log client communication to the tracker\n"
         ),
     )
 
@@ -105,29 +132,35 @@ def handle_app_mention(event, client):
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
-        else:
-            all_phrases = (
-                [
-                    f"`{MEDIATION.phrase}`",
-                    f"`{DISBURSEMENT.phrase}`",
-                    f"`{ATTORNEY_INTRO.phrase}`",
-                    f"`{PARALEGAL_INTRO.phrase}`",
-                    f"`{CASE_SETUP.phrase}`",
-                    f"`{CHECK_PICKUP.phrase}`",
-                    f"`{NEW_CASE.phrase}`",
-                    f"`{REVIEW_REQUEST.phrase}`",
-                ]
-                + [f"`{t.phrase}`" for t in TRIGGERS.values()]
-            )
-            client.chat_postMessage(
-                channel=event["channel"],
-                thread_ts=event["ts"],
-                text=(
-                    "I didn't recognize a trigger in that message. "
-                    "Try mentioning me with one of: " + ", ".join(all_phrases) +
-                    f"\n\nOr type `@RJL-zap help` — full reference at <{FAQ_URL}|{FAQ_URL}>"
-                ),
-            )
+            return
+
+        comm_type = comms_log.detect_comm_type(text)
+        if comm_type:
+            _log_communication(client, event, comm_type)
+            return
+
+        all_phrases = (
+            [
+                f"`{MEDIATION.phrase}`",
+                f"`{DISBURSEMENT.phrase}`",
+                f"`{ATTORNEY_INTRO.phrase}`",
+                f"`{PARALEGAL_INTRO.phrase}`",
+                f"`{CASE_SETUP.phrase}`",
+                f"`{CHECK_PICKUP.phrase}`",
+                f"`{NEW_CASE.phrase}`",
+                f"`{REVIEW_REQUEST.phrase}`",
+            ]
+            + [f"`{t.phrase}`" for t in TRIGGERS.values()]
+        )
+        client.chat_postMessage(
+            channel=event["channel"],
+            thread_ts=event["ts"],
+            text=(
+                "I didn't recognize a trigger in that message. "
+                "Try mentioning me with one of: " + ", ".join(all_phrases) +
+                f"\n\nOr type `@RJL-zap help` — full reference at <{FAQ_URL}|{FAQ_URL}>"
+            ),
+        )
         return
 
     if COMPLETION_REPLY.lower() in text.lower():

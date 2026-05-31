@@ -635,6 +635,48 @@
       </div>
     </div>
 
+    <!-- Communication Log -->
+    <div class="cmd-card">
+      <div class="cmd-header" style="background:#ecfeff;color:#155e75">
+        <i class="bi bi-mailbox"></i> Communication Log
+      </div>
+      <div class="cmd-body">
+        <p>Logs any out-of-band client communication to a Google Sheet — emails, texts, letters, mail, and faxes. The bot detects the type from the message, parses the case number from the channel name, and appends a row to the configured spreadsheet.</p>
+
+        <div class="cmd-grid">
+          <div>
+            <div class="type-label">Email</div>
+            <div class="type-this">@RJL-zap email Re: discovery responses</div>
+          </div>
+          <div>
+            <div class="type-label">Text Message</div>
+            <div class="type-this">@RJL-zap texted client re: depo prep</div>
+          </div>
+          <div>
+            <div class="type-label">Letter / Mail / Fax</div>
+            <div class="type-this">@RJL-zap mailed signed release</div>
+          </div>
+        </div>
+
+        <div class="what-happens mt-3">
+          <strong>One row gets appended with:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Timestamp (UTC)</li>
+            <li>Slack channel name &amp; ID</li>
+            <li>Case number &amp; case name (parsed from channel name, e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">smith-john-12345</code>)</li>
+            <li>Type (email / text / letter / mail / fax)</li>
+            <li>Subject / note (cleaned text)</li>
+            <li>Full original Slack message</li>
+          </ul>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-gear me-1"></i>
+          <strong>Setup required:</strong> An admin must paste the service account JSON into the <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> env var on Railway, set the spreadsheet ID in admin settings, and share the sheet with the service account email.
+        </div>
+      </div>
+    </div>
+
     <!-- New Case + Review (side by side) -->
     <div class="row g-3">
       <div class="col-md-6">
@@ -783,6 +825,20 @@
     </div>
 
     <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq-comms">
+        How does the communication log work?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
+      </div>
+      <div id="faq-comms" class="collapse">
+        <div class="faq-a">
+          Mention @RJL-zap in any case channel and include one of the words <em>email</em>, <em>text</em>, <em>texted</em>, <em>letter</em>, <em>mail</em>, <em>mailed</em>, or <em>fax</em> along with a quick note (subject line, what was sent, etc).
+          The bot detects the type from the message, parses the case number from the channel name (expects <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">case-name-12345</code> format), and appends a row to the Google Sheet configured in admin settings.
+          Note: explicit workflow phrases like <em>case setup</em> or <em>mediation checklist</em> take priority — if your message contains one of those, the communication log will not fire.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq7">
         Who gets the reminder messages?
         <i class="bi bi-chevron-down small flex-shrink-0"></i>
@@ -832,6 +888,14 @@
         <div class="env-row">
           <span class="env-key">BOT_DB_PATH</span>
           <span class="env-desc">Path to database file — set to <code>/data/bot.db</code> if using a Railway volume</span>
+        </div>
+        <div class="env-row">
+          <span class="env-key">GOOGLE_SERVICE_ACCOUNT_JSON</span>
+          <span class="env-desc">Full JSON key for the Google service account that writes to the communication log sheet. Paste the entire JSON object as a single env var value.</span>
+        </div>
+        <div class="env-row">
+          <span class="env-key">FAQ_URL</span>
+          <span class="env-desc">URL the bot replies with when someone types <code>@RJL-zap help</code>. Default: this page.</span>
         </div>
       </div>
 
