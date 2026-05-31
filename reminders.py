@@ -22,8 +22,25 @@ def _loop(client) -> None:
 
 
 def _tick(client) -> None:
-    cutoff = time.time() - REMINDER_INTERVAL_HOURS * 3600
+    now = time.time()
+
+    # Fire any scheduled follow-up messages (e.g. mediation sequence)
+    for msg in storage.due_scheduled_messages(now):
+        try:
+            client.chat_postMessage(
+                channel=msg["channel_id"],
+                thread_ts=msg["thread_ts"],
+                text=msg["text"],
+            )
+            storage.mark_scheduled_sent(msg["id"])
+        except Exception:
+            log.exception("failed to send scheduled message id=%s", msg["id"])
+
+    # Periodic reminders for open reaction-tracked checklists
+    cutoff = now - REMINDER_INTERVAL_HOURS * 3600
     for wf in storage.open_workflows_due_for_reminder(cutoff):
+        if wf["trigger_name"] == "mediation_checklist":
+            continue
         open_items = storage.workflow_open_items(wf["id"])
         if not open_items:
             storage.mark_workflow_complete(wf["id"])

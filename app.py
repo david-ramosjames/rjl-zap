@@ -1,13 +1,16 @@
 import logging
 import os
+import time
 
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+import re
+
 import reminders
 import storage
-from config import COMPLETION_EMOJI, COMPLETION_REPLY, TRIGGERS, TriggerConfig
+from config import COMPLETION_EMOJI, COMPLETION_REPLY, MEDIATION, TRIGGERS, TriggerConfig
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -31,17 +34,20 @@ def handle_app_mention(event, client):
     is_top_level = not parent_ts or parent_ts == event.get("ts")
 
     if is_top_level:
+        if MEDIATION.phrase in text.lower():
+            _start_mediation(client, event["channel"], event["ts"], text)
+            return
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
         else:
+            all_phrases = [f"`{MEDIATION.phrase}`"] + [f"`{t.phrase}`" for t in TRIGGERS.values()]
             client.chat_postMessage(
                 channel=event["channel"],
                 thread_ts=event["ts"],
                 text=(
-                    "I didn't recognize a calendaring trigger in that message. "
-                    "Try mentioning me with one of: "
-                    + ", ".join(f"`{t.phrase}`" for t in TRIGGERS.values())
+                    "I didn't recognize a trigger in that message. "
+                    "Try mentioning me with one of: " + ", ".join(all_phrases)
                 ),
             )
         return
@@ -55,6 +61,39 @@ def handle_app_mention(event, client):
                 thread_ts=parent_ts,
                 text=":tada: All calendaring items marked complete. Closing checklist.",
             )
+
+
+def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> None:
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
+
+    # Extract all <@UXXXXXXX> mentions except the bot itself
+    bot_id = client.auth_test()["user_id"]
+    mentioned = re.findall(r"<@([A-Z0-9]+)>", raw_text)
+    participants = [uid for uid in mentioned if uid != bot_id]
+    mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
+
+    checklist = "\n".join(MEDIATION.checklist)
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=parent_ts,
+        text=(
+            f":scales: *Mediation Checklist* — {mention_str} please coordinate the following:\n\n"
+            f"{checklist}"
+        ),
+    )
+
+    now = time.time()
+    for delay, template in MEDIATION.followups:
+        storage.schedule_message(
+            channel_id=channel,
+            thread_ts=parent_ts,
+            send_after=now + delay,
+            text=template.format(mentions=mention_str),
+        )
+
+    storage.create_workflow(channel, parent_ts, "mediation_checklist", [])
+    log.info("started mediation workflow channel=%s parent_ts=%s participants=%s", channel, parent_ts, participants)
 
 
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:

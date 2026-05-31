@@ -1,6 +1,6 @@
 import os
-from dataclasses import dataclass
-from typing import Dict, List
+from dataclasses import dataclass, field
+from typing import Dict, List, Tuple
 
 
 @dataclass
@@ -45,6 +45,30 @@ TRIGGERS: Dict[str, TriggerConfig] = {
         ],
     ),
 }
+
+@dataclass
+class MediationConfig:
+    phrase: str
+    checklist: List[str]
+    # (delay_seconds, message_text) — {mentions} is replaced with the tagged users
+    followups: List[Tuple[float, str]] = field(default_factory=list)
+
+
+MEDIATION = MediationConfig(
+    phrase="mediation checklist",
+    checklist=[
+        ":white_check_mark: Confirm mediation is calendared",
+        ":white_check_mark: Schedule client prep session",
+        ":white_check_mark: Reserve conference room",
+        ":white_check_mark: Send invoice to client",
+        ":white_check_mark: Confirm mediator payment",
+    ],
+    followups=[
+        (1 * 24 * 3600,  ":bell: {mentions} — quick check-in: have the prep steps above been completed?"),
+        (3 * 24 * 3600,  ":receipt: {mentions} — what's the status of the invoice to the client?"),
+        (14 * 24 * 3600, ":moneybag: {mentions} — has mediator payment been confirmed?"),
+    ],
+)
 
 # Reaction name (no colons) that marks an individual item complete
 COMPLETION_EMOJI = "white_check_mark"

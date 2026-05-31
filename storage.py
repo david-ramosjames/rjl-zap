@@ -26,7 +26,17 @@ CREATE TABLE IF NOT EXISTS items (
     completed_at REAL
 );
 
+CREATE TABLE IF NOT EXISTS scheduled_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL,
+    thread_ts TEXT NOT NULL,
+    send_after REAL NOT NULL,
+    text TEXT NOT NULL,
+    sent_at REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, send_after);
 """
 
 
@@ -145,4 +155,29 @@ def update_last_reminded(workflow_id: int) -> None:
         conn.execute(
             "UPDATE workflows SET last_reminded_at = ? WHERE id = ?",
             (time.time(), workflow_id),
+        )
+
+
+def schedule_message(channel_id: str, thread_ts: str, send_after: float, text: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO scheduled_messages (channel_id, thread_ts, send_after, text) VALUES (?, ?, ?, ?)",
+            (channel_id, thread_ts, send_after, text),
+        )
+
+
+def due_scheduled_messages(now: float) -> List[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM scheduled_messages WHERE sent_at IS NULL AND send_after <= ? ORDER BY send_after",
+            (now,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_scheduled_sent(message_id: int) -> None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE scheduled_messages SET sent_at = ? WHERE id = ?",
+            (time.time(), message_id),
         )
