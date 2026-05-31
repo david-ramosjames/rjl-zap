@@ -47,7 +47,10 @@ CREATE TABLE IF NOT EXISTS channel_lifecycle (
     created_at REAL NOT NULL,
     new_case_fired_at REAL,
     case_setup_fired_at REAL,
-    doc_verification_fired_at REAL
+    doc_verification_fired_at REAL,
+    calendar_sol_fired_at REAL,
+    attorney_intro_fired_for TEXT,
+    paralegal_intro_fired_for TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
@@ -60,12 +63,15 @@ def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
         # Migration: add columns introduced after initial deploy
-        for col, defn in [
-            ("check_replies_first", "INTEGER NOT NULL DEFAULT 0"),
-            ("done_keyword", "TEXT"),
+        for table, col, defn in [
+            ("scheduled_messages", "check_replies_first", "INTEGER NOT NULL DEFAULT 0"),
+            ("scheduled_messages", "done_keyword", "TEXT"),
+            ("channel_lifecycle",  "attorney_intro_fired_for", "TEXT"),
+            ("channel_lifecycle",  "paralegal_intro_fired_for", "TEXT"),
+            ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
         ]:
             try:
-                conn.execute(f"ALTER TABLE scheduled_messages ADD COLUMN {col} {defn}")
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
             except Exception:
                 pass  # column already exists
 
@@ -276,10 +282,7 @@ def mark_new_case_fired(channel_id: str) -> bool:
 
 def lifecycle_due(now: float, kind: str, delay_seconds: float) -> List[dict]:
     """Channels where `created_at + delay_seconds <= now` and the kind hasn't fired yet."""
-    col = {
-        "case_setup": "case_setup_fired_at",
-        "doc_verification": "doc_verification_fired_at",
-    }[kind]
+    col = _LIFECYCLE_COLS[kind]
     with connect() as conn:
         rows = conn.execute(
             f"SELECT * FROM channel_lifecycle "
@@ -289,11 +292,35 @@ def lifecycle_due(now: float, kind: str, delay_seconds: float) -> List[dict]:
         return [dict(r) for r in rows]
 
 
+_LIFECYCLE_COLS = {
+    "case_setup": "case_setup_fired_at",
+    "doc_verification": "doc_verification_fired_at",
+    "calendar_sol": "calendar_sol_fired_at",
+}
+
+
+def set_intro_fired_for(channel_id: str, role: str, user_id: str) -> bool:
+    """Record that we've fired an attorney_intro or paralegal_intro for `user_id`.
+    Returns True if the row needed updating (i.e. the user_id changed)."""
+    col = {"attorney": "attorney_intro_fired_for",
+           "paralegal": "paralegal_intro_fired_for"}[role]
+    with connect() as conn:
+        # Ensure a lifecycle row exists — channels created before the bot deployed
+        # won't have one.
+        conn.execute(
+            "INSERT OR IGNORE INTO channel_lifecycle (channel_id, created_at) VALUES (?, ?)",
+            (channel_id, time.time()),
+        )
+        cur = conn.execute(
+            f"UPDATE channel_lifecycle SET {col} = ? "
+            f"WHERE channel_id = ? AND (({col}) IS NULL OR ({col}) != ?)",
+            (user_id, channel_id, user_id),
+        )
+        return cur.rowcount > 0
+
+
 def mark_lifecycle_fired(channel_id: str, kind: str) -> bool:
-    col = {
-        "case_setup": "case_setup_fired_at",
-        "doc_verification": "doc_verification_fired_at",
-    }[kind]
+    col = _LIFECYCLE_COLS[kind]
     now = time.time()
     with connect() as conn:
         cur = conn.execute(

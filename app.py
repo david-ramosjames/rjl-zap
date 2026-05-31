@@ -15,6 +15,7 @@ import storage
 import web
 from config import (
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
+    CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
@@ -369,14 +370,15 @@ def _auto_start_followup(
     cfg: FollowUpConfig,
     escalation_setting_key: str,
     trigger_name: str,
+    participants: list[str] | None = None,
 ) -> None:
     """Like _start_followup_workflow but starts a brand-new top-level thread.
 
-    Tags the configured 'case_setup_participant_user_ids' (shared between
-    case setup and document verification) so the right people see the post
-    even though there was no triggering @-mention.
+    If `participants` is None we fall back to the 'case_setup_participant_user_ids'
+    setting (used by the auto Case Setup / Doc Verification triggers).
     """
-    participants = _ids_from_config("case_setup_participant_user_ids")
+    if participants is None:
+        participants = _ids_from_config("case_setup_participant_user_ids")
     mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
     escalation_str = " ".join(f"<@{uid}>" for uid in _ids_from_config(escalation_setting_key))
 
@@ -406,9 +408,9 @@ def _auto_start_followup(
 
 
 def fire_due_lifecycle_triggers(client) -> None:
-    """Called from the reminder loop. Fires case_setup (T+15min) and
-    doc_verification (T+24h) for any channel that's past its delay
-    but hasn't fired yet."""
+    """Called from the reminder loop. Fires case_setup (T+15min),
+    doc_verification (T+24h), and calendar_sol (T+48h) for any
+    channel that's past its delay but hasn't fired yet."""
     now = time.time()
 
     for row in storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS):
@@ -430,6 +432,46 @@ def fire_due_lifecycle_triggers(client) -> None:
                 )
             except Exception:
                 log.exception("auto doc_verification failed for channel=%s", row["channel_id"])
+
+    sol_trigger = TRIGGERS.get("calendar_sol")
+    if sol_trigger is not None:
+        for row in storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS):
+            if storage.mark_lifecycle_fired(row["channel_id"], "calendar_sol"):
+                try:
+                    _auto_start_trigger_workflow(client, row["channel_id"], sol_trigger)
+                except Exception:
+                    log.exception("auto calendar_sol failed for channel=%s", row["channel_id"])
+
+
+def _auto_start_trigger_workflow(client, channel: str, trigger: TriggerConfig) -> None:
+    """Auto-start a TriggerConfig workflow at the top level of a channel
+    (no @-mention required). Posts the announcement as a new parent
+    message, then runs the same item/reaction flow as _start_workflow."""
+    resp = client.chat_postMessage(channel=channel, text=trigger.announcement)
+    parent_ts = resp["ts"]
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
+
+    item_records: list[tuple[str, str]] = []
+    for item in trigger.items:
+        ir = client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=item)
+        item_records.append((item, ir["ts"]))
+        try:
+            client.reactions_add(channel=channel, name="hourglass_flowing_sand", timestamp=ir["ts"])
+        except Exception:
+            log.debug("could not add hourglass reaction", exc_info=True)
+
+    client.chat_postMessage(
+        channel=channel,
+        thread_ts=parent_ts,
+        text=(
+            f"React :{COMPLETION_EMOJI}: on each item above when done, "
+            f"or reply by mentioning me with `{COMPLETION_REPLY}` to close the checklist."
+        ),
+    )
+    storage.create_workflow(channel, parent_ts, trigger.name, item_records)
+    log.info("auto-started %s workflow channel=%s parent_ts=%s items=%d",
+             trigger.name, channel, parent_ts, len(item_records))
 
 
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:
@@ -475,6 +517,34 @@ def handle_reaction_added(event, client):
         _maybe_finalize(client, workflow_id)
 
 
+@app.event("member_joined_channel")
+def handle_member_joined(event, client):
+    """When the bot itself joins a channel (manually or via auto-join), peek at
+    the existing topic/purpose so we don't miss intros that were set before
+    the bot was present."""
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        return
+    if event.get("user") != bot_id:
+        return
+    channel_id = event.get("channel")
+    if not channel_id:
+        return
+    try:
+        info = client.conversations_info(channel=channel_id)
+        ch = info.get("channel") or {}
+        topic   = (ch.get("topic")   or {}).get("value", "") or ""
+        purpose = (ch.get("purpose") or {}).get("value", "") or ""
+    except Exception:
+        log.debug("conversations.info failed for %s", channel_id, exc_info=True)
+        return
+    if topic:
+        _maybe_fire_intros_from_topic(client, channel_id, topic)
+    if purpose:
+        _maybe_fire_intros_from_topic(client, channel_id, purpose)
+
+
 @app.event("channel_created")
 def handle_channel_created(event, client):
     auto_join.handle_channel_created(event, client)
@@ -488,16 +558,72 @@ def handle_channel_created(event, client):
                  ch.get("name", "?"), channel_id)
 
 
+_TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)>", re.IGNORECASE)
+_TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)>", re.IGNORECASE)
+
+
+def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> None:
+    """Parse the channel topic/purpose for `Attorney @X` / `Paralegal @Y`
+    mentions and auto-fire the respective intro workflows for those people.
+    Re-fires if a different person is named than before."""
+    if not channel_id or not topic_text:
+        return
+
+    bot_id = client.auth_test()["user_id"]
+    attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic_text, exclude=bot_id)
+    paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic_text, exclude=bot_id)
+
+    if attorney_id and storage.set_intro_fired_for(channel_id, "attorney", attorney_id):
+        log.info("auto-firing attorney_intro for %s in #%s", attorney_id, channel_id)
+        try:
+            _auto_start_followup(
+                client, channel_id, ATTORNEY_INTRO,
+                "attorney_intro_escalation_user_ids", "attorney_intro",
+                participants=[attorney_id],
+            )
+        except Exception:
+            log.exception("auto attorney_intro failed for channel=%s", channel_id)
+
+    if paralegal_id and storage.set_intro_fired_for(channel_id, "paralegal", paralegal_id):
+        log.info("auto-firing paralegal_intro for %s in #%s", paralegal_id, channel_id)
+        try:
+            _auto_start_followup(
+                client, channel_id, PARALEGAL_INTRO,
+                "paralegal_intro_escalation_user_ids", "paralegal_intro",
+                participants=[paralegal_id],
+            )
+        except Exception:
+            log.exception("auto paralegal_intro failed for channel=%s", channel_id)
+
+
+def _first_match(pattern, text: str, exclude: str | None = None) -> str | None:
+    for m in pattern.finditer(text):
+        uid = m.group(1)
+        if uid != exclude:
+            return uid
+    return None
+
+
 @app.event("message")
 def handle_message(event, client):
-    """Fires `new case` on the first user message in a newly created channel."""
-    if not NEW_CASE_ON_FIRST_MESSAGE:
-        return
-    # Skip bot messages, message subtypes (channel_join, etc), and thread replies
-    if event.get("bot_id") or event.get("subtype") or event.get("thread_ts"):
-        return
+    """Handles channel topic/purpose updates and the first-message new_case trigger."""
+    subtype = event.get("subtype")
     channel_id = event.get("channel")
     if not channel_id:
+        return
+
+    # Channel description / topic was set or changed → parse for intros
+    if subtype == "channel_topic":
+        _maybe_fire_intros_from_topic(client, channel_id, event.get("topic") or "")
+        return
+    if subtype == "channel_purpose":
+        _maybe_fire_intros_from_topic(client, channel_id, event.get("purpose") or "")
+        return
+
+    # First user message in a newly-created channel → fire new_case
+    if not NEW_CASE_ON_FIRST_MESSAGE:
+        return
+    if event.get("bot_id") or subtype or event.get("thread_ts"):
         return
     lc = storage.channel_lifecycle(channel_id)
     if not lc or lc.get("new_case_fired_at"):
@@ -505,7 +631,6 @@ def handle_message(event, client):
     if not storage.mark_new_case_fired(channel_id):
         return  # another worker beat us to it
     log.info("auto-firing new_case on first message in #%s", channel_id)
-    # Post a top-level message — no thread_ts, no @-mentioned participants
     _do_simple_post_top_level(client, channel_id, NEW_CASE)
 
 
