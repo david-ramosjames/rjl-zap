@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     thread_ts TEXT NOT NULL,
     send_after REAL NOT NULL,
     text TEXT NOT NULL,
-    sent_at REAL
+    sent_at REAL,
+    check_replies_first INTEGER NOT NULL DEFAULT 0,
+    done_keyword TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
@@ -43,6 +45,15 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, 
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # Migration: add columns introduced after initial deploy
+        for col, defn in [
+            ("check_replies_first", "INTEGER NOT NULL DEFAULT 0"),
+            ("done_keyword", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE scheduled_messages ADD COLUMN {col} {defn}")
+            except Exception:
+                pass  # column already exists
 
 
 @contextmanager
@@ -158,11 +169,20 @@ def update_last_reminded(workflow_id: int) -> None:
         )
 
 
-def schedule_message(channel_id: str, thread_ts: str, send_after: float, text: str) -> None:
+def schedule_message(
+    channel_id: str,
+    thread_ts: str,
+    send_after: float,
+    text: str,
+    check_replies_first: bool = False,
+    done_keyword: str | None = None,
+) -> None:
     with connect() as conn:
         conn.execute(
-            "INSERT INTO scheduled_messages (channel_id, thread_ts, send_after, text) VALUES (?, ?, ?, ?)",
-            (channel_id, thread_ts, send_after, text),
+            "INSERT INTO scheduled_messages "
+            "(channel_id, thread_ts, send_after, text, check_replies_first, done_keyword) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (channel_id, thread_ts, send_after, text, int(check_replies_first), done_keyword),
         )
 
 

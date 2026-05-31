@@ -188,6 +188,66 @@ DISBURSEMENT_AUTHORIZED_USER_IDS: set[str] = {
     uid.strip() for uid in _raw_auth.split(",") if uid.strip()
 }
 
+
+@dataclass
+class FollowUpConfig:
+    """Generic config for workflows that post a task, then escalate if no 'done' reply."""
+    phrase: str
+    initial_message: str          # posted immediately (or after initial_delay_seconds)
+    escalation_message: str       # posted if no done reply found; {mentions} and {escalation} substituted
+    done_keyword: str
+    initial_delay_seconds: float
+    check_delay_seconds: float    # when to check for done and maybe escalate
+
+
+_atty_escalation_raw = os.getenv("ATTORNEY_INTRO_ESCALATION_USER_IDS", "")
+ATTORNEY_INTRO_ESCALATION_IDS: List[str] = [
+    uid.strip() for uid in _atty_escalation_raw.split(",") if uid.strip()
+]
+
+ATTORNEY_INTRO = FollowUpConfig(
+    phrase="attorney intro",
+    done_keyword="done",
+    initial_delay_seconds=60 * 60,      # 1 hour
+    check_delay_seconds=48 * 60 * 60,   # 48 hours
+    initial_message=(
+        ":hourglass: *Client Contact Required* — {{mentions}}\n\n"
+        "You have *72 hours* to make initial contact with the client.\n"
+        "Please reply *done* in this thread once contact has been made."
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Client Contact Still Pending* :warning:\n\n"
+        "{{mentions}} — it has been 48 hours and no confirmation has been received.\n"
+        "Please confirm the status of client contact immediately and reply *done* when complete.\n\n"
+        "{{escalation}}Please follow up urgently."
+    ),
+)
+
+_case_setup_escalation_raw = os.getenv("CASE_SETUP_ESCALATION_USER_IDS", "")
+CASE_SETUP_ESCALATION_IDS: List[str] = [
+    uid.strip() for uid in _case_setup_escalation_raw.split(",") if uid.strip()
+]
+
+CASE_SETUP = FollowUpConfig(
+    phrase="case setup",
+    done_keyword="done",
+    initial_delay_seconds=0,            # immediate
+    check_delay_seconds=24 * 60 * 60,   # 24 hours
+    initial_message=(
+        ":clipboard: *Case Setup Verification — {{mentions}}*\n\n"
+        "Please confirm the following setup items have been completed and reply *done* in this thread:\n\n"
+        ":white_check_mark: Signed contract saved in Dropbox\n"
+        ":white_check_mark: Intake sheet completed\n"
+        ":white_check_mark: CTA signed and saved (if applicable)"
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Case Setup Not Yet Confirmed* :warning:\n\n"
+        "{{mentions}} — it has been 24 hours and setup has not been confirmed.\n"
+        "Please complete the checklist above and reply *done* in this thread.\n\n"
+        "{{escalation}}"
+    ),
+)
+
 # Reaction name (no colons) that marks an individual item complete
 COMPLETION_EMOJI = "white_check_mark"
 

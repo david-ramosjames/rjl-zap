@@ -11,8 +11,11 @@ import re
 import reminders
 import storage
 from config import (
+    ATTORNEY_INTRO, ATTORNEY_INTRO_ESCALATION_IDS,
+    CASE_SETUP, CASE_SETUP_ESCALATION_IDS,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_AUTHORIZED_USER_IDS, DISBURSEMENT_MASTER_CHECKLIST,
+    FollowUpConfig,
     MEDIATION, TRIGGERS, TriggerConfig,
 )
 
@@ -38,18 +41,36 @@ def handle_app_mention(event, client):
     is_top_level = not parent_ts or parent_ts == event.get("ts")
 
     if is_top_level:
-        if MEDIATION.phrase in text.lower():
+        lowered = text.lower()
+        if MEDIATION.phrase in lowered:
             _start_mediation(client, event["channel"], event["ts"], text)
             return
-        if DISBURSEMENT.phrase in text.lower():
+        if DISBURSEMENT.phrase in lowered:
             _start_disbursement(client, event["channel"], event["ts"], event.get("user", ""))
+            return
+        if ATTORNEY_INTRO.phrase in lowered:
+            _start_followup_workflow(
+                client, event["channel"], event["ts"], text,
+                ATTORNEY_INTRO, ATTORNEY_INTRO_ESCALATION_IDS, "attorney_intro",
+            )
+            return
+        if CASE_SETUP.phrase in lowered:
+            _start_followup_workflow(
+                client, event["channel"], event["ts"], text,
+                CASE_SETUP, CASE_SETUP_ESCALATION_IDS, "case_setup",
+            )
             return
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
         else:
             all_phrases = (
-                [f"`{MEDIATION.phrase}`", f"`{DISBURSEMENT.phrase}`"]
+                [
+                    f"`{MEDIATION.phrase}`",
+                    f"`{DISBURSEMENT.phrase}`",
+                    f"`{ATTORNEY_INTRO.phrase}`",
+                    f"`{CASE_SETUP.phrase}`",
+                ]
                 + [f"`{t.phrase}`" for t in TRIGGERS.values()]
             )
             client.chat_postMessage(
@@ -152,6 +173,59 @@ def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> N
         "started disbursement workflow channel=%s parent_ts=%s triggered_by=%s participants=%s",
         channel, parent_ts, user_id, participants,
     )
+
+
+def _start_followup_workflow(
+    client,
+    channel: str,
+    parent_ts: str,
+    raw_text: str,
+    cfg: FollowUpConfig,
+    escalation_ids: list[str],
+    trigger_name: str,
+) -> None:
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
+
+    bot_id = client.auth_test()["user_id"]
+    mentioned = re.findall(r"<@([A-Z0-9]+)>", raw_text)
+    participants = [uid for uid in mentioned if uid != bot_id]
+    mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
+    escalation_str = " ".join(f"<@{uid}>" for uid in escalation_ids)
+
+    def render(template: str) -> str:
+        return (
+            template
+            .replace("{{mentions}}", mention_str)
+            .replace("{{escalation}}", f"{escalation_str} " if escalation_str else "")
+        )
+
+    now = time.time()
+
+    if cfg.initial_delay_seconds > 0:
+        storage.schedule_message(
+            channel_id=channel,
+            thread_ts=parent_ts,
+            send_after=now + cfg.initial_delay_seconds,
+            text=render(cfg.initial_message),
+        )
+    else:
+        client.chat_postMessage(
+            channel=channel, thread_ts=parent_ts, text=render(cfg.initial_message)
+        )
+
+    storage.schedule_message(
+        channel_id=channel,
+        thread_ts=parent_ts,
+        send_after=now + cfg.check_delay_seconds,
+        text=render(cfg.escalation_message),
+        check_replies_first=True,
+        done_keyword=cfg.done_keyword,
+    )
+
+    storage.create_workflow(channel, parent_ts, trigger_name, [])
+    log.info("started %s workflow channel=%s parent_ts=%s participants=%s",
+             trigger_name, channel, parent_ts, participants)
 
 
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:

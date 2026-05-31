@@ -21,12 +21,34 @@ def _loop(client) -> None:
         time.sleep(REMINDER_CHECK_INTERVAL_SECONDS)
 
 
+def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str) -> bool:
+    try:
+        resp = client.conversations_replies(channel=channel_id, ts=thread_ts)
+        messages = resp.get("messages", [])
+        kw = keyword.lower()
+        # Skip the first message (the parent); ignore bot messages
+        return any(
+            kw in (m.get("text") or "").lower()
+            for m in messages[1:]
+            if not m.get("bot_id")
+        )
+    except Exception:
+        log.exception("could not fetch thread replies channel=%s ts=%s", channel_id, thread_ts)
+        return False
+
+
 def _tick(client) -> None:
     now = time.time()
 
-    # Fire any scheduled follow-up messages (e.g. mediation sequence)
+    # Fire any scheduled follow-up messages (e.g. mediation sequence, escalations)
     for msg in storage.due_scheduled_messages(now):
         try:
+            if msg["check_replies_first"] and msg["done_keyword"]:
+                if _thread_has_reply(client, msg["channel_id"], msg["thread_ts"], msg["done_keyword"]):
+                    log.info("thread already has '%s' reply — skipping scheduled msg id=%s",
+                             msg["done_keyword"], msg["id"])
+                    storage.mark_scheduled_sent(msg["id"])
+                    continue
             client.chat_postMessage(
                 channel=msg["channel_id"],
                 thread_ts=msg["thread_ts"],
