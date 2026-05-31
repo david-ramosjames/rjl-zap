@@ -606,7 +606,8 @@ def _first_match(pattern, text: str, exclude: str | None = None) -> str | None:
 
 @app.event("message")
 def handle_message(event, client):
-    """Handles channel topic/purpose updates and the first-message new_case trigger."""
+    """Handles channel topic/purpose updates, the first-message new_case
+    trigger, and the keyword-driven Mediation Checklist trigger."""
     subtype = event.get("subtype")
     channel_id = event.get("channel")
     if not channel_id:
@@ -620,10 +621,23 @@ def handle_message(event, client):
         _maybe_fire_intros_from_topic(client, channel_id, event.get("purpose") or "")
         return
 
+    # Skip bot messages, message subtypes (channel_join, etc.), and thread replies
+    if event.get("bot_id") or subtype or event.get("thread_ts"):
+        return
+
+    text = event.get("text") or ""
+    lowered = text.lower()
+
+    # Auto-fire Mediation Checklist on any message containing the phrase
+    # (matches the legacy Zapier "search for 'Mediation Checklist'" trigger).
+    # Skip if the bot is @-mentioned in this message — app_mention is
+    # already handling it.
+    if MEDIATION.phrase in lowered and not _bot_is_mentioned(client, text):
+        _start_mediation(client, channel_id, event["ts"], text)
+        return
+
     # First user message in a newly-created channel → fire new_case
     if not NEW_CASE_ON_FIRST_MESSAGE:
-        return
-    if event.get("bot_id") or subtype or event.get("thread_ts"):
         return
     lc = storage.channel_lifecycle(channel_id)
     if not lc or lc.get("new_case_fired_at"):
@@ -632,6 +646,19 @@ def handle_message(event, client):
         return  # another worker beat us to it
     log.info("auto-firing new_case on first message in #%s", channel_id)
     _do_simple_post_top_level(client, channel_id, NEW_CASE)
+
+
+_BOT_ID_CACHE: str | None = None
+
+
+def _bot_is_mentioned(client, text: str) -> bool:
+    global _BOT_ID_CACHE
+    if _BOT_ID_CACHE is None:
+        try:
+            _BOT_ID_CACHE = client.auth_test()["user_id"]
+        except Exception:
+            return False
+    return f"<@{_BOT_ID_CACHE}>" in text
 
 
 @app.event("reaction_removed")
