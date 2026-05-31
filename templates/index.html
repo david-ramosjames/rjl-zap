@@ -146,13 +146,22 @@
           </ul>
         </div>
 
-        <div>
+        <div class="mb-3">
           <div class="trigger-pill mb-2">@Jamie scheduling order agreed</div>
           <ul class="small text-muted mb-0">
             <li>Calendar discovery cutoff</li>
             <li>Calendar expert disclosure deadlines</li>
             <li>Calendar dispositive motion deadline</li>
             <li>Calendar trial date</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="trigger-pill mb-2">@Jamie calendar sol</div>
+          <ul class="small text-muted mb-0">
+            <li>Calendar Statute of Limitations deadline</li>
+            <li>Calendar 30-day SOL reminder</li>
+            <li>Calendar 7-day SOL reminder</li>
           </ul>
         </div>
       </div>
@@ -249,6 +258,72 @@
           <div class="timeline-dot bg-danger bg-opacity-25 text-danger">24h</div>
           <div class="small">If no <code>done</code> reply → posts escalation and tags escalation contacts (see Settings)</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Paralegal Intro -->
+    <div class="card workflow-card">
+      <div class="card-header bg-secondary bg-opacity-10 text-secondary">
+        <i class="bi bi-telephone me-2"></i>Paralegal Intro
+      </div>
+      <div class="card-body">
+        <div class="trigger-pill mb-2">@Jamie paralegal intro @paralegal</div>
+        <p class="text-muted small mb-3">Tag the paralegal responsible. Bot immediately requests client contact within 24 hours.</p>
+        <div class="timeline-row">
+          <div class="timeline-dot bg-secondary bg-opacity-25 text-secondary">0h</div>
+          <div class="small">Posts client contact task — reply <code>done</code> when complete</div>
+        </div>
+        <div class="timeline-row">
+          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">24h</div>
+          <div class="small">If no <code>done</code> reply → escalation tags configured contacts (see Settings)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Check Pickup -->
+    <div class="card workflow-card">
+      <div class="card-header bg-success bg-opacity-10 text-success">
+        <i class="bi bi-cash-coin me-2"></i>Client Check Pickup
+      </div>
+      <div class="card-body">
+        <div class="trigger-pill mb-2">@Jamie check pickup @person</div>
+        <p class="text-muted small mb-3">Tag the person responsible for scheduling client check pickup (7-day deadline).</p>
+        <div class="timeline-row">
+          <div class="timeline-dot bg-secondary bg-opacity-25 text-secondary">0h</div>
+          <div class="small">Posts pickup task — reply <code>scheduled</code> when on calendar</div>
+        </div>
+        <div class="timeline-row">
+          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">5d</div>
+          <div class="small">If no <code>scheduled</code> reply → escalation tags backup contacts (see Settings)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Case Assignment -->
+    <div class="card workflow-card">
+      <div class="card-header bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-folder-plus me-2"></i>New Case Assignment
+      </div>
+      <div class="card-body">
+        <div class="trigger-pill mb-2">@Jamie new case</div>
+        <p class="text-muted small mb-3">
+          One-shot notification. Always tags the configured assignee (e.g. Laura).
+          Add additional @-mentions to tag more people for this specific case.
+        </p>
+      </div>
+    </div>
+
+    <!-- Review Request -->
+    <div class="card workflow-card">
+      <div class="card-header bg-warning bg-opacity-10 text-warning">
+        <i class="bi bi-star me-2"></i>5-Star Review Prompt
+      </div>
+      <div class="card-body">
+        <div class="trigger-pill mb-2">@Jamie ready for review</div>
+        <p class="text-muted small mb-3">
+          One-shot prompt asking whether this client should be asked for a 5-star review.
+          Tags any people you @-mention plus the configured review-request contacts (see Settings).
+        </p>
       </div>
     </div>
 

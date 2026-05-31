@@ -43,6 +43,16 @@ TRIGGERS: Dict[str, TriggerConfig] = {
             ":date: Calendar trial date",
         ],
     ),
+    "calendar_sol": TriggerConfig(
+        name="calendar_sol",
+        phrase="calendar sol",
+        announcement=":rotating_light: *Calendar Statute of Limitations* — please confirm the SOL is calendared",
+        items=[
+            ":date: Calendar Statute of Limitations deadline (note the exact date in the case file)",
+            ":date: Set calendar reminder 30 days before SOL",
+            ":date: Set calendar reminder 7 days before SOL",
+        ],
+    ),
 }
 
 @dataclass
@@ -229,6 +239,64 @@ CASE_SETUP = FollowUpConfig(
         "{{escalation}}"
     ),
 )
+
+PARALEGAL_INTRO = FollowUpConfig(
+    phrase="paralegal intro",
+    done_keyword="done",
+    initial_delay_seconds=0,            # immediate
+    check_delay_seconds=24 * 60 * 60,   # 24 hours
+    initial_message=(
+        ":telephone_receiver: *Client Contact Required — {{mentions}}*\n\n"
+        "Please make initial contact with the client within *24 hours*.\n"
+        "Reply *done* in this thread once contact has been made."
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Client Contact Still Pending* :warning:\n\n"
+        "{{mentions}} — it has been 24 hours and no confirmation has been received.\n"
+        "Please confirm the status of client contact and reply *done* when complete.\n\n"
+        "{{escalation}}Please follow up urgently."
+    ),
+)
+
+CHECK_PICKUP = FollowUpConfig(
+    phrase="check pickup",
+    done_keyword="scheduled",
+    initial_delay_seconds=0,            # immediate
+    check_delay_seconds=5 * 86400,      # 5 days
+    initial_message=(
+        ":money_with_wings: *Client Check Pickup — {{mentions}}*\n\n"
+        "Please schedule the client check pickup *within 7 days*.\n"
+        "Reply *scheduled* in this thread once the pickup is on the calendar."
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Check Pickup Not Yet Scheduled* :warning:\n\n"
+        "{{mentions}} — it has been 5 days and pickup scheduling has not been confirmed.\n"
+        "The 7-day deadline is approaching. Please schedule immediately and reply *scheduled* when done.\n\n"
+        "{{escalation}}"
+    ),
+)
+
+
+@dataclass
+class SimplePostConfig:
+    """One-shot post: immediately drops a message tagging participants + extra contacts from settings."""
+    phrase: str
+    message: str  # {mentions} and {extras} substituted
+    extras_setting_key: str  # DB setting key for the extra user IDs to tag
+
+
+NEW_CASE = SimplePostConfig(
+    phrase="new case",
+    message=":file_folder: *Here is a new case to assign* — {extras}\n{mentions}",
+    extras_setting_key="new_case_assignee_user_ids",
+)
+
+REVIEW_REQUEST = SimplePostConfig(
+    phrase="ready for review",
+    message=":star: *Is this a client we will ask for a 5-star review?* :star:\n{mentions} {extras}",
+    extras_setting_key="review_request_user_ids",
+)
+
 
 COMPLETION_EMOJI = "white_check_mark"
 COMPLETION_REPLY = "COMPLETE"

@@ -12,11 +12,13 @@ import reminders
 import storage
 import web
 from config import (
-    ATTORNEY_INTRO, CASE_SETUP,
+    ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
     FollowUpConfig,
-    MEDIATION, TRIGGERS, TriggerConfig,
+    MEDIATION, NEW_CASE, REVIEW_REQUEST,
+    SimplePostConfig,
+    TRIGGERS, TriggerConfig,
 )
 
 load_dotenv()
@@ -53,20 +55,27 @@ def handle_app_mention(event, client):
         if DISBURSEMENT.phrase in lowered:
             _start_disbursement(client, event["channel"], event["ts"], event.get("user", ""))
             return
-        if ATTORNEY_INTRO.phrase in lowered:
-            _start_followup_workflow(
-                client, event["channel"], event["ts"], text,
-                ATTORNEY_INTRO, _ids_from_config("attorney_intro_escalation_user_ids"),
-                "attorney_intro",
-            )
-            return
-        if CASE_SETUP.phrase in lowered:
-            _start_followup_workflow(
-                client, event["channel"], event["ts"], text,
-                CASE_SETUP, _ids_from_config("case_setup_escalation_user_ids"),
-                "case_setup",
-            )
-            return
+        # Order matters: 'paralegal intro' and 'attorney intro' share the suffix "intro",
+        # and 'check pickup' must be matched before any potential collisions.
+        followup_matches = [
+            (PARALEGAL_INTRO, "paralegal_intro_escalation_user_ids", "paralegal_intro"),
+            (ATTORNEY_INTRO, "attorney_intro_escalation_user_ids", "attorney_intro"),
+            (CHECK_PICKUP, "check_pickup_backup_user_ids", "check_pickup"),
+            (CASE_SETUP, "case_setup_escalation_user_ids", "case_setup"),
+        ]
+        for cfg, setting_key, name in followup_matches:
+            if cfg.phrase in lowered:
+                _start_followup_workflow(
+                    client, event["channel"], event["ts"], text,
+                    cfg, _ids_from_config(setting_key), name,
+                )
+                return
+
+        for simple in (NEW_CASE, REVIEW_REQUEST):
+            if simple.phrase in lowered:
+                _do_simple_post(client, event["channel"], event["ts"], text, simple)
+                return
+
         trigger = _find_trigger(text)
         if trigger:
             _start_workflow(client, event["channel"], event["ts"], trigger)
@@ -76,7 +85,11 @@ def handle_app_mention(event, client):
                     f"`{MEDIATION.phrase}`",
                     f"`{DISBURSEMENT.phrase}`",
                     f"`{ATTORNEY_INTRO.phrase}`",
+                    f"`{PARALEGAL_INTRO.phrase}`",
                     f"`{CASE_SETUP.phrase}`",
+                    f"`{CHECK_PICKUP.phrase}`",
+                    f"`{NEW_CASE.phrase}`",
+                    f"`{REVIEW_REQUEST.phrase}`",
                 ]
                 + [f"`{t.phrase}`" for t in TRIGGERS.values()]
             )
@@ -231,6 +244,19 @@ def _start_followup_workflow(
     storage.create_workflow(channel, parent_ts, trigger_name, [])
     log.info("started %s workflow channel=%s parent_ts=%s participants=%s",
              trigger_name, channel, parent_ts, participants)
+
+
+def _do_simple_post(client, channel: str, parent_ts: str, raw_text: str, cfg: SimplePostConfig) -> None:
+    bot_id = client.auth_test()["user_id"]
+    mentioned = re.findall(r"<@([A-Z0-9]+)>", raw_text)
+    participants = [uid for uid in mentioned if uid != bot_id]
+    mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else ""
+    extras = " ".join(f"<@{uid}>" for uid in _ids_from_config(cfg.extras_setting_key))
+
+    text = cfg.message.replace("{mentions}", mention_str).replace("{extras}", extras).strip()
+    client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=text)
+    log.info("posted simple workflow phrase=%s channel=%s parent_ts=%s",
+             cfg.phrase, channel, parent_ts)
 
 
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:

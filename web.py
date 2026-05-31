@@ -25,6 +25,26 @@ SETTINGS = [
         "help": "Tagged in the 24-hour reminder if no 'done' reply. Comma-separated.",
     },
     {
+        "key": "paralegal_intro_escalation_user_ids",
+        "label": "Paralegal Intro — Escalation Contacts",
+        "help": "Tagged in the 24-hour reminder if no 'done' reply. Comma-separated.",
+    },
+    {
+        "key": "check_pickup_backup_user_ids",
+        "label": "Check Pickup — Backup Contacts",
+        "help": "Tagged in the 5-day reminder if no 'scheduled' reply. Comma-separated.",
+    },
+    {
+        "key": "new_case_assignee_user_ids",
+        "label": "New Case — Default Assignee(s)",
+        "help": "Always tagged when @Jamie new case fires (e.g. Laura: UA63X86AJ). Comma-separated.",
+    },
+    {
+        "key": "review_request_user_ids",
+        "label": "Review Request — Additional Contacts",
+        "help": "Extra people tagged in the 5-star review prompt. Comma-separated.",
+    },
+    {
         "key": "notify_group_id",
         "label": "@legalassistants — Group ID",
         "help": "Slack user group ID for checklist reminders (e.g. S12345678). "

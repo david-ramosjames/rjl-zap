@@ -65,7 +65,10 @@ def _tick(client) -> None:
     group_name = storage.get_config("notify_group_name", default="legalassistants")
     notify_mention = f"<!subteam^{group_id}|{group_name}> " if group_id else ""
 
-    skip_triggers = {"mediation_checklist", "disbursement", "attorney_intro", "case_setup"}
+    skip_triggers = {
+        "mediation_checklist", "disbursement",
+        "attorney_intro", "case_setup", "paralegal_intro", "check_pickup",
+    }
     for wf in storage.open_workflows_due_for_reminder(cutoff):
         if wf["trigger_name"] in skip_triggers:
             continue
