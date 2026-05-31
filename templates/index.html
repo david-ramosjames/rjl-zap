@@ -8,161 +8,408 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     :root {
-      --navy: #1a1f36;
-      --navy-light: #2d3561;
+      --accent: #e8385a;
+      --accent-light: #fce8ec;
+      --accent-mid: #f9d0d8;
+      --text-dark: #1a1a2e;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --bg: #f9fafb;
     }
-    body { background: #f4f5f9; font-family: 'Segoe UI', system-ui, sans-serif; }
-    .top-bar { background: var(--navy); color: #fff; padding: 1rem 2rem; }
-    .top-bar .bot-name { font-size: 1.3rem; font-weight: 700; letter-spacing: -.01em; }
-    .top-bar .tagline { font-size: .85rem; color: #a0a8c0; }
 
-    /* Nav tabs */
-    .page-nav { background: #fff; border-bottom: 1px solid #dee2e6; position: sticky; top: 0; z-index: 100; }
-    .page-nav a { display: inline-block; padding: .75rem 1.25rem; color: #495057; text-decoration: none;
-                  font-size: .9rem; font-weight: 500; border-bottom: 3px solid transparent; }
-    .page-nav a:hover { color: var(--navy); border-bottom-color: #dee2e6; }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text-dark); font-size: 15px; }
 
-    /* Section headers */
-    .section-label { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-                     color: #adb5bd; margin-bottom: .75rem; }
+    /* ── TOP BAR ── */
+    .top-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: .75rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .top-bar .bot-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-dark);
+      letter-spacing: -.01em;
+    }
+    .top-bar .divider { color: #d1d5db; }
+    .top-bar .org-label {
+      font-size: .78rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .internal-badge {
+      margin-left: auto;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      padding: .2rem .65rem;
+      border-radius: 20px;
+    }
 
-    /* Command cards */
-    .cmd-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
-                margin-bottom: 1rem; overflow: hidden; }
-    .cmd-card .cmd-header { padding: .9rem 1.25rem; font-weight: 600; font-size: .95rem;
-                            display: flex; align-items: center; gap: .5rem; }
-    .cmd-card .cmd-body { padding: .75rem 1.25rem 1.25rem; }
-    .cmd-card .cmd-body p { color: #495057; font-size: .9rem; margin-bottom: .6rem; }
+    /* ── NAV ── */
+    .page-nav {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0 2rem;
+    }
+    .page-nav a {
+      display: inline-block;
+      padding: .7rem 1rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: .85rem;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .page-nav a:hover {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
 
-    .type-this { background: var(--navy); color: #e2e8f0; border-radius: 8px;
-                 padding: .5rem .85rem; font-family: 'Consolas', monospace; font-size: .85rem;
-                 display: inline-block; margin: .35rem 0 .6rem; user-select: all; }
-    .type-label { font-size: .75rem; font-weight: 600; text-transform: uppercase;
-                  letter-spacing: .06em; color: #adb5bd; margin-bottom: .2rem; }
+    /* ── LAYOUT ── */
+    .container-page { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.25rem; }
 
-    .what-happens { background: #f8f9fa; border-radius: 8px; padding: .7rem 1rem;
-                    margin-top: .6rem; font-size: .87rem; color: #343a40; }
-    .what-happens ul { margin: 0; padding-left: 1.2rem; }
-    .what-happens li { margin-bottom: .2rem; }
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
 
-    .timeline-strip { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
-    .tl-row { display: flex; align-items: flex-start; gap: .65rem; font-size: .87rem; }
-    .tl-badge { border-radius: 20px; padding: .15rem .55rem; font-size: .72rem; font-weight: 700;
-                white-space: nowrap; flex-shrink: 0; margin-top: .1rem; }
+    /* ── STEPS (numbered circles) ── */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    @media (max-width: 600px) { .steps { grid-template-columns: 1fr; } }
+    .step-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.1rem;
+    }
+    .step-num {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: .9rem;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: .75rem;
+      flex-shrink: 0;
+    }
+    .step-card .step-title { font-weight: 600; font-size: .95rem; margin-bottom: .3rem; }
+    .step-card .step-desc { font-size: .85rem; color: var(--text-muted); line-height: 1.5; }
 
-    .badge-now  { background: #e3f9e5; color: #276749; }
-    .badge-soon { background: #e8f4fd; color: #1a6fa8; }
-    .badge-warn { background: #fff3cd; color: #856404; }
-    .badge-esc  { background: #fde8e8; color: #9b1c1c; }
+    /* ── CALLOUT BOXES ── */
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-light);
+      border-radius: 0 8px 8px 0;
+      padding: .85rem 1.1rem;
+      font-size: .875rem;
+      color: #5a1526;
+      margin: 1rem 0;
+    }
+    .callout.blue {
+      border-left-color: #3b82f6;
+      background: #eff6ff;
+      color: #1e40af;
+    }
+    .callout.green {
+      border-left-color: #22c55e;
+      background: #f0fdf4;
+      color: #166534;
+    }
+    .callout.amber {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+      color: #78350f;
+    }
 
-    .restricted-tag { background: #fff3cd; color: #856404; border-radius: 6px;
-                      padding: .15rem .5rem; font-size: .75rem; font-weight: 600; margin-left: .5rem; }
-    .done-word { background: #e3f9e5; color: #276749; border-radius: 4px;
-                 padding: .05rem .4rem; font-family: monospace; font-size: .9em; }
+    /* ── COMMAND CARDS ── */
+    .cmd-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .cmd-header {
+      padding: .85rem 1.25rem;
+      font-weight: 600;
+      font-size: .92rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmd-body { padding: 1rem 1.25rem 1.25rem; }
+    .cmd-body > p { font-size: .875rem; color: var(--text-muted); margin-bottom: .75rem; line-height: 1.6; }
 
-    /* FAQ */
-    .faq-item { background: #fff; border-radius: 10px; margin-bottom: .6rem;
-                box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-    .faq-q { padding: .9rem 1.1rem; font-weight: 600; color: var(--navy);
-             display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-    .faq-a { padding: 0 1.1rem .9rem; color: #495057; font-size: .9rem; line-height: 1.6; }
+    /* ── TYPE-THIS CODE BLOCKS ── */
+    .type-label {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: .3rem;
+    }
+    .type-this {
+      background: #1e1e2e;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: .45rem .9rem;
+      font-family: 'Consolas', 'SF Mono', monospace;
+      font-size: .84rem;
+      display: inline-block;
+      margin-bottom: .65rem;
+      user-select: all;
+    }
 
-    /* Settings */
-    .settings-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
-                     padding: 1.5rem; margin-bottom: 1rem; }
-    .env-callout { background: #1a1f36; color: #e2e8f0; border-radius: 10px;
-                   padding: 1.1rem 1.4rem; margin-bottom: 1.5rem; font-size: .88rem; }
-    .env-callout code { background: rgba(255,255,255,.12); color: #a5f3d0;
-                        border-radius: 4px; padding: .1rem .4rem; font-size: .88em; }
-    .env-callout .env-row { display: flex; gap: .75rem; align-items: baseline; padding: .3rem 0; }
-    .env-callout .env-key { font-family: monospace; font-weight: 600; color: #a5f3d0;
-                            min-width: 220px; flex-shrink: 0; }
-    .env-callout .env-desc { color: #a0a8c0; }
-    .env-callout .required-tag { background: #9b1c1c; color: #fff; border-radius: 4px;
-                                  font-size: .65rem; font-weight: 700; padding: .1rem .35rem;
-                                  text-transform: uppercase; letter-spacing: .04em; margin-left: .4rem; }
-    .form-label { font-weight: 600; font-size: .9rem; color: var(--navy); }
-    .form-help { font-size: .8rem; color: #6c757d; margin-top: .2rem; }
-    code.slack-id { background: #e9ecef; border-radius: 4px; padding: .1rem .35rem;
-                    font-size: .85em; color: #c0392b; }
-    .save-btn { background: var(--navy); color: #fff; border: none; border-radius: 8px;
-                padding: .6rem 1.75rem; font-weight: 600; cursor: pointer; }
-    .save-btn:hover { background: var(--navy-light); }
-    .saved-toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
-                   animation: fadeout 4s forwards; }
-    @keyframes fadeout { 0%,70%{opacity:1} 100%{opacity:0} }
+    /* ── WHAT HAPPENS LIST ── */
+    .what-happens {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .7rem 1rem;
+      font-size: .85rem;
+    }
+    .what-happens ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+    .what-happens li { margin-bottom: .2rem; color: #374151; }
 
-    .container-page { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }
+    /* ── TIMELINE ── */
+    .timeline-strip { display: flex; flex-direction: column; gap: .45rem; margin-top: .75rem; }
+    .tl-row { display: flex; align-items: flex-start; gap: .6rem; font-size: .85rem; color: #374151; }
+    .tl-badge {
+      border-radius: 20px;
+      padding: .12rem .5rem;
+      font-size: .7rem;
+      font-weight: 700;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: .1rem;
+    }
+    .badge-now  { background: #dcfce7; color: #166534; }
+    .badge-soon { background: #dbeafe; color: #1e40af; }
+    .badge-warn { background: #fef9c3; color: #854d0e; }
+    .badge-esc  { background: #fee2e2; color: #991b1b; }
 
-    /* Color accents per workflow type */
-    .hdr-calendar  { background: #e8f4fd; color: #1a6fa8; }
-    .hdr-mediation { background: #f0f4ff; color: #3730a3; }
+    /* ── HEADER ACCENT COLORS ── */
+    .hdr-calendar  { background: #eff6ff; color: #1e40af; }
+    .hdr-mediation { background: #f5f3ff; color: #5b21b6; }
     .hdr-disburse  { background: #fffbeb; color: #92400e; }
     .hdr-intro     { background: #f0fdf4; color: #166534; }
-    .hdr-setup     { background: #faf5ff; color: #6b21a8; }
+    .hdr-setup     { background: #fdf4ff; color: #701a75; }
     .hdr-pickup    { background: #fff7ed; color: #9a3412; }
-    .hdr-simple    { background: #f0f9ff; color: #075985; }
+    .hdr-simple    { background: #f0f9ff; color: #0369a1; }
+
+    .restricted-tag {
+      margin-left: auto;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 20px;
+      padding: .1rem .55rem;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+    .done-word {
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 4px;
+      padding: .05rem .4rem;
+      font-family: monospace;
+      font-size: .9em;
+      font-weight: 600;
+    }
+
+    /* ── COMMAND GRID (3-col) ── */
+    .cmd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 680px) { .cmd-grid { grid-template-columns: 1fr; } }
+
+    /* ── FAQ ── */
+    .faq-item {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: .5rem;
+      overflow: hidden;
+    }
+    .faq-q {
+      padding: .9rem 1.1rem;
+      font-weight: 600;
+      font-size: .92rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      gap: .5rem;
+    }
+    .faq-q:hover { background: var(--bg); }
+    .faq-a {
+      padding: 0 1.1rem .9rem;
+      color: #374151;
+      font-size: .875rem;
+      line-height: 1.65;
+      border-top: 1px solid var(--border);
+      padding-top: .75rem;
+    }
+
+    /* ── ADMIN TOGGLE ── */
+    .admin-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      cursor: pointer;
+      user-select: none;
+      padding: .5rem 0;
+      color: var(--text-muted);
+      font-size: .82rem;
+      font-weight: 500;
+    }
+    .admin-toggle-row:hover { color: var(--text-dark); }
+    .admin-toggle-row .lock-icon { font-size: .9rem; }
+
+    /* ── SETTINGS ── */
+    .settings-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .env-callout {
+      background: #1e1e2e;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 1.1rem 1.4rem;
+      margin-bottom: 1.5rem;
+      font-size: .87rem;
+    }
+    .env-callout code { background: rgba(255,255,255,.12); color: #a5f3d0; border-radius: 4px; padding: .1rem .4rem; font-size: .87em; }
+    .env-callout .env-row { display: flex; gap: .75rem; align-items: baseline; padding: .3rem 0; flex-wrap: wrap; }
+    .env-callout .env-key { font-family: monospace; font-weight: 600; color: #a5f3d0; min-width: 220px; flex-shrink: 0; }
+    .env-callout .env-desc { color: #a0a8c0; }
+    .env-callout .required-tag {
+      background: #991b1b;
+      color: #fff;
+      border-radius: 4px;
+      font-size: .63rem;
+      font-weight: 700;
+      padding: .1rem .32rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-left: .35rem;
+    }
+    .form-label { font-weight: 600; font-size: .88rem; color: var(--text-dark); }
+    .form-help { font-size: .78rem; color: var(--text-muted); margin-top: .2rem; }
+    code.slack-id { background: #f3f4f6; border-radius: 4px; padding: .1rem .35rem; font-size: .85em; color: var(--accent); }
+    .save-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: .55rem 1.75rem;
+      font-weight: 600;
+      font-size: .9rem;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .save-btn:hover { background: #c9304e; }
+
+    .saved-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      animation: fadeout 4s forwards;
+    }
+    @keyframes fadeout { 0%,70%{opacity:1} 100%{opacity:0} }
   </style>
 </head>
 <body>
 
+<!-- ── TOP BAR ── -->
 <div class="top-bar">
   <div class="bot-name">⚡ RJL-zap</div>
-  <div class="tagline">Slack automation for the RJL legal team</div>
+  <span class="divider">|</span>
+  <div class="org-label">Ramos James Law</div>
+  <div class="internal-badge">Internal</div>
 </div>
 
-<div class="page-nav px-3">
-  <a href="#how-to-use">How to Use</a>
-  <a href="#commands">All Commands</a>
+<!-- ── NAV ── -->
+<div class="page-nav">
+  <a href="#overview">Overview</a>
+  <a href="#how-it-works">How it works</a>
+  <a href="#commands">Commands</a>
+  <a href="#thread-replies">Thread replies</a>
   <a href="#faq">FAQ</a>
-  <a href="#settings">Admin Settings</a>
 </div>
 
 <div class="container-page">
 
-  <!-- ───── HOW TO USE ───── -->
-  <section id="how-to-use" class="mb-5">
-    <div class="section-label">Getting Started</div>
+  <!-- ── OVERVIEW ── -->
+  <section id="overview" class="mb-5">
+    <div class="section-label">Overview</div>
+    <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:.5rem">RJL-zap Slack Bot</h2>
+    <p style="color:var(--text-muted);font-size:.95rem;max-width:640px;line-height:1.65">
+      RJL-zap replaces the firm's Zapier automations. It lives in Slack and listens for @-mentions.
+      When you trigger a command, it posts checklists, sends timed follow-up messages, and escalates
+      to supervisors if something isn't confirmed — so nothing falls through the cracks.
+    </p>
 
-    <div class="cmd-card">
-      <div class="cmd-body p-4">
-        <h5 class="fw-bold mb-3" style="color:var(--navy)">What is RJL-zap?</h5>
-        <p style="font-size:.95rem;color:#343a40">
-          RJL-zap is a Slack bot that automatically sends checklists, reminders, and follow-ups
-          so nothing falls through the cracks on a case. You trigger it by typing its name in Slack.
-          It handles the follow-up from there.
-        </p>
-
-        <hr class="my-3">
-        <div class="row g-3">
-          <div class="col-md-4">
-            <div class="fw-semibold mb-1" style="color:var(--navy)">① Type a command</div>
-            <div class="small text-muted">In any case channel, mention @RJL-zap followed by a command phrase.</div>
-          </div>
-          <div class="col-md-4">
-            <div class="fw-semibold mb-1" style="color:var(--navy)">② Bot responds in a thread</div>
-            <div class="small text-muted">RJL-zap posts a checklist or task directly in the thread of your message.</div>
-          </div>
-          <div class="col-md-4">
-            <div class="fw-semibold mb-1" style="color:var(--navy)">③ Mark items done</div>
-            <div class="small text-muted">React ✅ on each item, or reply <span class="done-word">done</span> in the thread. The bot tracks it and stops reminding.</div>
-          </div>
-        </div>
-
-        <hr class="my-3">
-        <div class="fw-semibold mb-2" style="color:var(--navy)">First time in a channel?</div>
-        <p class="small text-muted mb-0">
-          When you mention @RJL-zap in a channel it hasn't been added to yet, Slack will show a popup asking
-          <em>"Add RJL-zap to this channel?"</em> — click <strong>Add to channel</strong> and the bot will respond normally.
-          You only need to do this once per channel.
-        </p>
-      </div>
+    <div class="callout blue" style="margin-top:1.25rem">
+      <i class="bi bi-at me-1"></i>
+      <strong>Always start with @RJL-zap.</strong> The bot only responds when you explicitly mention it.
+      Just typing a phrase on its own won't trigger anything.
     </div>
   </section>
 
-  <!-- ───── ALL COMMANDS ───── -->
+  <!-- ── HOW IT WORKS ── -->
+  <section id="how-it-works" class="mb-5">
+    <div class="section-label">How it works</div>
+
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">Type a command</div>
+        <div class="step-desc">In any case channel, mention <strong>@RJL-zap</strong> followed by a command phrase like <em>answer filed</em> or <em>mediation checklist</em>.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">Bot responds in a thread</div>
+        <div class="step-desc">RJL-zap immediately posts a checklist or task in the thread of your message and tags whoever you mentioned.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">Mark items done</div>
+        <div class="step-desc">React ✅ on each item as you complete it, or reply <span class="done-word">done</span> in the thread. The bot stops reminding automatically.</div>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:1.25rem">
+      <i class="bi bi-person-plus me-1"></i>
+      <strong>First time in a channel?</strong> Slack will show a popup asking to add RJL-zap —
+      click <em>Add to channel</em> and it will respond normally. You only need to do this once per channel.
+    </div>
+  </section>
+
+  <!-- ── COMMANDS ── -->
   <section id="commands" class="mb-5">
-    <div class="section-label">All Commands</div>
+    <div class="section-label">Commands</div>
 
     <!-- Calendar Checklists -->
     <div class="cmd-card">
@@ -170,10 +417,10 @@
         <i class="bi bi-calendar-check"></i> Calendar Checklists
       </div>
       <div class="cmd-body">
-        <p>Use these when a key case event happens and you need to make sure all the deadlines get on the calendar. The bot posts a checklist and reminds every 24 hours until every item is checked off.</p>
+        <p>Use these when a key case event happens and deadlines need to go on the calendar. The bot posts a checklist in the thread and nudges every 24 hours until every item is ✅.</p>
 
-        <div class="row g-3">
-          <div class="col-md-4">
+        <div class="cmd-grid">
+          <div>
             <div class="type-label">Answer Filed</div>
             <div class="type-this">@RJL-zap answer filed</div>
             <div class="what-happens">
@@ -185,9 +432,9 @@
               </ul>
             </div>
           </div>
-          <div class="col-md-4">
+          <div>
             <div class="type-label">Discovery Requests Received</div>
-            <div class="type-this">@RJL-zap discovery requests received</div>
+            <div class="type-this" style="font-size:.77rem">@RJL-zap discovery requests received</div>
             <div class="what-happens">
               <ul>
                 <li>Calendar 30-day response deadline</li>
@@ -196,9 +443,9 @@
               </ul>
             </div>
           </div>
-          <div class="col-md-4">
+          <div>
             <div class="type-label">Scheduling Order Agreed</div>
-            <div class="type-this">@RJL-zap scheduling order agreed</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap scheduling order agreed</div>
             <div class="what-happens">
               <ul>
                 <li>Calendar discovery cutoff</li>
@@ -222,10 +469,10 @@
           </div>
         </div>
 
-        <div class="mt-3 p-3 rounded" style="background:#f0f9ff;font-size:.87rem;color:#075985">
-          <i class="bi bi-info-circle me-1"></i>
-          <strong>To mark items done:</strong> React ✅ on each thread item as you calendar it.
-          Once every item has a ✅, the bot closes the checklist automatically and stops reminding.
+        <div class="callout green mt-3">
+          <i class="bi bi-check2-circle me-1"></i>
+          <strong>Completing items:</strong> React ✅ on each thread item as you calendar it.
+          Once every item has a ✅, the bot closes the checklist and stops reminding automatically.
         </div>
       </div>
     </div>
@@ -236,12 +483,12 @@
         <i class="bi bi-person-arms-up"></i> Mediation Checklist
       </div>
       <div class="cmd-body">
-        <p>Use this when a mediation is scheduled. Tag the people responsible for prep — the bot will post the checklist and follow up three times automatically.</p>
+        <p>Use when a mediation is scheduled. Tag the people responsible for prep — the bot posts the checklist and follows up automatically on day 1, 3, and 14.</p>
 
         <div class="type-label">Type this (tag the people responsible)</div>
         <div class="type-this">@RJL-zap mediation checklist @Sarah @Marcus</div>
 
-        <div class="what-happens mt-2">
+        <div class="what-happens mt-1 mb-3">
           <strong>Bot immediately posts:</strong>
           <ul class="mt-1">
             <li>Confirm mediation is calendared</li>
@@ -252,7 +499,7 @@
           </ul>
         </div>
 
-        <div class="timeline-strip mt-3">
+        <div class="timeline-strip">
           <div class="tl-row"><span class="tl-badge badge-now">Day 1</span> Check-in: are prep steps complete?</div>
           <div class="tl-row"><span class="tl-badge badge-soon">Day 3</span> Invoice status follow-up</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Mediator payment confirmation</div>
@@ -263,36 +510,37 @@
     <!-- 30-Day Disbursement -->
     <div class="cmd-card">
       <div class="cmd-header hdr-disburse">
-        <i class="bi bi-lock-fill me-1"></i><i class="bi bi-currency-dollar"></i>
+        <i class="bi bi-currency-dollar"></i>
         30-Day Disbursement Timer
-        <span class="restricted-tag">⚠ Restricted</span>
+        <span class="restricted-tag"><i class="bi bi-lock-fill me-1"></i>Restricted</span>
       </div>
       <div class="cmd-body">
-        <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this command</strong> (see Admin Settings below). The bot reads the channel topic to find the responsible team members.</p>
+        <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this</strong> — others will get a "not authorized" reply. The bot reads the channel topic to find who to tag.</p>
 
         <div class="type-label">Type this</div>
         <div class="type-this">@RJL-zap start disbursement</div>
 
-        <div class="what-happens mt-2">
-          <strong>Bot immediately posts:</strong> Full 5-phase disbursement checklist (Settlement → Medical Bills → Release → Funding → Disbursement)
+        <div class="callout amber">
+          <i class="bi bi-people me-1"></i>
+          <strong>Who gets tagged?</strong> The bot reads the Slack channel topic and tags up to 3 people found there.
+          Make sure the channel topic lists the relevant team members using @-mentions.
         </div>
 
-        <div class="timeline-strip mt-3">
-          <div class="tl-row"><span class="tl-badge badge-now">30 min</span> Disbursement overview</div>
-          <div class="tl-row"><span class="tl-badge badge-now">3 hours</span> Cancel orders & gather invoices</div>
-          <div class="tl-row"><span class="tl-badge badge-soon">22 hours</span> Medical bills check-in</div>
-          <div class="tl-row"><span class="tl-badge badge-soon">24 hours</span> Settlement confirmation</div>
+        <div class="what-happens mb-3">
+          <strong>Bot immediately posts:</strong> Full 5-phase checklist (Settlement → Medical Bills → Release → Funding → Disbursement)
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-now">30 min</span> Disbursement overview &amp; phase summary</div>
+          <div class="tl-row"><span class="tl-badge badge-now">3 hrs</span> Cancel orders &amp; gather invoices</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">22 hrs</span> Medical bills check-in</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> Settlement confirmation</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Release signatures</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Funding &amp; check issuance</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation</div>
           <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline</div>
-        </div>
-
-        <div class="mt-3 p-3 rounded" style="background:#f0f9ff;font-size:.87rem;color:#075985">
-          <i class="bi bi-info-circle me-1"></i>
-          To close this workflow early, reply <code style="background:#e2e8f0;border-radius:4px;padding:.1rem .35rem">@RJL-zap COMPLETE</code> in the thread.
         </div>
       </div>
     </div>
@@ -303,14 +551,14 @@
         <i class="bi bi-person-check"></i> Attorney Intro
       </div>
       <div class="cmd-body">
-        <p>Use this when an attorney needs to make initial contact with a new client. Tag the attorney — the bot will remind them and escalate if it doesn't hear back.</p>
+        <p>Use when an attorney needs to make initial contact with a new client. Tag the attorney — the bot reminds them and escalates to supervisors if no reply is received.</p>
 
         <div class="type-label">Type this (tag the attorney)</div>
         <div class="type-this">@RJL-zap attorney intro @AttorneyName</div>
 
-        <div class="timeline-strip mt-2">
-          <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts: attorney has 72 hours to contact client. Reply <span class="done-word">done</span> when complete.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">48 hours</span> If no <span class="done-word">done</span> reply → escalation message tags the configured backup contacts.</div>
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts task: attorney has 72 hrs to contact client. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">48 hours</span> If no <span class="done-word">done</span> reply — escalation message tags configured supervisors.</div>
         </div>
       </div>
     </div>
@@ -321,14 +569,14 @@
         <i class="bi bi-telephone"></i> Paralegal Intro
       </div>
       <div class="cmd-body">
-        <p>Use this when a paralegal needs to make initial contact with a new client. Tag the paralegal — the bot posts the task immediately and escalates if there's no confirmation.</p>
+        <p>Use when a paralegal needs to make initial contact with a new client. Task is posted immediately — escalates in 24 hours if not confirmed.</p>
 
         <div class="type-label">Type this (tag the paralegal)</div>
         <div class="type-this">@RJL-zap paralegal intro @ParalegalName</div>
 
-        <div class="timeline-strip mt-2">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: contact client within 24 hours. Reply <span class="done-word">done</span> when complete.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply → escalation message tags backup contacts.</div>
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: contact client within 24 hrs. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
@@ -339,12 +587,12 @@
         <i class="bi bi-clipboard-check"></i> Case Setup
       </div>
       <div class="cmd-body">
-        <p>Use this when a new case is being set up. Tag the person responsible for verifying the setup documents. Bot posts a checklist immediately.</p>
+        <p>Use when a new case is being set up. Tag the person responsible for verifying the intake documents — the bot posts the checklist immediately.</p>
 
         <div class="type-label">Type this (tag the person responsible)</div>
         <div class="type-this">@RJL-zap case setup @PersonName</div>
 
-        <div class="what-happens mt-2">
+        <div class="what-happens mt-1 mb-3">
           <strong>Bot immediately asks them to confirm:</strong>
           <ul class="mt-1 mb-0">
             <li>Signed contract saved in Dropbox</li>
@@ -353,8 +601,8 @@
           </ul>
         </div>
 
-        <div class="timeline-strip mt-3">
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply → escalation tags backup contacts.</div>
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
@@ -365,61 +613,98 @@
         <i class="bi bi-cash-coin"></i> Client Check Pickup
       </div>
       <div class="cmd-body">
-        <p>Use this when a client needs to schedule pickup of their settlement check. Tag the person responsible — they have 7 days to confirm scheduling.</p>
+        <p>Use when a client needs to schedule pickup of their settlement check. They have 7 days — the bot escalates on day 5 if nothing is scheduled.</p>
 
         <div class="type-label">Type this (tag the person responsible)</div>
         <div class="type-this">@RJL-zap check pickup @PersonName</div>
 
-        <div class="timeline-strip mt-2">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply → escalation tags backup contacts.</div>
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
 
-    <!-- New Case Assignment -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-simple">
-        <i class="bi bi-folder-plus"></i> New Case Assignment
+    <!-- New Case + Review (side by side) -->
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="cmd-card h-100">
+          <div class="cmd-header hdr-simple">
+            <i class="bi bi-folder-plus"></i> New Case Assignment
+          </div>
+          <div class="cmd-body">
+            <p>Sends a new case notification to the configured default assignee. One message, no follow-up. Add @-mentions to loop in extra people for this specific case.</p>
+            <div class="type-label">Type this</div>
+            <div class="type-this">@RJL-zap new case</div>
+            <div class="type-label mt-2">Or with extra people</div>
+            <div class="type-this">@RJL-zap new case @SomeoneElse</div>
+          </div>
+        </div>
       </div>
-      <div class="cmd-body">
-        <p>Sends a new case notification to the configured case assignee (usually Laura). One message, no follow-up. You can @-mention additional people to loop them in for this specific case.</p>
-
-        <div class="type-label">Type this</div>
-        <div class="type-this">@RJL-zap new case</div>
-        <div class="type-label mt-2">Or tag extra people for this specific case</div>
-        <div class="type-this">@RJL-zap new case @SomeoneElse</div>
-      </div>
-    </div>
-
-    <!-- Review Request -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-simple">
-        <i class="bi bi-star"></i> 5-Star Review Prompt
-      </div>
-      <div class="cmd-body">
-        <p>Posts a prompt asking the team whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
-
-        <div class="type-label">Type this (tag the people to notify)</div>
-        <div class="type-this">@RJL-zap ready for review @PersonName</div>
+      <div class="col-md-6">
+        <div class="cmd-card h-100">
+          <div class="cmd-header hdr-simple">
+            <i class="bi bi-star"></i> 5-Star Review Prompt
+          </div>
+          <div class="cmd-body">
+            <p>Posts a prompt asking whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
+            <div class="type-label">Type this (tag the people to notify)</div>
+            <div class="type-this">@RJL-zap ready for review @PersonName</div>
+          </div>
+        </div>
       </div>
     </div>
 
   </section>
 
-  <!-- ───── FAQ ───── -->
+  <!-- ── THREAD REPLIES ── -->
+  <section id="thread-replies" class="mb-5">
+    <div class="section-label">Thread replies</div>
+
+    <div class="cmd-card">
+      <div class="cmd-body">
+        <p class="mb-3">Some commands require a reply inside the thread to mark something complete or close a workflow early.</p>
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Mark intro/setup complete</div>
+            <div class="type-this">done</div>
+            <div class="small text-muted mt-1">Stops the escalation timer for attorney intro, paralegal intro, and case setup.</div>
+          </div>
+          <div class="col-md-4">
+            <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Confirm check pickup scheduled</div>
+            <div class="type-this">scheduled</div>
+            <div class="small text-muted mt-1">Stops the escalation timer for the check pickup workflow.</div>
+          </div>
+          <div class="col-md-4">
+            <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Close any workflow early</div>
+            <div class="type-this">@RJL-zap COMPLETE</div>
+            <div class="small text-muted mt-1">Immediately closes the checklist and stops all reminders, even if not every ✅ is checked.</div>
+          </div>
+        </div>
+
+        <div class="callout mt-3">
+          <i class="bi bi-chat-left-text me-1"></i>
+          <strong>Important:</strong> Replies must go <em>inside the thread</em> started by the bot — not in the main channel. Click <strong>Reply</strong> under the bot's message to open it.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ── -->
   <section id="faq" class="mb-5">
-    <div class="section-label">Frequently Asked Questions</div>
+    <div class="section-label">FAQ</div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq1">
         What if I type the command and nothing happens?
-        <i class="bi bi-chevron-down small"></i>
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq1" class="collapse show">
         <div class="faq-a">
-          First, make sure you @-mentioned <strong>@RJL-zap</strong> (not just typed the phrase). If it's the first time the bot is being used in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
-          If the bot still doesn't respond, let your admin know.
+          Make sure you @-mentioned <strong>@RJL-zap</strong> — just typing the phrase without the @-mention won't trigger anything.
+          If it's the first time in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
+          If it still doesn't respond, contact your admin.
         </div>
       </div>
     </div>
@@ -427,138 +712,150 @@
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq2">
         Can I trigger a workflow more than once in the same channel?
-        <i class="bi bi-chevron-down small"></i>
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq2" class="collapse">
         <div class="faq-a">
-          Yes — but each individual message can only start one workflow. Just post a new @RJL-zap message and a new workflow starts. The old one stays open until you complete it.
+          Yes — each individual @-mention message starts its own workflow thread. Post a new @RJL-zap message and a new workflow begins. Previous ones stay open until completed.
         </div>
       </div>
     </div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq3">
-        What does "reply done in the thread" mean?
-        <i class="bi bi-chevron-down small"></i>
+        What does "reply done in the thread" mean exactly?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq3" class="collapse">
         <div class="faq-a">
-          Click <strong>Reply</strong> under the bot's message (not the original trigger message) to open the thread, then type the word <span class="done-word">done</span> and hit send. The bot will see it and stop the escalation timer.
-          For the check pickup workflow, type <span class="done-word">scheduled</span> instead of <span class="done-word">done</span>.
+          Click <strong>Reply</strong> under the bot's message to open the thread, then type the word
+          <span class="done-word">done</span> and send. The bot checks for this keyword and will stop the escalation timer.
+          For check pickup, type <span class="done-word">scheduled</span> instead.
         </div>
       </div>
     </div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq4">
-        How do I close a checklist early if everything is done?
-        <i class="bi bi-chevron-down small"></i>
+        How do I close a checklist if everything is already done?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq4" class="collapse">
         <div class="faq-a">
-          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-zap COMPLETE</code> in the thread. This immediately closes the workflow and stops all reminders, even if not every ✅ has been added yet.
-          Alternatively, just react ✅ to every item — the bot closes it automatically when all are checked.
+          Reply <code style="background:#f3f4f6;border-radius:4px;padding:.1rem .4rem;color:var(--accent)">@RJL-zap COMPLETE</code> in the thread to close it immediately.
+          Or just react ✅ to every checklist item — the bot closes it automatically when all are checked.
         </div>
       </div>
     </div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq5">
-        What happens after 48 hours if something isn't done?
-        <i class="bi bi-chevron-down small"></i>
+        What happens if something isn't confirmed in time?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq5" class="collapse">
         <div class="faq-a">
-          For workflows with escalation (attorney intro, paralegal intro, case setup, check pickup), the bot posts a follow-up in the thread and tags the supervisors or backup contacts configured by your admin. You'll see an ⚠️ warning message and the original person plus supervisors will be tagged.
+          For workflows with escalation (attorney intro, paralegal intro, case setup, check pickup), the bot posts a follow-up in the thread and tags the supervisors or backup contacts configured by your admin. Both the original person tagged and the supervisors will see the escalation message.
         </div>
       </div>
     </div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq6">
-        What if I accidentally trigger a workflow?
-        <i class="bi bi-chevron-down small"></i>
+        What if I accidentally triggered a workflow?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq6" class="collapse">
         <div class="faq-a">
-          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-zap COMPLETE</code> in the thread right away — that closes it immediately and stops any scheduled reminders.
+          Reply <code style="background:#f3f4f6;border-radius:4px;padding:.1rem .4rem;color:var(--accent)">@RJL-zap COMPLETE</code> in the thread right away. That closes it immediately and cancels all scheduled reminders.
         </div>
       </div>
     </div>
 
     <div class="faq-item">
       <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq7">
-        Who gets the reminders and escalation messages?
-        <i class="bi bi-chevron-down small"></i>
+        Who gets the reminder messages?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
       </div>
       <div id="faq7" class="collapse">
         <div class="faq-a">
-          Checklist reminders (24-hour nudges) go to the @legalassistants group. Escalation messages for intro and setup workflows tag the people configured by your admin in the settings below.
-          The original person you tagged in the trigger message is always tagged in every message.
+          Checklist reminders (24-hour nudges on open calendar items) go to the @legalassistants group.
+          Escalation messages for intro and setup workflows tag the backup contacts configured by your admin.
+          The person you originally tagged in the trigger message is always included.
         </div>
       </div>
     </div>
 
   </section>
 
-  <!-- ───── SETTINGS ───── -->
+  <!-- ── ADMIN SETTINGS (hidden behind toggle) ── -->
   <section id="settings" class="mb-5">
-    <div class="section-label">Admin Settings</div>
 
-    <!-- Env var callout -->
-    <div class="env-callout mb-4">
-      <div class="fw-bold mb-2" style="font-size:.9rem;color:#fff">
-        <i class="bi bi-terminal me-2"></i>Server Environment Variables
-        <span style="font-size:.75rem;font-weight:400;color:#a0a8c0;margin-left:.5rem">Set in Railway → Variables, not on this page</span>
-      </div>
-      <div class="env-row">
-        <span class="env-key">SLACK_BOT_TOKEN <span class="required-tag">required</span></span>
-        <span class="env-desc">Bot's Slack credentials — starts with <code>xoxb-</code></span>
-      </div>
-      <div class="env-row">
-        <span class="env-key">SLACK_APP_TOKEN <span class="required-tag">required</span></span>
-        <span class="env-desc">Socket Mode connection token — starts with <code>xapp-</code></span>
-      </div>
-      <div class="env-row">
-        <span class="env-key">WEB_PASSWORD</span>
-        <span class="env-desc">Password to protect this admin page (recommended)</span>
-      </div>
-      <div class="env-row">
-        <span class="env-key">BOT_DB_PATH</span>
-        <span class="env-desc">Path to the database file — set to <code>/data/bot.db</code> if using a Railway volume</span>
-      </div>
+    <div class="admin-toggle-row" data-bs-toggle="collapse" data-bs-target="#admin-panel" aria-expanded="false">
+      <i class="bi bi-lock lock-icon"></i>
+      <span>Admin Settings</span>
+      <i class="bi bi-chevron-down small"></i>
     </div>
 
-    <!-- Form settings -->
-    <div class="settings-card">
-      <p class="text-muted mb-1" style="font-size:.88rem">
-        <i class="bi bi-pencil me-1"></i>Changes below take effect immediately — no restart needed.
-      </p>
-      <p class="text-muted mb-4" style="font-size:.85rem">
-        <strong>Finding a Slack user ID:</strong> Click any person's name or photo in Slack → click <strong>⋮</strong> (three dots) → <strong>Copy member ID</strong>.
-        It looks like <code class="slack-id">U026P9FUKHC</code>. For multiple people, separate with commas.
-      </p>
+    <div id="admin-panel" class="collapse">
 
-      <form method="POST" action="/settings">
-        {% for s in settings %}
-        <div class="mb-4">
-          <label class="form-label" for="{{ s.key }}">{{ s.label }}</label>
-          <input
-            type="text"
-            class="form-control font-monospace"
-            id="{{ s.key }}"
-            name="{{ s.key }}"
-            value="{{ cfg.get(s.key, '') }}"
-            placeholder="{% if 'hours' in s.key %}24{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
-          >
-          <div class="form-help">{{ s.help }}</div>
+      <div class="mt-3 mb-3">
+        <div class="section-label" style="margin-bottom:.5rem">Server Environment Variables</div>
+        <p style="font-size:.83rem;color:var(--text-muted);margin-bottom:.75rem">
+          These must be set in Railway → Variables (or your hosting dashboard). They are <em>not</em> editable on this page.
+        </p>
+      </div>
+
+      <div class="env-callout mb-4">
+        <div class="env-row">
+          <span class="env-key">SLACK_BOT_TOKEN <span class="required-tag">required</span></span>
+          <span class="env-desc">Bot's Slack credentials — starts with <code>xoxb-</code></span>
         </div>
-        {% endfor %}
+        <div class="env-row">
+          <span class="env-key">SLACK_APP_TOKEN <span class="required-tag">required</span></span>
+          <span class="env-desc">Socket Mode connection token — starts with <code>xapp-</code></span>
+        </div>
+        <div class="env-row">
+          <span class="env-key">WEB_PASSWORD</span>
+          <span class="env-desc">Password to protect this admin page (recommended)</span>
+        </div>
+        <div class="env-row">
+          <span class="env-key">BOT_DB_PATH</span>
+          <span class="env-desc">Path to database file — set to <code>/data/bot.db</code> if using a Railway volume</span>
+        </div>
+      </div>
 
-        <button type="submit" class="save-btn">
-          <i class="bi bi-floppy me-2"></i>Save Settings
-        </button>
-      </form>
+      <div class="settings-card">
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.5rem">
+          <i class="bi bi-arrow-repeat me-1"></i>Changes below take effect immediately — no restart needed.
+        </p>
+        <p style="font-size:.83rem;color:var(--text-muted);margin-bottom:1.5rem">
+          <strong>Finding a Slack user ID:</strong> Click any person's name or photo in Slack → click <strong>⋮</strong> (three dots) → <strong>Copy member ID</strong>.
+          It looks like <code class="slack-id">U026P9FUKHC</code>. For multiple people, separate with commas: <code class="slack-id">U026P9FUKHC, U05419CMZ5E</code>.
+        </p>
+
+        <form method="POST" action="/settings">
+          {% for s in settings %}
+          <div class="mb-4">
+            <label class="form-label" for="{{ s.key }}">{{ s.label }}</label>
+            <input
+              type="text"
+              class="form-control font-monospace"
+              id="{{ s.key }}"
+              name="{{ s.key }}"
+              value="{{ cfg.get(s.key, '') }}"
+              placeholder="{% if 'hours' in s.key %}24{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
+              style="font-size:.875rem"
+            >
+            <div class="form-help">{{ s.help }}</div>
+          </div>
+          {% endfor %}
+
+          <button type="submit" class="save-btn">
+            <i class="bi bi-floppy me-2"></i>Save Settings
+          </button>
+        </form>
+      </div>
     </div>
   </section>
 
@@ -566,12 +863,31 @@
 
 {% if saved %}
 <div class="saved-toast">
-  <div class="alert alert-success d-flex align-items-center shadow border-0 rounded-3">
+  <div class="alert alert-success d-flex align-items-center shadow border-0 rounded-3" style="font-size:.9rem">
     <i class="bi bi-check-circle-fill me-2"></i> Settings saved
   </div>
 </div>
 {% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Rotate chevron when admin panel opens/closes
+  const adminToggle = document.querySelector('[data-bs-target="#admin-panel"]');
+  const adminPanel = document.getElementById('admin-panel');
+  if (adminPanel) {
+    adminPanel.addEventListener('show.bs.collapse', () => {
+      adminToggle.querySelector('.bi-chevron-down').classList.replace('bi-chevron-down', 'bi-chevron-up');
+    });
+    adminPanel.addEventListener('hide.bs.collapse', () => {
+      adminToggle.querySelector('.bi-chevron-up').classList.replace('bi-chevron-up', 'bi-chevron-down');
+    });
+  }
+
+  // Auto-expand admin panel if we just saved (so user sees the confirmation)
+  {% if saved %}
+  const panel = new bootstrap.Collapse(document.getElementById('admin-panel'), { toggle: false });
+  panel.show();
+  {% endif %}
+</script>
 </body>
 </html>
