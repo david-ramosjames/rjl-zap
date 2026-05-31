@@ -47,6 +47,15 @@ SETTINGS = [
         "help": "Tagged in the 5-day reminder if no 'scheduled' reply. Comma-separated.",
     },
     {
+        "key": "check_pickup_trigger_user_ids",
+        "label": "Check Pickup — Auto-Trigger Users",
+        "help": "Slack user IDs whose messages auto-trigger Check Pickup "
+                "when they include the phrase \"law firm can be paid\". "
+                "The user who posted the message gets tagged in the "
+                "scheduling reminder. Comma-separated. Leave empty to "
+                "disable the auto-trigger.",
+    },
+    {
         "key": "new_case_assignee_user_ids",
         "label": "New Case — Default Assignee(s)",
         "help": "Always tagged when @Jamie new case fires (e.g. Laura: UA63X86AJ). Comma-separated.",

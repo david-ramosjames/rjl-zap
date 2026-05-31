@@ -540,13 +540,14 @@
         <div class="what-happens">
           <strong>Phrases that auto-trigger:</strong>
           <ul class="mt-1 mb-0">
-            <li><code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">Mediation Checklist</code> — fires the <strong>Mediation Checklist</strong> workflow (checklist + day 1/3/14 follow-ups).</li>
+            <li><code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">Mediation Checklist</code> — fires the <strong>Mediation Checklist</strong> workflow (checklist + day 1/3/14 follow-ups). Anyone can trigger this.</li>
+            <li><code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">law firm can be paid</code> — fires <strong>Client Check Pickup</strong> (7-day scheduling reminder, escalates day 5). <strong>Restricted</strong> — only fires when posted by a user listed in <em>Check Pickup — Auto-Trigger Users</em> in admin settings. The person who posted gets tagged.</li>
           </ul>
         </div>
 
         <div class="callout blue mt-3">
           <i class="bi bi-info-circle me-1"></i>
-          <strong>One workflow per thread.</strong> If a thread already has a mediation workflow running, repeating the phrase won't start a duplicate.
+          <strong>One workflow per thread.</strong> If a thread already has a workflow of this type running, repeating the phrase won't start a duplicate.
         </div>
       </div>
     </div>
@@ -807,12 +808,16 @@
     <div class="cmd-card">
       <div class="cmd-header hdr-pickup">
         <i class="bi bi-cash-coin"></i> Client Check Pickup
-        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
+        <span class="trigger-tag both" title="Auto-fires when a configured user posts 'law firm can be paid'; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p>Use when a client needs to schedule pickup of their settlement check. They have 7 days — the bot escalates on day 5 if nothing is scheduled.</p>
+        <p>Reminds the responsible person to schedule pickup of a client's settlement check. They have 7 days — the bot escalates on day 5 if nothing is scheduled.</p>
 
-        <div class="type-label">Type this (tag the person responsible)</div>
+        <p style="font-size:.88rem;background:#f0fdf4;border-left:3px solid #22c55e;padding:.6rem .85rem;border-radius:0 6px 6px 0;margin-bottom:.75rem">
+          <strong>Auto-fires</strong> when a configured trigger user posts a message containing <code style="background:rgba(0,0,0,.06);padding:.05rem .3rem;border-radius:3px">law firm can be paid</code>. The person who posted gets tagged in the scheduling reminder. Set the trigger user(s) in admin settings under <em>Check Pickup — Auto-Trigger Users</em>.
+        </p>
+
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
         <div class="type-this">@RJL-zap check pickup @PersonName</div>
 
         <div class="timeline-strip mt-1">

@@ -17,6 +17,7 @@ from config import (
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
+    CHECK_PICKUP_AUTO_PHRASE,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
     DOC_VERIFICATION,
@@ -635,6 +636,23 @@ def handle_message(event, client):
     if MEDIATION.phrase in lowered and not _bot_is_mentioned(client, text):
         _start_mediation(client, channel_id, event["ts"], text)
         return
+
+    # Auto-fire Check Pickup when a configured user posts the trigger phrase
+    # (legacy Zapier "law firm can be paid" from:@paralegal trigger).
+    if CHECK_PICKUP_AUTO_PHRASE in lowered:
+        trigger_users = _ids_from_config("check_pickup_trigger_user_ids")
+        author = event.get("user", "")
+        if trigger_users and author in trigger_users and not _bot_is_mentioned(client, text):
+            log.info("auto-firing check_pickup from user=%s in #%s", author, channel_id)
+            try:
+                _auto_start_followup(
+                    client, channel_id, CHECK_PICKUP,
+                    "check_pickup_backup_user_ids", "check_pickup",
+                    participants=[author],
+                )
+            except Exception:
+                log.exception("auto check_pickup failed for channel=%s", channel_id)
+            return
 
     # First user message in a newly-created channel → fire new_case
     if not NEW_CASE_ON_FIRST_MESSAGE:

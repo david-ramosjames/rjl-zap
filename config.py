@@ -338,3 +338,7 @@ NEW_CASE_ON_FIRST_MESSAGE = True
 CASE_SETUP_DELAY_SECONDS = 15 * 60
 DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60
 CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60
+
+# Phrase that auto-triggers Check Pickup. Only fires when the message
+# author is in the `check_pickup_trigger_user_ids` admin setting.
+CHECK_PICKUP_AUTO_PHRASE = "law firm can be paid"
