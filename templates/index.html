@@ -3,370 +3,574 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Jamie — Legal Ops Bot</title>
+  <title>RJL-flow — How to Use</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
-    body { background: #f8f9fa; }
-    .navbar { background: #1a1f36; }
-    .sidebar { position: sticky; top: 1rem; }
-    .sidebar .nav-link { color: #495057; border-radius: 6px; padding: .4rem .75rem; }
-    .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #e9ecef; color: #1a1f36; }
-    .section-header { font-size: .7rem; font-weight: 700; letter-spacing: .08em;
-                      text-transform: uppercase; color: #adb5bd; margin: 1.25rem 0 .5rem .75rem; }
-    .workflow-card { border: none; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 1rem; }
-    .workflow-card .card-header { border-radius: 12px 12px 0 0 !important; font-weight: 600; }
-    .badge-trigger { font-size: .78rem; font-weight: 500; }
-    .trigger-pill { background: #1a1f36; color: #fff; border-radius: 20px;
-                    padding: .2rem .7rem; font-family: monospace; font-size: .82rem; display: inline-block; }
-    .timeline-row { display: flex; gap: .75rem; align-items: flex-start; margin-bottom: .5rem; }
-    .timeline-dot { width: 28px; height: 28px; border-radius: 50%; display: flex;
-                    align-items: center; justify-content: center; flex-shrink: 0;
-                    font-size: .75rem; font-weight: 700; margin-top: .1rem; }
-    .setting-card { border: none; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    .faq-item { border-bottom: 1px solid #dee2e6; padding: 1rem 0; }
-    .faq-item:last-child { border-bottom: none; }
-    .faq-q { font-weight: 600; color: #1a1f36; margin-bottom: .25rem; cursor: pointer; }
-    .faq-a { color: #495057; font-size: .93rem; }
-    code { background: #e9ecef; border-radius: 4px; padding: .1rem .35rem; font-size: .85em; color: #c0392b; }
-    .id-help { font-size: .8rem; color: #6c757d; margin-top: .25rem; }
-    .saved-banner { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
-                    animation: fadeout 4s forwards; }
-    @keyframes fadeout { 0%,75%{opacity:1} 100%{opacity:0} }
+    :root {
+      --navy: #1a1f36;
+      --navy-light: #2d3561;
+    }
+    body { background: #f4f5f9; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .top-bar { background: var(--navy); color: #fff; padding: 1rem 2rem; }
+    .top-bar .bot-name { font-size: 1.3rem; font-weight: 700; letter-spacing: -.01em; }
+    .top-bar .tagline { font-size: .85rem; color: #a0a8c0; }
+
+    /* Nav tabs */
+    .page-nav { background: #fff; border-bottom: 1px solid #dee2e6; position: sticky; top: 0; z-index: 100; }
+    .page-nav a { display: inline-block; padding: .75rem 1.25rem; color: #495057; text-decoration: none;
+                  font-size: .9rem; font-weight: 500; border-bottom: 3px solid transparent; }
+    .page-nav a:hover { color: var(--navy); border-bottom-color: #dee2e6; }
+
+    /* Section headers */
+    .section-label { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+                     color: #adb5bd; margin-bottom: .75rem; }
+
+    /* Command cards */
+    .cmd-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+                margin-bottom: 1rem; overflow: hidden; }
+    .cmd-card .cmd-header { padding: .9rem 1.25rem; font-weight: 600; font-size: .95rem;
+                            display: flex; align-items: center; gap: .5rem; }
+    .cmd-card .cmd-body { padding: .75rem 1.25rem 1.25rem; }
+    .cmd-card .cmd-body p { color: #495057; font-size: .9rem; margin-bottom: .6rem; }
+
+    .type-this { background: var(--navy); color: #e2e8f0; border-radius: 8px;
+                 padding: .5rem .85rem; font-family: 'Consolas', monospace; font-size: .85rem;
+                 display: inline-block; margin: .35rem 0 .6rem; user-select: all; }
+    .type-label { font-size: .75rem; font-weight: 600; text-transform: uppercase;
+                  letter-spacing: .06em; color: #adb5bd; margin-bottom: .2rem; }
+
+    .what-happens { background: #f8f9fa; border-radius: 8px; padding: .7rem 1rem;
+                    margin-top: .6rem; font-size: .87rem; color: #343a40; }
+    .what-happens ul { margin: 0; padding-left: 1.2rem; }
+    .what-happens li { margin-bottom: .2rem; }
+
+    .timeline-strip { display: flex; flex-direction: column; gap: .4rem; margin-top: .6rem; }
+    .tl-row { display: flex; align-items: flex-start; gap: .65rem; font-size: .87rem; }
+    .tl-badge { border-radius: 20px; padding: .15rem .55rem; font-size: .72rem; font-weight: 700;
+                white-space: nowrap; flex-shrink: 0; margin-top: .1rem; }
+
+    .badge-now  { background: #e3f9e5; color: #276749; }
+    .badge-soon { background: #e8f4fd; color: #1a6fa8; }
+    .badge-warn { background: #fff3cd; color: #856404; }
+    .badge-esc  { background: #fde8e8; color: #9b1c1c; }
+
+    .restricted-tag { background: #fff3cd; color: #856404; border-radius: 6px;
+                      padding: .15rem .5rem; font-size: .75rem; font-weight: 600; margin-left: .5rem; }
+    .done-word { background: #e3f9e5; color: #276749; border-radius: 4px;
+                 padding: .05rem .4rem; font-family: monospace; font-size: .9em; }
+
+    /* FAQ */
+    .faq-item { background: #fff; border-radius: 10px; margin-bottom: .6rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .faq-q { padding: .9rem 1.1rem; font-weight: 600; color: var(--navy);
+             display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .faq-a { padding: 0 1.1rem .9rem; color: #495057; font-size: .9rem; line-height: 1.6; }
+
+    /* Settings */
+    .settings-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+                     padding: 1.5rem; margin-bottom: 1rem; }
+    .env-callout { background: #1a1f36; color: #e2e8f0; border-radius: 10px;
+                   padding: 1.1rem 1.4rem; margin-bottom: 1.5rem; font-size: .88rem; }
+    .env-callout code { background: rgba(255,255,255,.12); color: #a5f3d0;
+                        border-radius: 4px; padding: .1rem .4rem; font-size: .88em; }
+    .env-callout .env-row { display: flex; gap: .75rem; align-items: baseline; padding: .3rem 0; }
+    .env-callout .env-key { font-family: monospace; font-weight: 600; color: #a5f3d0;
+                            min-width: 220px; flex-shrink: 0; }
+    .env-callout .env-desc { color: #a0a8c0; }
+    .env-callout .required-tag { background: #9b1c1c; color: #fff; border-radius: 4px;
+                                  font-size: .65rem; font-weight: 700; padding: .1rem .35rem;
+                                  text-transform: uppercase; letter-spacing: .04em; margin-left: .4rem; }
+    .form-label { font-weight: 600; font-size: .9rem; color: var(--navy); }
+    .form-help { font-size: .8rem; color: #6c757d; margin-top: .2rem; }
+    code.slack-id { background: #e9ecef; border-radius: 4px; padding: .1rem .35rem;
+                    font-size: .85em; color: #c0392b; }
+    .save-btn { background: var(--navy); color: #fff; border: none; border-radius: 8px;
+                padding: .6rem 1.75rem; font-weight: 600; cursor: pointer; }
+    .save-btn:hover { background: var(--navy-light); }
+    .saved-toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+                   animation: fadeout 4s forwards; }
+    @keyframes fadeout { 0%,70%{opacity:1} 100%{opacity:0} }
+
+    .container-page { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }
+
+    /* Color accents per workflow type */
+    .hdr-calendar  { background: #e8f4fd; color: #1a6fa8; }
+    .hdr-mediation { background: #f0f4ff; color: #3730a3; }
+    .hdr-disburse  { background: #fffbeb; color: #92400e; }
+    .hdr-intro     { background: #f0fdf4; color: #166534; }
+    .hdr-setup     { background: #faf5ff; color: #6b21a8; }
+    .hdr-pickup    { background: #fff7ed; color: #9a3412; }
+    .hdr-simple    { background: #f0f9ff; color: #075985; }
   </style>
 </head>
 <body>
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark px-4 py-3">
-  <span class="navbar-brand fw-bold fs-5">
-    <i class="bi bi-robot me-2"></i>Jamie — Legal Ops Bot
-  </span>
-  <div class="d-flex gap-3">
-    <a href="#quick-reference" class="text-white-50 text-decoration-none small">Quick Reference</a>
-    <a href="#workflows" class="text-white-50 text-decoration-none small">Workflows</a>
-    <a href="#settings" class="text-white-50 text-decoration-none small">Settings</a>
-  </div>
-</nav>
+<div class="top-bar">
+  <div class="bot-name">⚡ RJL-flow</div>
+  <div class="tagline">Slack automation for the RJL legal team</div>
+</div>
 
-<div class="container-fluid py-4" style="max-width:960px">
+<div class="page-nav px-3">
+  <a href="#how-to-use">How to Use</a>
+  <a href="#commands">All Commands</a>
+  <a href="#faq">FAQ</a>
+  <a href="#settings">Admin Settings</a>
+</div>
 
-  {% if saved %}
-  <div class="saved-banner">
-    <div class="alert alert-success d-flex align-items-center shadow" role="alert">
-      <i class="bi bi-check-circle-fill me-2"></i> Settings saved
-    </div>
-  </div>
-  {% endif %}
+<div class="container-page">
 
-  <!-- Quick Reference -->
-  <section id="quick-reference" class="mb-5">
-    <h4 class="fw-bold mb-3"><i class="bi bi-question-circle me-2 text-primary"></i>Quick Reference</h4>
-    <div class="card setting-card p-3">
+  <!-- ───── HOW TO USE ───── -->
+  <section id="how-to-use" class="mb-5">
+    <div class="section-label">Getting Started</div>
 
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-at me-1"></i>How do I trigger the bot?</div>
-        <div class="faq-a">
-          @-mention <strong>@Jamie</strong> in any channel followed by a recognized phrase (see Workflows below).
-          The first time you mention Jamie in a channel, Slack will prompt you to invite it — click <em>Add to channel</em>.
+    <div class="cmd-card">
+      <div class="cmd-body p-4">
+        <h5 class="fw-bold mb-3" style="color:var(--navy)">What is RJL-flow?</h5>
+        <p style="font-size:.95rem;color:#343a40">
+          RJL-flow is a Slack bot that automatically sends checklists, reminders, and follow-ups
+          so nothing falls through the cracks on a case. You trigger it by typing its name in Slack.
+          It handles the follow-up from there.
+        </p>
+
+        <hr class="my-3">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="fw-semibold mb-1" style="color:var(--navy)">① Type a command</div>
+            <div class="small text-muted">In any case channel, mention @RJL-flow followed by a command phrase.</div>
+          </div>
+          <div class="col-md-4">
+            <div class="fw-semibold mb-1" style="color:var(--navy)">② Bot responds in a thread</div>
+            <div class="small text-muted">RJL-flow posts a checklist or task directly in the thread of your message.</div>
+          </div>
+          <div class="col-md-4">
+            <div class="fw-semibold mb-1" style="color:var(--navy)">③ Mark items done</div>
+            <div class="small text-muted">React ✅ on each item, or reply <span class="done-word">done</span> in the thread. The bot tracks it and stops reminding.</div>
+          </div>
         </div>
-      </div>
 
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-check2-square me-1"></i>How do I mark a task complete?</div>
-        <div class="faq-a">
-          React ✅ on individual checklist items as you finish them.
-          To close an entire workflow at once, reply <code>@Jamie COMPLETE</code> in the thread.
-        </div>
+        <hr class="my-3">
+        <div class="fw-semibold mb-2" style="color:var(--navy)">First time in a channel?</div>
+        <p class="small text-muted mb-0">
+          When you mention @RJL-flow in a channel it hasn't been added to yet, Slack will show a popup asking
+          <em>"Add RJL-flow to this channel?"</em> — click <strong>Add to channel</strong> and the bot will respond normally.
+          You only need to do this once per channel.
+        </p>
       </div>
-
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-bell me-1"></i>Who gets reminded?</div>
-        <div class="faq-a">
-          Reminders always post in the original thread so everyone following it sees them.
-          Some workflows also tag specific escalation contacts (configured in Settings below) if no one responds.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-clock-history me-1"></i>How often does the bot send reminders?</div>
-        <div class="faq-a">
-          Checklist workflows (answer filed, discovery, scheduling) remind every <strong>24 hours</strong> until all items are checked off.
-          Mediation and disbursement follow a fixed schedule. Intro workflows escalate once if no
-          <code>done</code> reply is received.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-arrow-repeat me-1"></i>Can I run a workflow again in the same channel?</div>
-        <div class="faq-a">
-          Each original trigger message can only start one workflow. To start a new one, post a new @Jamie mention in the channel.
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q"><i class="bi bi-person-badge me-1"></i>How do I find a Slack user ID?</div>
-        <div class="faq-a">
-          Click any person's name or avatar in Slack → click the <strong>⋮</strong> (three dots) → <strong>Copy member ID</strong>.
-          It looks like <code>U026P9FUKHC</code>. Paste it into the Settings fields below.
-        </div>
-      </div>
-
     </div>
   </section>
 
-  <!-- Workflows -->
-  <section id="workflows" class="mb-5">
-    <h4 class="fw-bold mb-3"><i class="bi bi-diagram-3 me-2 text-success"></i>Workflows</h4>
+  <!-- ───── ALL COMMANDS ───── -->
+  <section id="commands" class="mb-5">
+    <div class="section-label">All Commands</div>
 
     <!-- Calendar Checklists -->
-    <div class="card workflow-card">
-      <div class="card-header bg-primary bg-opacity-10 text-primary">
-        <i class="bi bi-calendar-check me-2"></i>Calendar Checklists
+    <div class="cmd-card">
+      <div class="cmd-header hdr-calendar">
+        <i class="bi bi-calendar-check"></i> Calendar Checklists
       </div>
-      <div class="card-body">
-        <p class="text-muted small mb-3">Post a checklist of deadlines to calendar. React ✅ on each item when done. Bot reminds every 24 hours until all items are checked.</p>
+      <div class="cmd-body">
+        <p>Use these when a key case event happens and you need to make sure all the deadlines get on the calendar. The bot posts a checklist and reminds every 24 hours until every item is checked off.</p>
 
-        <div class="mb-3">
-          <div class="trigger-pill mb-2">@Jamie answer filed</div>
-          <ul class="small text-muted mb-0">
-            <li>Calendar Initial Disclosures</li>
-            <li>Calendar Chapter 18 deadline</li>
-            <li>Calendar controverting affidavit deadline</li>
-            <li>Update case management calendar</li>
-          </ul>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="type-label">Answer Filed</div>
+            <div class="type-this">@RJL-flow answer filed</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar Initial Disclosures</li>
+                <li>Calendar Chapter 18 deadline</li>
+                <li>Calendar controverting affidavit</li>
+                <li>Update case management calendar</li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="type-label">Discovery Requests Received</div>
+            <div class="type-this">@RJL-flow discovery requests received</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar 30-day response deadline</li>
+                <li>Calendar draft review deadline</li>
+                <li>Assign drafter for responses</li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="type-label">Scheduling Order Agreed</div>
+            <div class="type-this">@RJL-flow scheduling order agreed</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar discovery cutoff</li>
+                <li>Calendar expert disclosures</li>
+                <li>Calendar dispositive motions</li>
+                <li>Calendar trial date</li>
+              </ul>
+            </div>
+          </div>
         </div>
 
-        <div class="mb-3">
-          <div class="trigger-pill mb-2">@Jamie discovery requests received</div>
-          <ul class="small text-muted mb-0">
-            <li>Calendar 30-day response deadline</li>
-            <li>Calendar internal draft review deadline</li>
-            <li>Assign drafter for responses</li>
-          </ul>
+        <div class="mt-3">
+          <div class="type-label">Calendar Statute of Limitations</div>
+          <div class="type-this">@RJL-flow calendar sol</div>
+          <div class="what-happens">
+            <ul class="mb-0">
+              <li>Calendar the SOL deadline with exact date</li>
+              <li>Set 30-day advance reminder</li>
+              <li>Set 7-day advance reminder</li>
+            </ul>
+          </div>
         </div>
 
-        <div class="mb-3">
-          <div class="trigger-pill mb-2">@Jamie scheduling order agreed</div>
-          <ul class="small text-muted mb-0">
-            <li>Calendar discovery cutoff</li>
-            <li>Calendar expert disclosure deadlines</li>
-            <li>Calendar dispositive motion deadline</li>
-            <li>Calendar trial date</li>
-          </ul>
-        </div>
-
-        <div>
-          <div class="trigger-pill mb-2">@Jamie calendar sol</div>
-          <ul class="small text-muted mb-0">
-            <li>Calendar Statute of Limitations deadline</li>
-            <li>Calendar 30-day SOL reminder</li>
-            <li>Calendar 7-day SOL reminder</li>
-          </ul>
+        <div class="mt-3 p-3 rounded" style="background:#f0f9ff;font-size:.87rem;color:#075985">
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>To mark items done:</strong> React ✅ on each thread item as you calendar it.
+          Once every item has a ✅, the bot closes the checklist automatically and stops reminding.
         </div>
       </div>
     </div>
 
     <!-- Mediation Checklist -->
-    <div class="card workflow-card">
-      <div class="card-header bg-info bg-opacity-10 text-info">
-        <i class="bi bi-scales me-2"></i>Mediation Checklist
+    <div class="cmd-card">
+      <div class="cmd-header hdr-mediation">
+        <i class="bi bi-person-arms-up"></i> Mediation Checklist
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie mediation checklist @person1 @person2</div>
-        <p class="text-muted small mb-3">Tag the people responsible. Bot posts the full prep checklist addressing them, then sends three timed follow-ups in the thread.</p>
-        <div>
-          <div class="timeline-row">
-            <div class="timeline-dot bg-info bg-opacity-25 text-info">1d</div>
-            <div class="small">Prep steps check-in</div>
-          </div>
-          <div class="timeline-row">
-            <div class="timeline-dot bg-info bg-opacity-25 text-info">3d</div>
-            <div class="small">Invoice status</div>
-          </div>
-          <div class="timeline-row">
-            <div class="timeline-dot bg-info bg-opacity-25 text-info">14d</div>
-            <div class="small">Mediator payment confirmation</div>
-          </div>
+      <div class="cmd-body">
+        <p>Use this when a mediation is scheduled. Tag the people responsible for prep — the bot will post the checklist and follow up three times automatically.</p>
+
+        <div class="type-label">Type this (tag the people responsible)</div>
+        <div class="type-this">@RJL-flow mediation checklist @Sarah @Marcus</div>
+
+        <div class="what-happens mt-2">
+          <strong>Bot immediately posts:</strong>
+          <ul class="mt-1">
+            <li>Confirm mediation is calendared</li>
+            <li>Schedule client prep session</li>
+            <li>Reserve conference room</li>
+            <li>Send invoice to client</li>
+            <li>Confirm mediator payment</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip mt-3">
+          <div class="tl-row"><span class="tl-badge badge-now">Day 1</span> Check-in: are prep steps complete?</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">Day 3</span> Invoice status follow-up</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Mediator payment confirmation</div>
         </div>
       </div>
     </div>
 
-    <!-- Disbursement -->
-    <div class="card workflow-card">
-      <div class="card-header bg-warning bg-opacity-10 text-warning">
-        <i class="bi bi-lock me-1"></i>
-        <i class="bi bi-currency-dollar me-1"></i>30-Day Disbursement Timer
-        <span class="badge bg-warning text-dark ms-2 float-end" style="font-size:.7rem">Restricted</span>
+    <!-- 30-Day Disbursement -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-disburse">
+        <i class="bi bi-lock-fill me-1"></i><i class="bi bi-currency-dollar"></i>
+        30-Day Disbursement Timer
+        <span class="restricted-tag">⚠ Restricted</span>
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie start disbursement</div>
-        <p class="text-muted small mb-3">
-          Only authorized users can trigger this (see Settings). Team members are pulled from the channel topic.
-          Posts a full 5-phase disbursement checklist, then sends 10 timed reminders over 30 days.
-        </p>
-        <div class="row row-cols-2 g-2">
-          {% for label, time in [("Overview","30 min"),("Cancel orders & gather invoices","3 hours"),
-            ("Medical bills check-in","22 hours"),("Settlement confirmation","24 hours"),
-            ("Reductions update","Day 3"),("Release signatures","Day 7"),
-            ("Funding & check issuance","Day 14"),("Deposit confirmation","Day 17"),
-            ("Expense reconciliation","Day 21"),("Final deadline","Day 30")] %}
-          <div class="col">
-            <div class="d-flex gap-2 align-items-center small">
-              <span class="badge bg-warning text-dark" style="min-width:60px;font-size:.7rem">{{ time }}</span>
-              <span class="text-muted">{{ label }}</span>
-            </div>
-          </div>
-          {% endfor %}
+      <div class="cmd-body">
+        <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this command</strong> (see Admin Settings below). The bot reads the channel topic to find the responsible team members.</p>
+
+        <div class="type-label">Type this</div>
+        <div class="type-this">@RJL-flow start disbursement</div>
+
+        <div class="what-happens mt-2">
+          <strong>Bot immediately posts:</strong> Full 5-phase disbursement checklist (Settlement → Medical Bills → Release → Funding → Disbursement)
+        </div>
+
+        <div class="timeline-strip mt-3">
+          <div class="tl-row"><span class="tl-badge badge-now">30 min</span> Disbursement overview</div>
+          <div class="tl-row"><span class="tl-badge badge-now">3 hours</span> Cancel orders & gather invoices</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">22 hours</span> Medical bills check-in</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">24 hours</span> Settlement confirmation</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Release signatures</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Funding &amp; check issuance</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline</div>
+        </div>
+
+        <div class="mt-3 p-3 rounded" style="background:#f0f9ff;font-size:.87rem;color:#075985">
+          <i class="bi bi-info-circle me-1"></i>
+          To close this workflow early, reply <code style="background:#e2e8f0;border-radius:4px;padding:.1rem .35rem">@RJL-flow COMPLETE</code> in the thread.
         </div>
       </div>
     </div>
 
     <!-- Attorney Intro -->
-    <div class="card workflow-card">
-      <div class="card-header bg-secondary bg-opacity-10 text-secondary">
-        <i class="bi bi-person-check me-2"></i>Attorney Intro
+    <div class="cmd-card">
+      <div class="cmd-header hdr-intro">
+        <i class="bi bi-person-check"></i> Attorney Intro
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie attorney intro @attorney</div>
-        <p class="text-muted small mb-3">Tag the attorney responsible. Bot schedules a client contact reminder and escalates if there's no confirmation.</p>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-secondary bg-opacity-25 text-secondary">1h</div>
-          <div class="small">Posts client contact task — attorney has 72 hours, reply <code>done</code> when complete</div>
-        </div>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">48h</div>
-          <div class="small">If no <code>done</code> reply → posts escalation and tags escalation contacts (see Settings)</div>
-        </div>
-      </div>
-    </div>
+      <div class="cmd-body">
+        <p>Use this when an attorney needs to make initial contact with a new client. Tag the attorney — the bot will remind them and escalate if it doesn't hear back.</p>
 
-    <!-- Case Setup -->
-    <div class="card workflow-card">
-      <div class="card-header bg-success bg-opacity-10 text-success">
-        <i class="bi bi-clipboard-check me-2"></i>Case Setup
-      </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie case setup @person</div>
-        <p class="text-muted small mb-3">Tag the person responsible. Bot immediately posts a 3-item setup verification checklist.</p>
-        <ul class="small text-muted mb-3">
-          <li>Signed contract saved in Dropbox</li>
-          <li>Intake sheet completed</li>
-          <li>CTA signed and saved (if applicable)</li>
-        </ul>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">24h</div>
-          <div class="small">If no <code>done</code> reply → posts escalation and tags escalation contacts (see Settings)</div>
+        <div class="type-label">Type this (tag the attorney)</div>
+        <div class="type-this">@RJL-flow attorney intro @AttorneyName</div>
+
+        <div class="timeline-strip mt-2">
+          <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts: attorney has 72 hours to contact client. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">48 hours</span> If no <span class="done-word">done</span> reply → escalation message tags the configured backup contacts.</div>
         </div>
       </div>
     </div>
 
     <!-- Paralegal Intro -->
-    <div class="card workflow-card">
-      <div class="card-header bg-secondary bg-opacity-10 text-secondary">
-        <i class="bi bi-telephone me-2"></i>Paralegal Intro
+    <div class="cmd-card">
+      <div class="cmd-header hdr-intro">
+        <i class="bi bi-telephone"></i> Paralegal Intro
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie paralegal intro @paralegal</div>
-        <p class="text-muted small mb-3">Tag the paralegal responsible. Bot immediately requests client contact within 24 hours.</p>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-secondary bg-opacity-25 text-secondary">0h</div>
-          <div class="small">Posts client contact task — reply <code>done</code> when complete</div>
+      <div class="cmd-body">
+        <p>Use this when a paralegal needs to make initial contact with a new client. Tag the paralegal — the bot posts the task immediately and escalates if there's no confirmation.</p>
+
+        <div class="type-label">Type this (tag the paralegal)</div>
+        <div class="type-this">@RJL-flow paralegal intro @ParalegalName</div>
+
+        <div class="timeline-strip mt-2">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: contact client within 24 hours. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply → escalation message tags backup contacts.</div>
         </div>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">24h</div>
-          <div class="small">If no <code>done</code> reply → escalation tags configured contacts (see Settings)</div>
+      </div>
+    </div>
+
+    <!-- Case Setup -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-setup">
+        <i class="bi bi-clipboard-check"></i> Case Setup
+      </div>
+      <div class="cmd-body">
+        <p>Use this when a new case is being set up. Tag the person responsible for verifying the setup documents. Bot posts a checklist immediately.</p>
+
+        <div class="type-label">Type this (tag the person responsible)</div>
+        <div class="type-this">@RJL-flow case setup @PersonName</div>
+
+        <div class="what-happens mt-2">
+          <strong>Bot immediately asks them to confirm:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Signed contract saved in Dropbox</li>
+            <li>Intake sheet completed</li>
+            <li>CTA signed and saved (if applicable)</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip mt-3">
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply → escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
 
     <!-- Check Pickup -->
-    <div class="card workflow-card">
-      <div class="card-header bg-success bg-opacity-10 text-success">
-        <i class="bi bi-cash-coin me-2"></i>Client Check Pickup
+    <div class="cmd-card">
+      <div class="cmd-header hdr-pickup">
+        <i class="bi bi-cash-coin"></i> Client Check Pickup
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie check pickup @person</div>
-        <p class="text-muted small mb-3">Tag the person responsible for scheduling client check pickup (7-day deadline).</p>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-secondary bg-opacity-25 text-secondary">0h</div>
-          <div class="small">Posts pickup task — reply <code>scheduled</code> when on calendar</div>
-        </div>
-        <div class="timeline-row">
-          <div class="timeline-dot bg-danger bg-opacity-25 text-danger">5d</div>
-          <div class="small">If no <code>scheduled</code> reply → escalation tags backup contacts (see Settings)</div>
+      <div class="cmd-body">
+        <p>Use this when a client needs to schedule pickup of their settlement check. Tag the person responsible — they have 7 days to confirm scheduling.</p>
+
+        <div class="type-label">Type this (tag the person responsible)</div>
+        <div class="type-this">@RJL-flow check pickup @PersonName</div>
+
+        <div class="timeline-strip mt-2">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply → escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
 
     <!-- New Case Assignment -->
-    <div class="card workflow-card">
-      <div class="card-header bg-primary bg-opacity-10 text-primary">
-        <i class="bi bi-folder-plus me-2"></i>New Case Assignment
+    <div class="cmd-card">
+      <div class="cmd-header hdr-simple">
+        <i class="bi bi-folder-plus"></i> New Case Assignment
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie new case</div>
-        <p class="text-muted small mb-3">
-          One-shot notification. Always tags the configured assignee (e.g. Laura).
-          Add additional @-mentions to tag more people for this specific case.
-        </p>
+      <div class="cmd-body">
+        <p>Sends a new case notification to the configured case assignee (usually Laura). One message, no follow-up. You can @-mention additional people to loop them in for this specific case.</p>
+
+        <div class="type-label">Type this</div>
+        <div class="type-this">@RJL-flow new case</div>
+        <div class="type-label mt-2">Or tag extra people for this specific case</div>
+        <div class="type-this">@RJL-flow new case @SomeoneElse</div>
       </div>
     </div>
 
     <!-- Review Request -->
-    <div class="card workflow-card">
-      <div class="card-header bg-warning bg-opacity-10 text-warning">
-        <i class="bi bi-star me-2"></i>5-Star Review Prompt
+    <div class="cmd-card">
+      <div class="cmd-header hdr-simple">
+        <i class="bi bi-star"></i> 5-Star Review Prompt
       </div>
-      <div class="card-body">
-        <div class="trigger-pill mb-2">@Jamie ready for review</div>
-        <p class="text-muted small mb-3">
-          One-shot prompt asking whether this client should be asked for a 5-star review.
-          Tags any people you @-mention plus the configured review-request contacts (see Settings).
-        </p>
+      <div class="cmd-body">
+        <p>Posts a prompt asking the team whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
+
+        <div class="type-label">Type this (tag the people to notify)</div>
+        <div class="type-this">@RJL-flow ready for review @PersonName</div>
       </div>
     </div>
 
   </section>
 
-  <!-- Settings -->
-  <section id="settings" class="mb-5">
-    <h4 class="fw-bold mb-3"><i class="bi bi-gear me-2 text-secondary"></i>Settings</h4>
-    <div class="card setting-card">
-      <div class="card-body p-4">
+  <!-- ───── FAQ ───── -->
+  <section id="faq" class="mb-5">
+    <div class="section-label">Frequently Asked Questions</div>
 
-        <p class="text-muted small mb-4">
-          Changes take effect immediately — no restart needed.
-          <br>
-          <strong>How to find a Slack user ID:</strong> Click a person's name → <strong>⋮</strong> → <strong>Copy member ID</strong> (looks like <code>U026P9FUKHC</code>).
-          For multiple people, separate with commas.
-        </p>
-
-        <form method="POST" action="/settings">
-          {% for s in settings %}
-          <div class="mb-4">
-            <label class="form-label fw-semibold" for="{{ s.key }}">{{ s.label }}</label>
-            <input
-              type="text"
-              class="form-control font-monospace"
-              id="{{ s.key }}"
-              name="{{ s.key }}"
-              value="{{ cfg.get(s.key, '') }}"
-              placeholder="{% if 'hours' in s.key %}24{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
-            >
-            <div class="id-help">{{ s.help }}</div>
-          </div>
-          {% endfor %}
-
-          <button type="submit" class="btn btn-dark px-4">
-            <i class="bi bi-floppy me-2"></i>Save Settings
-          </button>
-        </form>
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq1">
+        What if I type the command and nothing happens?
+        <i class="bi bi-chevron-down small"></i>
       </div>
+      <div id="faq1" class="collapse show">
+        <div class="faq-a">
+          First, make sure you @-mentioned <strong>@RJL-flow</strong> (not just typed the phrase). If it's the first time the bot is being used in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
+          If the bot still doesn't respond, let your admin know.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq2">
+        Can I trigger a workflow more than once in the same channel?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq2" class="collapse">
+        <div class="faq-a">
+          Yes — but each individual message can only start one workflow. Just post a new @RJL-flow message and a new workflow starts. The old one stays open until you complete it.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq3">
+        What does "reply done in the thread" mean?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq3" class="collapse">
+        <div class="faq-a">
+          Click <strong>Reply</strong> under the bot's message (not the original trigger message) to open the thread, then type the word <span class="done-word">done</span> and hit send. The bot will see it and stop the escalation timer.
+          For the check pickup workflow, type <span class="done-word">scheduled</span> instead of <span class="done-word">done</span>.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq4">
+        How do I close a checklist early if everything is done?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq4" class="collapse">
+        <div class="faq-a">
+          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-flow COMPLETE</code> in the thread. This immediately closes the workflow and stops all reminders, even if not every ✅ has been added yet.
+          Alternatively, just react ✅ to every item — the bot closes it automatically when all are checked.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq5">
+        What happens after 48 hours if something isn't done?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq5" class="collapse">
+        <div class="faq-a">
+          For workflows with escalation (attorney intro, paralegal intro, case setup, check pickup), the bot posts a follow-up in the thread and tags the supervisors or backup contacts configured by your admin. You'll see an ⚠️ warning message and the original person plus supervisors will be tagged.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq6">
+        What if I accidentally trigger a workflow?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq6" class="collapse">
+        <div class="faq-a">
+          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-flow COMPLETE</code> in the thread right away — that closes it immediately and stops any scheduled reminders.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq7">
+        Who gets the reminders and escalation messages?
+        <i class="bi bi-chevron-down small"></i>
+      </div>
+      <div id="faq7" class="collapse">
+        <div class="faq-a">
+          Checklist reminders (24-hour nudges) go to the @legalassistants group. Escalation messages for intro and setup workflows tag the people configured by your admin in the settings below.
+          The original person you tagged in the trigger message is always tagged in every message.
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ───── SETTINGS ───── -->
+  <section id="settings" class="mb-5">
+    <div class="section-label">Admin Settings</div>
+
+    <!-- Env var callout -->
+    <div class="env-callout mb-4">
+      <div class="fw-bold mb-2" style="font-size:.9rem;color:#fff">
+        <i class="bi bi-terminal me-2"></i>Server Environment Variables
+        <span style="font-size:.75rem;font-weight:400;color:#a0a8c0;margin-left:.5rem">Set in Railway → Variables, not on this page</span>
+      </div>
+      <div class="env-row">
+        <span class="env-key">SLACK_BOT_TOKEN <span class="required-tag">required</span></span>
+        <span class="env-desc">Bot's Slack credentials — starts with <code>xoxb-</code></span>
+      </div>
+      <div class="env-row">
+        <span class="env-key">SLACK_APP_TOKEN <span class="required-tag">required</span></span>
+        <span class="env-desc">Socket Mode connection token — starts with <code>xapp-</code></span>
+      </div>
+      <div class="env-row">
+        <span class="env-key">WEB_PASSWORD</span>
+        <span class="env-desc">Password to protect this admin page (recommended)</span>
+      </div>
+      <div class="env-row">
+        <span class="env-key">BOT_DB_PATH</span>
+        <span class="env-desc">Path to the database file — set to <code>/data/bot.db</code> if using a Railway volume</span>
+      </div>
+    </div>
+
+    <!-- Form settings -->
+    <div class="settings-card">
+      <p class="text-muted mb-1" style="font-size:.88rem">
+        <i class="bi bi-pencil me-1"></i>Changes below take effect immediately — no restart needed.
+      </p>
+      <p class="text-muted mb-4" style="font-size:.85rem">
+        <strong>Finding a Slack user ID:</strong> Click any person's name or photo in Slack → click <strong>⋮</strong> (three dots) → <strong>Copy member ID</strong>.
+        It looks like <code class="slack-id">U026P9FUKHC</code>. For multiple people, separate with commas.
+      </p>
+
+      <form method="POST" action="/settings">
+        {% for s in settings %}
+        <div class="mb-4">
+          <label class="form-label" for="{{ s.key }}">{{ s.label }}</label>
+          <input
+            type="text"
+            class="form-control font-monospace"
+            id="{{ s.key }}"
+            name="{{ s.key }}"
+            value="{{ cfg.get(s.key, '') }}"
+            placeholder="{% if 'hours' in s.key %}24{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
+          >
+          <div class="form-help">{{ s.help }}</div>
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="save-btn">
+          <i class="bi bi-floppy me-2"></i>Save Settings
+        </button>
+      </form>
     </div>
   </section>
 
 </div>
+
+{% if saved %}
+<div class="saved-toast">
+  <div class="alert alert-success d-flex align-items-center shadow border-0 rounded-3">
+    <i class="bi bi-check-circle-fill me-2"></i> Settings saved
+  </div>
+</div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
