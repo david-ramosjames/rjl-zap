@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+import auto_join
 import recent_contact
 import reminders
 import storage
@@ -393,6 +394,11 @@ def handle_reaction_added(event, client):
         _maybe_finalize(client, workflow_id)
 
 
+@app.event("channel_created")
+def handle_channel_created(event, client):
+    auto_join.handle_channel_created(event, client)
+
+
 @app.event("reaction_removed")
 def handle_reaction_removed(event, client):
     if event.get("reaction") != COMPLETION_EMOJI:
@@ -421,6 +427,8 @@ def main() -> None:
     storage.init_db()
     reminders.start_reminder_loop(app.client)
     threading.Thread(target=web.start, daemon=True).start()
+    if os.getenv("AUTO_JOIN_CHANNELS", "1") not in ("0", "false", "False", ""):
+        auto_join.join_all_public_channels_async(app.client)
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
 

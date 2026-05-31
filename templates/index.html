@@ -410,10 +410,17 @@
       </div>
     </div>
 
-    <div class="callout" style="margin-top:1.25rem">
-      <i class="bi bi-person-plus me-1"></i>
-      <strong>First time in a channel?</strong> Slack will show a popup asking to add RJL-zap —
-      click <em>Add to channel</em> and it will respond normally. You only need to do this once per channel.
+    <div class="callout green" style="margin-top:1.25rem">
+      <i class="bi bi-check2-circle me-1"></i>
+      <strong>RJL-zap is already in every public channel.</strong> No need to invite or add it —
+      the bot auto-joins every public channel on startup and immediately joins any new channel as it's created.
+      Just @-mention it and it responds.
+    </div>
+
+    <div class="callout amber" style="margin-top:.75rem">
+      <i class="bi bi-lock me-1"></i>
+      <strong>Private channels are the exception.</strong> Slack does not allow bots to self-join private channels.
+      In a private channel, type <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">/invite @RJL-zap</code> once to add it.
     </div>
   </section>
 
@@ -785,7 +792,8 @@
       <div id="faq1" class="collapse show">
         <div class="faq-a">
           Make sure you @-mentioned <strong>@RJL-zap</strong> — just typing the phrase without the @-mention won't trigger anything.
-          If it's the first time in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
+          The bot auto-joins every public channel, so it should respond anywhere.
+          If you're in a <strong>private channel</strong>, type <code style="background:#f3f4f6;border-radius:4px;padding:.05rem .4rem">/invite @RJL-zap</code> once to add it (Slack doesn't allow bots to self-join private channels).
           If it still doesn't respond, contact your admin.
         </div>
       </div>
@@ -926,6 +934,10 @@
         <div class="env-row">
           <span class="env-key">FAQ_URL</span>
           <span class="env-desc">URL the bot replies with when someone types <code>@RJL-zap help</code>. Default: this page.</span>
+        </div>
+        <div class="env-row">
+          <span class="env-key">AUTO_JOIN_CHANNELS</span>
+          <span class="env-desc">Auto-join every public channel on startup and as new ones are created. Default: <code>1</code> (on). Set to <code>0</code> to disable.</span>
         </div>
       </div>
 
