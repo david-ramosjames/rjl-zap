@@ -40,6 +40,13 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str) -> 
 def _tick(client) -> None:
     now = time.time()
 
+    # Fire any auto channel-lifecycle triggers (case setup, doc verification)
+    try:
+        import app  # late import — avoids circular dep at module load
+        app.fire_due_lifecycle_triggers(client)
+    except Exception:
+        log.exception("lifecycle trigger sweep failed")
+
     # Fire any scheduled follow-up messages (e.g. mediation sequence, escalations)
     for msg in storage.due_scheduled_messages(now):
         try:
@@ -68,6 +75,7 @@ def _tick(client) -> None:
     skip_triggers = {
         "mediation_checklist", "disbursement",
         "attorney_intro", "case_setup", "paralegal_intro", "check_pickup",
+        "doc_verification",
     }
     for wf in storage.open_workflows_due_for_reminder(cutoff):
         if wf["trigger_name"] in skip_triggers:

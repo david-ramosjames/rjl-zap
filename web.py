@@ -25,6 +25,18 @@ SETTINGS = [
         "help": "Tagged in the 24-hour reminder if no 'done' reply. Comma-separated.",
     },
     {
+        "key": "doc_verification_escalation_user_ids",
+        "label": "Document Verification — Escalation Contacts",
+        "help": "Tagged in the 24-hour reminder if no 'verified' reply. Comma-separated.",
+    },
+    {
+        "key": "case_setup_participant_user_ids",
+        "label": "Case Setup / Doc Verification — Auto-Tagged Participants",
+        "help": "Comma-separated Slack user IDs to @-mention when the bot "
+                "auto-fires Case Setup (15 min) and Document Verification "
+                "(24 hr) in newly created channels.",
+    },
+    {
         "key": "paralegal_intro_escalation_user_ids",
         "label": "Paralegal Intro — Escalation Contacts",
         "help": "Tagged in the 24-hour reminder if no 'done' reply. Comma-separated.",

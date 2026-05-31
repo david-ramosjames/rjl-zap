@@ -15,10 +15,12 @@ import storage
 import web
 from config import (
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
+    CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
+    DOC_VERIFICATION,
     FollowUpConfig,
-    MEDIATION, NEW_CASE, REVIEW_REQUEST,
+    MEDIATION, NEW_CASE, NEW_CASE_ON_FIRST_MESSAGE, REVIEW_REQUEST,
     SimplePostConfig,
     TRIGGERS, TriggerConfig,
 )
@@ -152,6 +154,7 @@ def handle_app_mention(event, client):
             (ATTORNEY_INTRO, "attorney_intro_escalation_user_ids", "attorney_intro"),
             (CHECK_PICKUP, "check_pickup_backup_user_ids", "check_pickup"),
             (CASE_SETUP, "case_setup_escalation_user_ids", "case_setup"),
+            (DOC_VERIFICATION, "doc_verification_escalation_user_ids", "doc_verification"),
         ]
         for cfg, setting_key, name in followup_matches:
             if cfg.phrase in lowered:
@@ -351,6 +354,84 @@ def _do_simple_post(client, channel: str, parent_ts: str, raw_text: str, cfg: Si
              cfg.phrase, channel, parent_ts)
 
 
+def _do_simple_post_top_level(client, channel: str, cfg: SimplePostConfig) -> None:
+    """Post a SimplePost as a brand-new channel message (no thread, no @-mentioned participants)."""
+    extras = " ".join(f"<@{uid}>" for uid in _ids_from_config(cfg.extras_setting_key))
+    text = cfg.message.replace("{mentions}", "").replace("{extras}", extras).strip()
+    text = re.sub(r"\s+\n", "\n", text)
+    client.chat_postMessage(channel=channel, text=text)
+    log.info("auto-posted simple workflow phrase=%s channel=%s", cfg.phrase, channel)
+
+
+def _auto_start_followup(
+    client,
+    channel: str,
+    cfg: FollowUpConfig,
+    escalation_setting_key: str,
+    trigger_name: str,
+) -> None:
+    """Like _start_followup_workflow but starts a brand-new top-level thread.
+
+    Tags the configured 'case_setup_participant_user_ids' (shared between
+    case setup and document verification) so the right people see the post
+    even though there was no triggering @-mention.
+    """
+    participants = _ids_from_config("case_setup_participant_user_ids")
+    mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
+    escalation_str = " ".join(f"<@{uid}>" for uid in _ids_from_config(escalation_setting_key))
+
+    def render(template: str) -> str:
+        return (
+            template
+            .replace("{{mentions}}", mention_str)
+            .replace("{{escalation}}", f"{escalation_str} " if escalation_str else "")
+        )
+
+    resp = client.chat_postMessage(channel=channel, text=render(cfg.initial_message))
+    parent_ts = resp["ts"]
+
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
+
+    storage.schedule_message(
+        channel_id=channel,
+        thread_ts=parent_ts,
+        send_after=time.time() + cfg.check_delay_seconds,
+        text=render(cfg.escalation_message),
+        check_replies_first=True,
+        done_keyword=cfg.done_keyword,
+    )
+    storage.create_workflow(channel, parent_ts, trigger_name, [])
+    log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
+
+
+def fire_due_lifecycle_triggers(client) -> None:
+    """Called from the reminder loop. Fires case_setup (T+15min) and
+    doc_verification (T+24h) for any channel that's past its delay
+    but hasn't fired yet."""
+    now = time.time()
+
+    for row in storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS):
+        if storage.mark_lifecycle_fired(row["channel_id"], "case_setup"):
+            try:
+                _auto_start_followup(
+                    client, row["channel_id"], CASE_SETUP,
+                    "case_setup_escalation_user_ids", "case_setup",
+                )
+            except Exception:
+                log.exception("auto case_setup failed for channel=%s", row["channel_id"])
+
+    for row in storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS):
+        if storage.mark_lifecycle_fired(row["channel_id"], "doc_verification"):
+            try:
+                _auto_start_followup(
+                    client, row["channel_id"], DOC_VERIFICATION,
+                    "doc_verification_escalation_user_ids", "doc_verification",
+                )
+            except Exception:
+                log.exception("auto doc_verification failed for channel=%s", row["channel_id"])
+
+
 def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig) -> None:
     if storage.workflow_by_thread(channel, parent_ts):
         return
@@ -397,6 +478,35 @@ def handle_reaction_added(event, client):
 @app.event("channel_created")
 def handle_channel_created(event, client):
     auto_join.handle_channel_created(event, client)
+    ch = event.get("channel") or {}
+    channel_id = ch.get("id")
+    if channel_id:
+        # Slack gives `created` as epoch seconds; fall back to now if missing.
+        created_at = ch.get("created") or time.time()
+        storage.record_channel_created(channel_id, float(created_at))
+        log.info("recorded channel lifecycle for #%s (%s)",
+                 ch.get("name", "?"), channel_id)
+
+
+@app.event("message")
+def handle_message(event, client):
+    """Fires `new case` on the first user message in a newly created channel."""
+    if not NEW_CASE_ON_FIRST_MESSAGE:
+        return
+    # Skip bot messages, message subtypes (channel_join, etc), and thread replies
+    if event.get("bot_id") or event.get("subtype") or event.get("thread_ts"):
+        return
+    channel_id = event.get("channel")
+    if not channel_id:
+        return
+    lc = storage.channel_lifecycle(channel_id)
+    if not lc or lc.get("new_case_fired_at"):
+        return
+    if not storage.mark_new_case_fired(channel_id):
+        return  # another worker beat us to it
+    log.info("auto-firing new_case on first message in #%s", channel_id)
+    # Post a top-level message — no thread_ts, no @-mentioned participants
+    _do_simple_post_top_level(client, channel_id, NEW_CASE)
 
 
 @app.event("reaction_removed")

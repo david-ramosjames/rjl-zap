@@ -298,6 +298,42 @@ REVIEW_REQUEST = SimplePostConfig(
 )
 
 
+DOC_VERIFICATION = FollowUpConfig(
+    phrase="document verification",
+    done_keyword="verified",
+    initial_delay_seconds=0,
+    check_delay_seconds=24 * 60 * 60,
+    initial_message=(
+        ":mag: *Legal Case Document Verification — {{mentions}}*\n\n"
+        "It has been 24 hours since this case channel was created. "
+        "Please verify the following are properly filed:\n\n"
+        ":white_check_mark: Signed retainer / contract is in Dropbox\n"
+        ":white_check_mark: Intake sheet is complete and saved\n"
+        ":white_check_mark: CTA is signed and saved (if applicable)\n"
+        ":white_check_mark: Conflict check has been documented\n"
+        ":white_check_mark: Client contact information is in the case management system\n"
+        ":white_check_mark: Initial case notes are recorded\n\n"
+        "Reply *verified* in this thread once all items are confirmed in place."
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Document Verification Outstanding* :warning:\n\n"
+        "{{mentions}} — it has been 24 hours since the verification request and "
+        "no confirmation has been received. Please complete the verification and "
+        "reply *verified* in this thread.\n\n"
+        "{{escalation}}"
+    ),
+)
+
+
 COMPLETION_EMOJI = "white_check_mark"
 COMPLETION_REPLY = "COMPLETE"
 REMINDER_CHECK_INTERVAL_SECONDS = 300
+
+# ── Channel-lifecycle automatic triggers ──
+# When a new public channel is created, the bot auto-joins it and fires these:
+#   - new_case   → on the first user message in the channel
+#   - case_setup → 15 minutes after channel creation
+#   - doc_verification → 24 hours after channel creation
+NEW_CASE_ON_FIRST_MESSAGE = True
+CASE_SETUP_DELAY_SECONDS = 15 * 60
+DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60

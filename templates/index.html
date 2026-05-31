@@ -226,6 +226,21 @@
       font-size: .7rem;
       font-weight: 700;
     }
+    .trigger-tag {
+      margin-left: auto;
+      border-radius: 20px;
+      padding: .12rem .6rem;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+    }
+    .trigger-tag.manual { background: #e0e7ff; color: #3730a3; }
+    .trigger-tag.auto   { background: #dcfce7; color: #166534; }
+    .trigger-tag.both   { background: #fef3c7; color: #92400e; }
     .done-word {
       background: #dcfce7;
       color: #166534;
@@ -354,7 +369,8 @@
 <div class="page-nav">
   <a href="#overview">Overview</a>
   <a href="#how-it-works">How it works</a>
-  <a href="#commands">Commands</a>
+  <a href="#auto-triggers">Automatic</a>
+  <a href="#commands">Manual commands</a>
   <a href="#thread-replies">Thread replies</a>
   <a href="#faq">FAQ</a>
 </div>
@@ -424,14 +440,68 @@
     </div>
   </section>
 
+  <!-- ── AUTOMATIC TRIGGERS ── -->
+  <section id="auto-triggers" class="mb-5">
+    <div class="section-label">Automatic triggers</div>
+    <p style="color:var(--text-muted);font-size:.9rem;max-width:640px;line-height:1.6;margin-bottom:1.25rem">
+      These fire on their own when a new case channel is created — no @-mention needed.
+      The bot auto-joins the channel and runs the schedule below.
+    </p>
+
+    <div class="cmd-card">
+      <div class="cmd-header" style="background:#dcfce7;color:#14532d">
+        <i class="bi bi-magic"></i> Channel Creation → Auto Sequence
+        <span class="trigger-tag auto"><i class="bi bi-lightning-charge-fill"></i> Automatic</span>
+      </div>
+      <div class="cmd-body">
+        <p>The bot watches for newly created public channels and fires three workflows automatically based on the case-channel lifecycle.</p>
+
+        <div class="timeline-strip">
+          <div class="tl-row">
+            <span class="tl-badge badge-now">On creation</span>
+            Bot joins the channel automatically (public channels only).
+          </div>
+          <div class="tl-row">
+            <span class="tl-badge badge-now">First message</span>
+            <span><strong>New Case Assignment</strong> fires — notifies the configured case assignee (e.g. Laura).</span>
+          </div>
+          <div class="tl-row">
+            <span class="tl-badge badge-soon">+15 min</span>
+            <span><strong>Case Setup</strong> checklist posts — confirm signed contract, intake sheet, and CTA are saved. Reply <span class="done-word">done</span> when complete.</span>
+          </div>
+          <div class="tl-row">
+            <span class="tl-badge badge-warn">+24 hours</span>
+            <span><strong>Legal Case Document Verification</strong> posts — verify retainer, intake, CTA, conflict check, client info, and case notes are all properly filed. Reply <span class="done-word">verified</span> when done.</span>
+          </div>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-people me-1"></i>
+          <strong>Who gets tagged?</strong> Set <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings.
+          These are the Slack users who get @-mentioned when the bot auto-fires both workflows on the +15min and +24hr schedule.
+        </div>
+
+        <div class="callout">
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>Private channels:</strong> Bots can't self-join private channels, so the auto-sequence only runs in public channels.
+          For a private case channel, type <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">/invite @RJL-zap</code>, then trigger the workflows manually with the commands below.
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── COMMANDS ── -->
   <section id="commands" class="mb-5">
-    <div class="section-label">Commands</div>
+    <div class="section-label">Manual commands</div>
+    <p style="color:var(--text-muted);font-size:.9rem;max-width:640px;line-height:1.6;margin-bottom:1.25rem">
+      Every command below is triggered by @-mentioning the bot. Tags on each card show whether the workflow is <span class="trigger-tag manual" style="margin-left:0"><i class="bi bi-hand-index-thumb-fill"></i> Manual only</span> or also runs <span class="trigger-tag both" style="margin-left:0"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span> as part of the channel-creation sequence.
+    </p>
 
     <!-- Calendar Checklists -->
     <div class="cmd-card">
       <div class="cmd-header hdr-calendar">
         <i class="bi bi-calendar-check"></i> Calendar Checklists
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use these when a key case event happens and deadlines need to go on the calendar. The bot posts a checklist in the thread and nudges every 24 hours until every item is ✅.</p>
@@ -498,6 +568,7 @@
     <div class="cmd-card">
       <div class="cmd-header hdr-mediation">
         <i class="bi bi-person-arms-up"></i> Mediation Checklist
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use when a mediation is scheduled. Tag the people responsible for prep — the bot posts the checklist and follows up automatically on day 1, 3, and 14.</p>
@@ -529,7 +600,8 @@
       <div class="cmd-header hdr-disburse">
         <i class="bi bi-currency-dollar"></i>
         30-Day Disbursement Timer
-        <span class="restricted-tag"><i class="bi bi-lock-fill me-1"></i>Restricted</span>
+        <span class="trigger-tag manual" style="margin-left:auto"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
+        <span class="restricted-tag" style="margin-left:.4rem"><i class="bi bi-lock-fill me-1"></i>Restricted</span>
       </div>
       <div class="cmd-body">
         <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this</strong> — others will get a "not authorized" reply. The bot reads the channel topic to find who to tag.</p>
@@ -566,6 +638,7 @@
     <div class="cmd-card">
       <div class="cmd-header hdr-intro">
         <i class="bi bi-person-check"></i> Attorney Intro
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use when an attorney needs to make initial contact with a new client. Tag the attorney — the bot reminds them and escalates to supervisors if no reply is received.</p>
@@ -584,6 +657,7 @@
     <div class="cmd-card">
       <div class="cmd-header hdr-intro">
         <i class="bi bi-telephone"></i> Paralegal Intro
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use when a paralegal needs to make initial contact with a new client. Task is posted immediately — escalates in 24 hours if not confirmed.</p>
@@ -602,11 +676,12 @@
     <div class="cmd-card">
       <div class="cmd-header hdr-setup">
         <i class="bi bi-clipboard-check"></i> Case Setup
+        <span class="trigger-tag both" title="Auto-fires 15 min after channel creation; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p>Use when a new case is being set up. Tag the person responsible for verifying the intake documents — the bot posts the checklist immediately.</p>
+        <p>Confirms intake documents have been saved. <strong>Auto-fires 15 minutes after a new public channel is created.</strong> You can also trigger it manually any time:</p>
 
-        <div class="type-label">Type this (tag the person responsible)</div>
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
         <div class="type-this">@RJL-zap case setup @PersonName</div>
 
         <div class="what-happens mt-1 mb-3">
@@ -624,10 +699,42 @@
       </div>
     </div>
 
+    <!-- Document Verification -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-setup">
+        <i class="bi bi-shield-check"></i> Legal Case Document Verification
+        <span class="trigger-tag both" title="Auto-fires 24 hours after channel creation; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p>Verifies all required case documents are properly filed. <strong>Auto-fires 24 hours after a new public channel is created</strong> so nothing slips through after the initial Case Setup checklist. Can also be triggered manually:</p>
+
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
+        <div class="type-this">@RJL-zap document verification @PersonName</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot asks them to verify:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Signed retainer / contract is in Dropbox</li>
+            <li>Intake sheet is complete and saved</li>
+            <li>CTA is signed and saved (if applicable)</li>
+            <li>Conflict check has been documented</li>
+            <li>Client contact information is in the case management system</li>
+            <li>Initial case notes are recorded</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts checklist. Reply <span class="done-word">verified</span> when all items are confirmed.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">verified</span> reply — escalation tags backup contacts.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Check Pickup -->
     <div class="cmd-card">
       <div class="cmd-header hdr-pickup">
         <i class="bi bi-cash-coin"></i> Client Check Pickup
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use when a client needs to schedule pickup of their settlement check. They have 7 days — the bot escalates on day 5 if nothing is scheduled.</p>
@@ -646,6 +753,7 @@
     <div class="cmd-card">
       <div class="cmd-header" style="background:#ecfeff;color:#155e75">
         <i class="bi bi-chat-dots"></i> Recent Contact
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Logs any client interaction to the Recent Contact Google Sheet — emails, texts, calls, voicemails, letters, mail, faxes, and in-person visits. Use this any time you've reached out to or heard from a client.</p>
@@ -720,10 +828,11 @@
         <div class="cmd-card h-100">
           <div class="cmd-header hdr-simple">
             <i class="bi bi-folder-plus"></i> New Case Assignment
+            <span class="trigger-tag both" title="Auto-fires on first message in a new channel; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
           </div>
           <div class="cmd-body">
-            <p>Sends a new case notification to the configured default assignee. One message, no follow-up. Add @-mentions to loop in extra people for this specific case.</p>
-            <div class="type-label">Type this</div>
+            <p>Notifies the configured case assignee (e.g. Laura). <strong>Auto-fires on the first user message in a newly created channel.</strong> Can also be triggered manually any time:</p>
+            <div class="type-label">Manual trigger</div>
             <div class="type-this">@RJL-zap new case</div>
             <div class="type-label mt-2">Or with extra people</div>
             <div class="type-this">@RJL-zap new case @SomeoneElse</div>
@@ -734,6 +843,7 @@
         <div class="cmd-card h-100">
           <div class="cmd-header hdr-simple">
             <i class="bi bi-star"></i> 5-Star Review Prompt
+            <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
           </div>
           <div class="cmd-body">
             <p>Posts a prompt asking whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
@@ -858,6 +968,25 @@
       <div id="faq6" class="collapse">
         <div class="faq-a">
           Reply <code style="background:#f3f4f6;border-radius:4px;padding:.1rem .4rem;color:var(--accent)">@RJL-zap COMPLETE</code> in the thread right away. That closes it immediately and cancels all scheduled reminders.
+        </div>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" data-bs-toggle="collapse" data-bs-target="#faq-auto">
+        What happens automatically when a new case channel is created?
+        <i class="bi bi-chevron-down small flex-shrink-0"></i>
+      </div>
+      <div id="faq-auto" class="collapse">
+        <div class="faq-a">
+          The bot watches for new public channels and runs this sequence with no @-mention required:
+          <ol style="margin:.5rem 0 .25rem;padding-left:1.3rem">
+            <li><strong>Immediately:</strong> Bot joins the channel.</li>
+            <li><strong>First user message:</strong> New Case Assignment fires — pings the configured assignee.</li>
+            <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved.</li>
+            <li><strong>+24 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed.</li>
+          </ol>
+          The same workflows can also be triggered manually any time via @-mention — useful for private channels (where the bot needs to be <code style="background:#f3f4f6;border-radius:4px;padding:.05rem .4rem">/invite</code>'d) or to re-fire the checklist later.
         </div>
       </div>
     </div>

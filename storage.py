@@ -42,8 +42,17 @@ CREATE TABLE IF NOT EXISTS config (
     value TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS channel_lifecycle (
+    channel_id TEXT PRIMARY KEY,
+    created_at REAL NOT NULL,
+    new_case_fired_at REAL,
+    case_setup_fired_at REAL,
+    doc_verification_fired_at REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, send_after);
+CREATE INDEX IF NOT EXISTS idx_lifecycle_pending ON channel_lifecycle(created_at);
 """
 
 
@@ -232,3 +241,64 @@ def get_all_config() -> dict:
     with connect() as conn:
         rows = conn.execute("SELECT key, value FROM config").fetchall()
         return {r["key"]: r["value"] for r in rows}
+
+
+def record_channel_created(channel_id: str, created_at: float | None = None) -> None:
+    """Idempotent — won't overwrite an existing row's timestamps."""
+    ts = created_at if created_at is not None else time.time()
+    with connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO channel_lifecycle (channel_id, created_at) VALUES (?, ?)",
+            (channel_id, ts),
+        )
+
+
+def channel_lifecycle(channel_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM channel_lifecycle WHERE channel_id = ?",
+            (channel_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def mark_new_case_fired(channel_id: str) -> bool:
+    """Returns True if this call set the timestamp; False if it was already set."""
+    now = time.time()
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE channel_lifecycle SET new_case_fired_at = ? "
+            "WHERE channel_id = ? AND new_case_fired_at IS NULL",
+            (now, channel_id),
+        )
+        return cur.rowcount > 0
+
+
+def lifecycle_due(now: float, kind: str, delay_seconds: float) -> List[dict]:
+    """Channels where `created_at + delay_seconds <= now` and the kind hasn't fired yet."""
+    col = {
+        "case_setup": "case_setup_fired_at",
+        "doc_verification": "doc_verification_fired_at",
+    }[kind]
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM channel_lifecycle "
+            f"WHERE {col} IS NULL AND (created_at + ?) <= ?",
+            (delay_seconds, now),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_lifecycle_fired(channel_id: str, kind: str) -> bool:
+    col = {
+        "case_setup": "case_setup_fired_at",
+        "doc_verification": "doc_verification_fired_at",
+    }[kind]
+    now = time.time()
+    with connect() as conn:
+        cur = conn.execute(
+            f"UPDATE channel_lifecycle SET {col} = ? "
+            f"WHERE channel_id = ? AND {col} IS NULL",
+            (now, channel_id),
+        )
+        return cur.rowcount > 0
