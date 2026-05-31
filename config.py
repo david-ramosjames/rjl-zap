@@ -186,7 +186,7 @@ DISBURSEMENT = DisbursementConfig(
             "• Net proceeds have been disbursed to the client\n"
             "• Final disbursement statement is signed\n"
             "• File is ready to close\n\n"
-            "Reply `@RJL-flow COMPLETE` in this thread to close out the workflow."
+            "Reply `@RJL-zap COMPLETE` in this thread to close out the workflow."
         )),
     ],
 )

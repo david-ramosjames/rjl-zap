@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RJL-flow — How to Use</title>
+  <title>RJL-zap — How to Use</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -107,7 +107,7 @@
 <body>
 
 <div class="top-bar">
-  <div class="bot-name">⚡ RJL-flow</div>
+  <div class="bot-name">⚡ RJL-zap</div>
   <div class="tagline">Slack automation for the RJL legal team</div>
 </div>
 
@@ -126,9 +126,9 @@
 
     <div class="cmd-card">
       <div class="cmd-body p-4">
-        <h5 class="fw-bold mb-3" style="color:var(--navy)">What is RJL-flow?</h5>
+        <h5 class="fw-bold mb-3" style="color:var(--navy)">What is RJL-zap?</h5>
         <p style="font-size:.95rem;color:#343a40">
-          RJL-flow is a Slack bot that automatically sends checklists, reminders, and follow-ups
+          RJL-zap is a Slack bot that automatically sends checklists, reminders, and follow-ups
           so nothing falls through the cracks on a case. You trigger it by typing its name in Slack.
           It handles the follow-up from there.
         </p>
@@ -137,11 +137,11 @@
         <div class="row g-3">
           <div class="col-md-4">
             <div class="fw-semibold mb-1" style="color:var(--navy)">① Type a command</div>
-            <div class="small text-muted">In any case channel, mention @RJL-flow followed by a command phrase.</div>
+            <div class="small text-muted">In any case channel, mention @RJL-zap followed by a command phrase.</div>
           </div>
           <div class="col-md-4">
             <div class="fw-semibold mb-1" style="color:var(--navy)">② Bot responds in a thread</div>
-            <div class="small text-muted">RJL-flow posts a checklist or task directly in the thread of your message.</div>
+            <div class="small text-muted">RJL-zap posts a checklist or task directly in the thread of your message.</div>
           </div>
           <div class="col-md-4">
             <div class="fw-semibold mb-1" style="color:var(--navy)">③ Mark items done</div>
@@ -152,8 +152,8 @@
         <hr class="my-3">
         <div class="fw-semibold mb-2" style="color:var(--navy)">First time in a channel?</div>
         <p class="small text-muted mb-0">
-          When you mention @RJL-flow in a channel it hasn't been added to yet, Slack will show a popup asking
-          <em>"Add RJL-flow to this channel?"</em> — click <strong>Add to channel</strong> and the bot will respond normally.
+          When you mention @RJL-zap in a channel it hasn't been added to yet, Slack will show a popup asking
+          <em>"Add RJL-zap to this channel?"</em> — click <strong>Add to channel</strong> and the bot will respond normally.
           You only need to do this once per channel.
         </p>
       </div>
@@ -175,7 +175,7 @@
         <div class="row g-3">
           <div class="col-md-4">
             <div class="type-label">Answer Filed</div>
-            <div class="type-this">@RJL-flow answer filed</div>
+            <div class="type-this">@RJL-zap answer filed</div>
             <div class="what-happens">
               <ul>
                 <li>Calendar Initial Disclosures</li>
@@ -187,7 +187,7 @@
           </div>
           <div class="col-md-4">
             <div class="type-label">Discovery Requests Received</div>
-            <div class="type-this">@RJL-flow discovery requests received</div>
+            <div class="type-this">@RJL-zap discovery requests received</div>
             <div class="what-happens">
               <ul>
                 <li>Calendar 30-day response deadline</li>
@@ -198,7 +198,7 @@
           </div>
           <div class="col-md-4">
             <div class="type-label">Scheduling Order Agreed</div>
-            <div class="type-this">@RJL-flow scheduling order agreed</div>
+            <div class="type-this">@RJL-zap scheduling order agreed</div>
             <div class="what-happens">
               <ul>
                 <li>Calendar discovery cutoff</li>
@@ -212,7 +212,7 @@
 
         <div class="mt-3">
           <div class="type-label">Calendar Statute of Limitations</div>
-          <div class="type-this">@RJL-flow calendar sol</div>
+          <div class="type-this">@RJL-zap calendar sol</div>
           <div class="what-happens">
             <ul class="mb-0">
               <li>Calendar the SOL deadline with exact date</li>
@@ -239,7 +239,7 @@
         <p>Use this when a mediation is scheduled. Tag the people responsible for prep — the bot will post the checklist and follow up three times automatically.</p>
 
         <div class="type-label">Type this (tag the people responsible)</div>
-        <div class="type-this">@RJL-flow mediation checklist @Sarah @Marcus</div>
+        <div class="type-this">@RJL-zap mediation checklist @Sarah @Marcus</div>
 
         <div class="what-happens mt-2">
           <strong>Bot immediately posts:</strong>
@@ -271,7 +271,7 @@
         <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this command</strong> (see Admin Settings below). The bot reads the channel topic to find the responsible team members.</p>
 
         <div class="type-label">Type this</div>
-        <div class="type-this">@RJL-flow start disbursement</div>
+        <div class="type-this">@RJL-zap start disbursement</div>
 
         <div class="what-happens mt-2">
           <strong>Bot immediately posts:</strong> Full 5-phase disbursement checklist (Settlement → Medical Bills → Release → Funding → Disbursement)
@@ -292,7 +292,7 @@
 
         <div class="mt-3 p-3 rounded" style="background:#f0f9ff;font-size:.87rem;color:#075985">
           <i class="bi bi-info-circle me-1"></i>
-          To close this workflow early, reply <code style="background:#e2e8f0;border-radius:4px;padding:.1rem .35rem">@RJL-flow COMPLETE</code> in the thread.
+          To close this workflow early, reply <code style="background:#e2e8f0;border-radius:4px;padding:.1rem .35rem">@RJL-zap COMPLETE</code> in the thread.
         </div>
       </div>
     </div>
@@ -306,7 +306,7 @@
         <p>Use this when an attorney needs to make initial contact with a new client. Tag the attorney — the bot will remind them and escalate if it doesn't hear back.</p>
 
         <div class="type-label">Type this (tag the attorney)</div>
-        <div class="type-this">@RJL-flow attorney intro @AttorneyName</div>
+        <div class="type-this">@RJL-zap attorney intro @AttorneyName</div>
 
         <div class="timeline-strip mt-2">
           <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts: attorney has 72 hours to contact client. Reply <span class="done-word">done</span> when complete.</div>
@@ -324,7 +324,7 @@
         <p>Use this when a paralegal needs to make initial contact with a new client. Tag the paralegal — the bot posts the task immediately and escalates if there's no confirmation.</p>
 
         <div class="type-label">Type this (tag the paralegal)</div>
-        <div class="type-this">@RJL-flow paralegal intro @ParalegalName</div>
+        <div class="type-this">@RJL-zap paralegal intro @ParalegalName</div>
 
         <div class="timeline-strip mt-2">
           <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: contact client within 24 hours. Reply <span class="done-word">done</span> when complete.</div>
@@ -342,7 +342,7 @@
         <p>Use this when a new case is being set up. Tag the person responsible for verifying the setup documents. Bot posts a checklist immediately.</p>
 
         <div class="type-label">Type this (tag the person responsible)</div>
-        <div class="type-this">@RJL-flow case setup @PersonName</div>
+        <div class="type-this">@RJL-zap case setup @PersonName</div>
 
         <div class="what-happens mt-2">
           <strong>Bot immediately asks them to confirm:</strong>
@@ -368,7 +368,7 @@
         <p>Use this when a client needs to schedule pickup of their settlement check. Tag the person responsible — they have 7 days to confirm scheduling.</p>
 
         <div class="type-label">Type this (tag the person responsible)</div>
-        <div class="type-this">@RJL-flow check pickup @PersonName</div>
+        <div class="type-this">@RJL-zap check pickup @PersonName</div>
 
         <div class="timeline-strip mt-2">
           <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
@@ -386,9 +386,9 @@
         <p>Sends a new case notification to the configured case assignee (usually Laura). One message, no follow-up. You can @-mention additional people to loop them in for this specific case.</p>
 
         <div class="type-label">Type this</div>
-        <div class="type-this">@RJL-flow new case</div>
+        <div class="type-this">@RJL-zap new case</div>
         <div class="type-label mt-2">Or tag extra people for this specific case</div>
-        <div class="type-this">@RJL-flow new case @SomeoneElse</div>
+        <div class="type-this">@RJL-zap new case @SomeoneElse</div>
       </div>
     </div>
 
@@ -401,7 +401,7 @@
         <p>Posts a prompt asking the team whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
 
         <div class="type-label">Type this (tag the people to notify)</div>
-        <div class="type-this">@RJL-flow ready for review @PersonName</div>
+        <div class="type-this">@RJL-zap ready for review @PersonName</div>
       </div>
     </div>
 
@@ -418,7 +418,7 @@
       </div>
       <div id="faq1" class="collapse show">
         <div class="faq-a">
-          First, make sure you @-mentioned <strong>@RJL-flow</strong> (not just typed the phrase). If it's the first time the bot is being used in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
+          First, make sure you @-mentioned <strong>@RJL-zap</strong> (not just typed the phrase). If it's the first time the bot is being used in this channel, Slack may have shown a prompt to add the bot — look for a system message and click <em>Add to channel</em>, then try again.
           If the bot still doesn't respond, let your admin know.
         </div>
       </div>
@@ -431,7 +431,7 @@
       </div>
       <div id="faq2" class="collapse">
         <div class="faq-a">
-          Yes — but each individual message can only start one workflow. Just post a new @RJL-flow message and a new workflow starts. The old one stays open until you complete it.
+          Yes — but each individual message can only start one workflow. Just post a new @RJL-zap message and a new workflow starts. The old one stays open until you complete it.
         </div>
       </div>
     </div>
@@ -456,7 +456,7 @@
       </div>
       <div id="faq4" class="collapse">
         <div class="faq-a">
-          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-flow COMPLETE</code> in the thread. This immediately closes the workflow and stops all reminders, even if not every ✅ has been added yet.
+          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-zap COMPLETE</code> in the thread. This immediately closes the workflow and stops all reminders, even if not every ✅ has been added yet.
           Alternatively, just react ✅ to every item — the bot closes it automatically when all are checked.
         </div>
       </div>
@@ -481,7 +481,7 @@
       </div>
       <div id="faq6" class="collapse">
         <div class="faq-a">
-          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-flow COMPLETE</code> in the thread right away — that closes it immediately and stops any scheduled reminders.
+          Reply <code style="background:#e9ecef;border-radius:4px;padding:.1rem .4rem">@RJL-zap COMPLETE</code> in the thread right away — that closes it immediately and stops any scheduled reminders.
         </div>
       </div>
     </div>
