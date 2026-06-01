@@ -560,6 +560,7 @@ def handle_member_joined(event, client):
         return
 
     _ensure_channel_lifecycle(channel_id, created_at)
+    _maybe_fire_new_case_on_creation(client, channel_id, created_at)
 
     if topic:
         _maybe_fire_intros_from_topic(client, channel_id, topic)
@@ -568,6 +569,25 @@ def handle_member_joined(event, client):
 
 
 _STALE_CHANNEL_SECONDS = 24 * 60 * 60
+
+
+def _maybe_fire_new_case_on_creation(client, channel_id: str, created_at: float) -> None:
+    """Fire New Case Assignment as soon as the bot sees a freshly-created
+    channel. Safe to call from multiple events (channel_created,
+    member_joined_channel) — mark_new_case_fired is atomic so only one
+    caller actually posts. Suppressed for stale channels (>24 hrs old) so
+    the startup auto-join sweep doesn't fire new_case retroactively."""
+    if not NEW_CASE_ON_FIRST_MESSAGE:
+        return
+    if time.time() - created_at > _STALE_CHANNEL_SECONDS:
+        return
+    if not storage.mark_new_case_fired(channel_id):
+        return  # already fired
+    log.info("auto-firing new_case on channel creation for #%s", channel_id)
+    try:
+        _do_simple_post_top_level(client, channel_id, NEW_CASE)
+    except Exception:
+        log.exception("new_case post failed for channel=%s", channel_id)
 
 
 def _ensure_channel_lifecycle(channel_id: str, created_at: float) -> dict | None:
@@ -598,6 +618,7 @@ def handle_channel_created(event, client):
         _ensure_channel_lifecycle(channel_id, created_at)
         log.info("recorded channel lifecycle for #%s (%s)",
                  ch.get("name", "?"), channel_id)
+        _maybe_fire_new_case_on_creation(client, channel_id, created_at)
 
 
 # Slack renders user mentions as either `<@U123>` or `<@U123|displayName>` —
@@ -677,8 +698,8 @@ def _first_match(pattern, text: str, exclude: str | None = None) -> str | None:
 
 @app.event("message")
 def handle_message(event, client):
-    """Handles channel topic/purpose updates, the first-message new_case
-    trigger, and the keyword-driven Mediation Checklist trigger."""
+    """Handles channel topic/purpose updates and the keyword-driven
+    Mediation Checklist / Check Pickup / Review Request triggers."""
     subtype = event.get("subtype")
     channel_id = event.get("channel")
     if not channel_id:
@@ -730,6 +751,9 @@ def handle_message(event, client):
                 log.exception("auto check_pickup failed for channel=%s", channel_id)
             return
 
+    # New Case Assignment fires on channel creation (see handle_channel_created /
+    # handle_member_joined) — no first-message hook here.
+
     # Auto-fire 5-star review prompt when a configured user posts "RJL has been paid"
     # (3-minute delay so the message lands after the case is settled in Slack)
     if REVIEW_REQUEST_AUTO_PHRASE.lower() in lowered:
@@ -757,27 +781,6 @@ def handle_message(event, client):
                 log.exception("auto review_request scheduling failed for channel=%s", channel_id)
             return
 
-    # First user message in a newly-created channel → fire new_case
-    if not NEW_CASE_ON_FIRST_MESSAGE:
-        return
-    lc = storage.channel_lifecycle(channel_id)
-    if lc is None:
-        # No lifecycle row — channel_created was probably missed (bot was
-        # redeploying, or the channel existed before this code rolled out).
-        # Backfill from conversations.info so we don't silently drop new_case.
-        try:
-            info = client.conversations_info(channel=channel_id)
-            created_at = float((info.get("channel") or {}).get("created") or time.time())
-        except Exception:
-            created_at = time.time()
-            log.debug("conversations.info failed for %s", channel_id, exc_info=True)
-        lc = _ensure_channel_lifecycle(channel_id, created_at) or {}
-    if lc.get("new_case_fired_at"):
-        return
-    if not storage.mark_new_case_fired(channel_id):
-        return  # another worker beat us to it
-    log.info("auto-firing new_case on first message in #%s", channel_id)
-    _do_simple_post_top_level(client, channel_id, NEW_CASE)
 
 
 _BOT_ID_CACHE: str | None = None
