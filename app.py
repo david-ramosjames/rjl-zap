@@ -536,9 +536,10 @@ def handle_reaction_added(event, client):
 
 @app.event("member_joined_channel")
 def handle_member_joined(event, client):
-    """When the bot itself joins a channel (manually or via auto-join), peek at
-    the existing topic/purpose so we don't miss intros that were set before
-    the bot was present."""
+    """When the bot itself joins a channel (manually or via auto-join), record
+    lifecycle (so we don't miss new_case if channel_created was missed) and
+    peek at the existing topic/purpose so we don't miss intros that were set
+    before the bot was present."""
     try:
         bot_id = client.auth_test()["user_id"]
     except Exception:
@@ -553,13 +554,37 @@ def handle_member_joined(event, client):
         ch = info.get("channel") or {}
         topic   = (ch.get("topic")   or {}).get("value", "") or ""
         purpose = (ch.get("purpose") or {}).get("value", "") or ""
+        created_at = float(ch.get("created") or time.time())
     except Exception:
         log.debug("conversations.info failed for %s", channel_id, exc_info=True)
         return
+
+    _ensure_channel_lifecycle(channel_id, created_at)
+
     if topic:
         _maybe_fire_intros_from_topic(client, channel_id, topic)
     if purpose:
         _maybe_fire_intros_from_topic(client, channel_id, purpose)
+
+
+_STALE_CHANNEL_SECONDS = 24 * 60 * 60
+
+
+def _ensure_channel_lifecycle(channel_id: str, created_at: float) -> dict | None:
+    """Idempotently record lifecycle for the channel using the channel's real
+    creation time. For channels older than _STALE_CHANNEL_SECONDS, pre-mark
+    every lifecycle trigger as already fired so the bot doesn't fire
+    new_case / case_setup / etc. retroactively when it first sees an old
+    channel."""
+    storage.record_channel_created(channel_id, created_at)
+    if time.time() - created_at > _STALE_CHANNEL_SECONDS:
+        lc = storage.channel_lifecycle(channel_id) or {}
+        if not lc.get("new_case_fired_at"):
+            storage.mark_new_case_fired(channel_id)
+        for kind in ("case_setup", "doc_verification", "calendar_sol", "client_intake"):
+            if not lc.get(f"{kind}_fired_at"):
+                storage.mark_lifecycle_fired(channel_id, kind)
+    return storage.channel_lifecycle(channel_id)
 
 
 @app.event("channel_created")
@@ -569,8 +594,8 @@ def handle_channel_created(event, client):
     channel_id = ch.get("id")
     if channel_id:
         # Slack gives `created` as epoch seconds; fall back to now if missing.
-        created_at = ch.get("created") or time.time()
-        storage.record_channel_created(channel_id, float(created_at))
+        created_at = float(ch.get("created") or time.time())
+        _ensure_channel_lifecycle(channel_id, created_at)
         log.info("recorded channel lifecycle for #%s (%s)",
                  ch.get("name", "?"), channel_id)
 
@@ -724,7 +749,18 @@ def handle_message(event, client):
     if not NEW_CASE_ON_FIRST_MESSAGE:
         return
     lc = storage.channel_lifecycle(channel_id)
-    if not lc or lc.get("new_case_fired_at"):
+    if lc is None:
+        # No lifecycle row — channel_created was probably missed (bot was
+        # redeploying, or the channel existed before this code rolled out).
+        # Backfill from conversations.info so we don't silently drop new_case.
+        try:
+            info = client.conversations_info(channel=channel_id)
+            created_at = float((info.get("channel") or {}).get("created") or time.time())
+        except Exception:
+            created_at = time.time()
+            log.debug("conversations.info failed for %s", channel_id, exc_info=True)
+        lc = _ensure_channel_lifecycle(channel_id, created_at) or {}
+    if lc.get("new_case_fired_at"):
         return
     if not storage.mark_new_case_fired(channel_id):
         return  # another worker beat us to it
