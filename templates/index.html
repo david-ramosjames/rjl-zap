@@ -676,8 +676,8 @@
         </div>
 
         <div class="callout blue mt-3">
-          <i class="bi bi-arrow-repeat me-1"></i>
-          <strong>Re-fires if the attorney changes.</strong> Updating the description to name a different attorney fires a fresh intro for the new person.
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>One-time fire.</strong> Only the first time the channel description is set will trigger the intro. Later edits to the description do not re-fire it — use the manual command if a new attorney needs an intro.
         </div>
       </div>
     </div>
@@ -700,8 +700,8 @@
         </div>
 
         <div class="callout blue mt-3">
-          <i class="bi bi-arrow-repeat me-1"></i>
-          <strong>Re-fires if the paralegal changes.</strong> Updating the description to name a different paralegal fires a fresh intro for the new person.
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>One-time fire.</strong> Only the first time the channel description is set will trigger the intro. Later edits to the description do not re-fire it — use the manual command if a new paralegal needs an intro.
         </div>
       </div>
     </div>
@@ -1099,7 +1099,7 @@
             <li><strong>+1 hour:</strong> Client Intake request posts — assigned collector gathers client details.</li>
             <li><strong>+24 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed.</li>
             <li><strong>+48 hours:</strong> Calendar Statute of Limitations checklist posts — calendar the SOL deadline and advance reminders.</li>
-            <li><strong>When the channel description is set:</strong> If it includes <em>Attorney @X | Paralegal @Y</em>, Attorney Intro and Paralegal Intro fire for those specific people. Re-fires if a different person is named later.</li>
+            <li><strong>When the channel description is set:</strong> If it includes <em>Attorney @X | Paralegal @Y</em>, Attorney Intro and Paralegal Intro fire for those specific people. Only fires the first time — later edits to the description do not re-fire.</li>
           </ol>
           The same workflows can also be triggered manually any time via @-mention — useful for private channels (where the bot needs to be <code style="background:#f3f4f6;border-radius:4px;padding:.05rem .4rem">/invite</code>'d) or to re-fire the checklist later.
         </div>

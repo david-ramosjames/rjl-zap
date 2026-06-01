@@ -303,8 +303,10 @@ _LIFECYCLE_COLS = {
 
 
 def set_intro_fired_for(channel_id: str, role: str, user_id: str) -> bool:
-    """Record that we've fired an attorney_intro or paralegal_intro for `user_id`.
-    Returns True if the row needed updating (i.e. the user_id changed)."""
+    """Record that we've fired an attorney_intro or paralegal_intro for this
+    channel. Returns True only on the *first* fire — subsequent calls (even
+    with a different user_id) return False, so the intro never re-fires when
+    the channel description is changed later."""
     col = {"attorney": "attorney_intro_fired_for",
            "paralegal": "paralegal_intro_fired_for"}[role]
     with connect() as conn:
@@ -316,8 +318,8 @@ def set_intro_fired_for(channel_id: str, role: str, user_id: str) -> bool:
         )
         cur = conn.execute(
             f"UPDATE channel_lifecycle SET {col} = ? "
-            f"WHERE channel_id = ? AND (({col}) IS NULL OR ({col}) != ?)",
-            (user_id, channel_id, user_id),
+            f"WHERE channel_id = ? AND {col} IS NULL",
+            (user_id, channel_id),
         )
         return cur.rowcount > 0
 
