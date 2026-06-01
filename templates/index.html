@@ -370,7 +370,7 @@
   <a href="#overview">Overview</a>
   <a href="#how-it-works">How it works</a>
   <a href="#auto-triggers">Automatic</a>
-  <a href="#commands">Manual commands</a>
+  <a href="#commands">Manual only</a>
   <a href="#thread-replies">Thread replies</a>
   <a href="#faq">FAQ</a>
 </div>
@@ -442,129 +442,297 @@
 
   <!-- ── AUTOMATIC TRIGGERS ── -->
   <section id="auto-triggers" class="mb-5">
-    <div class="section-label">Automatic triggers</div>
-    <p style="color:var(--text-muted);font-size:.9rem;max-width:640px;line-height:1.6;margin-bottom:1.25rem">
-      These fire on their own when a new case channel is created — no @-mention needed.
-      The bot auto-joins the channel and runs the schedule below.
+    <div class="section-label">Automatic</div>
+    <p style="color:var(--text-muted);font-size:.9rem;max-width:680px;line-height:1.6;margin-bottom:1.25rem">
+      These workflows fire on their own as a case progresses through Slack — new channel created, channel description set, certain phrases posted. <strong>Each can also be triggered manually</strong> via @-mention; the manual command for every one is shown on its card below.
     </p>
 
+    <!-- ── OVERVIEW: how triggers wire up ── -->
     <div class="cmd-card">
       <div class="cmd-header" style="background:#dcfce7;color:#14532d">
-        <i class="bi bi-magic"></i> Channel Creation → Auto Sequence
-        <span class="trigger-tag auto"><i class="bi bi-lightning-charge-fill"></i> Automatic</span>
+        <i class="bi bi-magic"></i> How automatic triggers work
+        <span class="trigger-tag auto"><i class="bi bi-lightning-charge-fill"></i> Overview</span>
       </div>
       <div class="cmd-body">
-        <p>The bot watches for newly created public channels and fires three workflows automatically based on the case-channel lifecycle.</p>
+        <p>Three event sources drive every automatic workflow in the firm:</p>
+
+        <div class="row g-3 mt-1">
+          <div class="col-md-4">
+            <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-plus-circle me-1"></i>Channel creation</div>
+            <div class="small text-muted">New public channel → bot joins, then runs a timed sequence: first message, +15 min, +24 hrs, +48 hrs.</div>
+          </div>
+          <div class="col-md-4">
+            <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-pencil-square me-1"></i>Channel description</div>
+            <div class="small text-muted">When the description is set to <em>Attorney @X | Paralegal @Y</em>, the bot fires the intros for those specific people.</div>
+          </div>
+          <div class="col-md-4">
+            <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-chat-quote me-1"></i>Phrase in any message</div>
+            <div class="small text-muted">Phrases like <em>"mediation checklist"</em> or <em>"law firm can be paid"</em> trigger workflows directly from the chat.</div>
+          </div>
+        </div>
+
+        <hr class="my-3">
 
         <div class="timeline-strip">
           <div class="tl-row">
             <span class="tl-badge badge-now">On creation</span>
-            Bot joins the channel automatically (public channels only).
+            Bot auto-joins the new public channel.
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-now">First message</span>
-            <span><strong>New Case Assignment</strong> fires — notifies the configured case assignee (e.g. Laura).</span>
+            <strong>New Case Assignment</strong> notifies the case assignee.
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-soon">+15 min</span>
-            <span><strong>Case Setup</strong> checklist posts — confirm signed contract, intake sheet, and CTA are saved. Reply <span class="done-word">done</span> when complete.</span>
+            <strong>Case Setup</strong> checklist posts.
           </div>
           <div class="tl-row">
-            <span class="tl-badge badge-warn">+24 hours</span>
-            <span><strong>Legal Case Document Verification</strong> posts — verify retainer, intake, CTA, conflict check, client info, and case notes are all properly filed. Reply <span class="done-word">verified</span> when done.</span>
+            <span class="tl-badge badge-warn">+24 hrs</span>
+            <strong>Document Verification</strong> checklist posts.
           </div>
           <div class="tl-row">
-            <span class="tl-badge badge-warn">+48 hours</span>
-            <span><strong>Calendar Statute of Limitations</strong> checklist posts — calendar the SOL deadline plus 30-day and 7-day advance reminders. React ✅ on each item as you calendar it.</span>
+            <span class="tl-badge badge-warn">+48 hrs</span>
+            <strong>Calendar SOL</strong> checklist posts.
           </div>
           <div class="tl-row">
-            <span class="tl-badge badge-soon">On description set</span>
-            <span><strong>Attorney Intro</strong> and <strong>Paralegal Intro</strong> fire for the named people whenever the channel description includes <em>Attorney @X | Paralegal @Y</em>.</span>
+            <span class="tl-badge badge-soon">Description set</span>
+            <strong>Attorney Intro</strong> + <strong>Paralegal Intro</strong> fire for the named people.
+          </div>
+          <div class="tl-row">
+            <span class="tl-badge badge-soon">Phrase posted</span>
+            <strong>Mediation Checklist</strong> (anyone) or <strong>Check Pickup</strong> (configured users only).
           </div>
         </div>
 
         <div class="callout amber mt-3">
           <i class="bi bi-people me-1"></i>
-          <strong>Who gets tagged?</strong> Set <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings.
-          These are the Slack users who get @-mentioned when the bot auto-fires both workflows on the +15min and +24hr schedule.
+          <strong>Auto-tagged participants:</strong> When Case Setup and Doc Verification fire automatically there's no @-mention to pull from. Set <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings so the right people get pinged.
         </div>
 
         <div class="callout">
-          <i class="bi bi-info-circle me-1"></i>
-          <strong>Private channels:</strong> Bots can't self-join private channels, so the auto-sequence only runs in public channels.
-          For a private case channel, type <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">/invite @RJL-zap</code>, then trigger the workflows manually with the commands below.
+          <i class="bi bi-lock me-1"></i>
+          <strong>Private channels:</strong> Bots can't self-join private channels, so the channel-creation sequence only runs in public channels. For private channels, type <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">/invite @RJL-zap</code>, then trigger workflows manually with the commands on each card.
         </div>
       </div>
     </div>
 
+    <!-- New Case Assignment -->
     <div class="cmd-card">
-      <div class="cmd-header" style="background:#dcfce7;color:#14532d">
-        <i class="bi bi-pencil-square"></i> Channel Description → Auto Intros
-        <span class="trigger-tag auto"><i class="bi bi-lightning-charge-fill"></i> Automatic</span>
+      <div class="cmd-header hdr-simple">
+        <i class="bi bi-folder-plus"></i> New Case Assignment
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p>When the channel description (a.k.a. topic) is set or updated, the bot parses it for <strong>Attorney</strong> and <strong>Paralegal</strong> assignments and fires the corresponding intro workflows for those specific people. No @-mention of the bot needed.</p>
+        <p><strong>Auto-fires on the first user message in a newly created channel.</strong> Notifies the configured case assignee (e.g. Laura). One message, no follow-up.</p>
+        <div class="type-label">Manual trigger</div>
+        <div class="type-this">@RJL-zap new case</div>
+        <div class="type-label mt-2">Or with extra people</div>
+        <div class="type-this">@RJL-zap new case @SomeoneElse</div>
+      </div>
+    </div>
 
-        <div class="type-label">Format the bot recognizes</div>
-        <div class="type-this">Attorney @Arielle | Paralegal @Josslyn (Treating)</div>
+    <!-- Case Setup -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-setup">
+        <i class="bi bi-clipboard-check"></i> Case Setup
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires 15 minutes after a new public channel is created.</strong> Confirms intake documents have been saved. Can also be triggered manually any time:</p>
 
-        <div class="what-happens mt-3">
-          <strong>What happens:</strong>
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
+        <div class="type-this">@RJL-zap case setup @PersonName</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot immediately asks them to confirm:</strong>
           <ul class="mt-1 mb-0">
-            <li>Attorney Intro fires tagging @Arielle — 72 hours to contact the client.</li>
-            <li>Paralegal Intro fires tagging @Josslyn — 24 hours to contact the client.</li>
-            <li>Each escalates to backup contacts if no <span class="done-word">done</span> reply.</li>
+            <li>Signed contract saved in Dropbox</li>
+            <li>Intake sheet completed</li>
+            <li>CTA signed and saved (if applicable)</li>
           </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document Verification -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-setup">
+        <i class="bi bi-shield-check"></i> Legal Case Document Verification
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires 24 hours after a new public channel is created</strong> so nothing slips through after the initial Case Setup checklist. Can also be triggered manually:</p>
+
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
+        <div class="type-this">@RJL-zap document verification @PersonName</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot asks them to verify:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Signed retainer / contract is in Dropbox</li>
+            <li>Intake sheet is complete and saved</li>
+            <li>CTA is signed and saved (if applicable)</li>
+            <li>Conflict check has been documented</li>
+            <li>Client contact information is in the case management system</li>
+            <li>Initial case notes are recorded</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts checklist. Reply <span class="done-word">verified</span> when all items are confirmed.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">verified</span> reply — escalation tags backup contacts.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar SOL -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-calendar">
+        <i class="bi bi-hourglass-split"></i> Calendar Statute of Limitations
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires 48 hours after a new public channel is created.</strong> Posts the SOL checklist and tracks completion via ✅ reactions. Can also be triggered manually:</p>
+
+        <div class="type-label">Manual trigger</div>
+        <div class="type-this">@RJL-zap calendar sol</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot posts:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Calendar the SOL deadline with exact date</li>
+            <li>Set 30-day advance reminder</li>
+            <li>Set 7-day advance reminder</li>
+          </ul>
+        </div>
+
+        <div class="callout green">
+          <i class="bi bi-check2-circle me-1"></i>
+          React ✅ on each thread item as you calendar it. Once every item has a ✅, the bot closes the checklist automatically.
+        </div>
+      </div>
+    </div>
+
+    <!-- Attorney Intro -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-intro">
+        <i class="bi bi-person-check"></i> Attorney Intro
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires when an attorney is named in the channel description.</strong> Format the description as <code style="background:#f3f4f6;padding:.05rem .35rem;border-radius:3px">Attorney @Arielle | Paralegal @Josslyn (Treating)</code> — the bot parses the attorney mention and fires this intro tagging that person specifically.</p>
+
+        <div class="type-label">Manual trigger (tag the attorney)</div>
+        <div class="type-this">@RJL-zap attorney intro @AttorneyName</div>
+
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts task: attorney has 72 hrs to contact client. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">48 hours</span> If no <span class="done-word">done</span> reply — escalation tags configured supervisors.</div>
         </div>
 
         <div class="callout blue mt-3">
           <i class="bi bi-arrow-repeat me-1"></i>
-          <strong>Re-fires if a person changes.</strong> If the channel description is updated to name a different attorney or paralegal, a new intro fires for the new person. Updates that don't change the named user don't re-fire.
-        </div>
-
-        <div class="callout amber">
-          <i class="bi bi-eye me-1"></i>
-          <strong>Existing channels:</strong> If the bot is invited into a channel that already has Attorney/Paralegal in its description, it will read the description on join and fire the intros once for those people.
+          <strong>Re-fires if the attorney changes.</strong> Updating the description to name a different attorney fires a fresh intro for the new person.
         </div>
       </div>
     </div>
 
+    <!-- Paralegal Intro -->
     <div class="cmd-card">
-      <div class="cmd-header" style="background:#dcfce7;color:#14532d">
-        <i class="bi bi-chat-quote"></i> Phrase Triggers
-        <span class="trigger-tag auto"><i class="bi bi-lightning-charge-fill"></i> Automatic</span>
+      <div class="cmd-header hdr-intro">
+        <i class="bi bi-telephone"></i> Paralegal Intro
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p>Some workflows fire from a phrase appearing in any channel message — no @-mention required. This matches the original Zapier behavior for the trigger.</p>
+        <p><strong>Auto-fires when a paralegal is named in the channel description.</strong> Same parser as the attorney intro — looks for <em>Paralegal @Name</em> in the description and fires for that specific person.</p>
 
-        <div class="what-happens">
-          <strong>Phrases that auto-trigger:</strong>
-          <ul class="mt-1 mb-0">
-            <li><code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">Mediation Checklist</code> — fires the <strong>Mediation Checklist</strong> workflow (checklist + day 1/3/14 follow-ups). Anyone can trigger this.</li>
-            <li><code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">law firm can be paid</code> — fires <strong>Client Check Pickup</strong> (7-day scheduling reminder, escalates day 5). <strong>Restricted</strong> — only fires when posted by a user listed in <em>Check Pickup — Auto-Trigger Users</em> in admin settings. The person who posted gets tagged.</li>
-          </ul>
+        <div class="type-label">Manual trigger (tag the paralegal)</div>
+        <div class="type-this">@RJL-zap paralegal intro @ParalegalName</div>
+
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: contact client within 24 hrs. Reply <span class="done-word">done</span> when complete.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
         </div>
 
         <div class="callout blue mt-3">
-          <i class="bi bi-info-circle me-1"></i>
-          <strong>One workflow per thread.</strong> If a thread already has a workflow of this type running, repeating the phrase won't start a duplicate.
+          <i class="bi bi-arrow-repeat me-1"></i>
+          <strong>Re-fires if the paralegal changes.</strong> Updating the description to name a different paralegal fires a fresh intro for the new person.
+        </div>
+      </div>
+    </div>
+
+    <!-- Mediation Checklist -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-mediation">
+        <i class="bi bi-person-arms-up"></i> Mediation Checklist
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires on any message containing the phrase "mediation checklist"</strong> — no @-mention of the bot needed. Posts the checklist and follows up automatically on day 1, 3, and 14.</p>
+
+        <div class="type-label">Just type this in any channel</div>
+        <div class="type-this">Mediation checklist for next Tuesday</div>
+
+        <p class="mt-3" style="font-size:.85rem;color:var(--text-muted);margin-bottom:.4rem">
+          Or trigger manually with @-mention to also tag the people responsible:
+        </p>
+        <div class="type-this">@RJL-zap mediation checklist @Sarah @Marcus</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot immediately posts:</strong>
+          <ul class="mt-1">
+            <li>Confirm mediation is calendared</li>
+            <li>Schedule client prep session</li>
+            <li>Reserve conference room</li>
+            <li>Send invoice to client</li>
+            <li>Confirm mediator payment</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-now">Day 1</span> Check-in: are prep steps complete?</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">Day 3</span> Invoice status follow-up</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Mediator payment confirmation</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Check Pickup -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-pickup">
+        <i class="bi bi-cash-coin"></i> Client Check Pickup
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires when a configured trigger user posts a message containing <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">law firm can be paid</code>.</strong> The person who posted gets tagged as responsible for scheduling pickup. Set the allowed users in admin settings under <em>Check Pickup — Auto-Trigger Users</em>.</p>
+
+        <div class="type-label">Manual trigger (tag the person responsible)</div>
+        <div class="type-this">@RJL-zap check pickup @PersonName</div>
+
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ── COMMANDS ── -->
+  <!-- ── MANUAL COMMANDS ── -->
   <section id="commands" class="mb-5">
-    <div class="section-label">Manual commands</div>
-    <p style="color:var(--text-muted);font-size:.9rem;max-width:640px;line-height:1.6;margin-bottom:1.25rem">
-      Every command below is triggered by @-mentioning the bot. Tags on each card show whether the workflow is <span class="trigger-tag manual" style="margin-left:0"><i class="bi bi-hand-index-thumb-fill"></i> Manual only</span> or also runs <span class="trigger-tag both" style="margin-left:0"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span> as part of the channel-creation sequence.
+    <div class="section-label">Manual only</div>
+    <p style="color:var(--text-muted);font-size:.9rem;max-width:680px;line-height:1.6;margin-bottom:1.25rem">
+      These don't fire on their own — they're driven entirely by you @-mentioning the bot when something happens that doesn't fit the natural channel-lifecycle flow.
     </p>
 
     <!-- Calendar Checklists -->
     <div class="cmd-card">
       <div class="cmd-header hdr-calendar">
         <i class="bi bi-calendar-check"></i> Calendar Checklists
-        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Mostly manual</span>
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
       <div class="cmd-body">
         <p>Use these when a key case event happens and deadlines need to go on the calendar. The bot posts a checklist in the thread and nudges every 24 hours until every item is ✅.</p>
@@ -607,64 +775,15 @@
           </div>
         </div>
 
-        <div class="mt-3" style="padding:.85rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
-          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
-            <div class="type-label" style="margin:0">Calendar Statute of Limitations</div>
-            <span class="trigger-tag both" style="margin:0" title="Auto-fires 48 hours after channel creation; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-          </div>
-          <p style="font-size:.85rem;color:#166534;margin:0 0 .5rem">
-            <strong>Auto-fires 48 hours after a new public channel is created.</strong> Can also be triggered manually:
-          </p>
-          <div class="type-this">@RJL-zap calendar sol</div>
-          <div class="what-happens" style="background:#fff">
-            <ul class="mb-0">
-              <li>Calendar the SOL deadline with exact date</li>
-              <li>Set 30-day advance reminder</li>
-              <li>Set 7-day advance reminder</li>
-            </ul>
-          </div>
-        </div>
-
         <div class="callout green mt-3">
           <i class="bi bi-check2-circle me-1"></i>
           <strong>Completing items:</strong> React ✅ on each thread item as you calendar it.
           Once every item has a ✅, the bot closes the checklist and stops reminding automatically.
         </div>
-      </div>
-    </div>
 
-    <!-- Mediation Checklist -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-mediation">
-        <i class="bi bi-person-arms-up"></i> Mediation Checklist
-        <span class="trigger-tag both" title="Auto-fires on any message containing 'mediation checklist'; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p><strong>Auto-fires on any message containing the phrase "mediation checklist"</strong> — no @-mention of the bot needed. Once it fires, it posts the checklist and follows up automatically on day 1, 3, and 14.</p>
-
-        <div class="type-label">Just type this in any channel</div>
-        <div class="type-this">Mediation checklist for next Tuesday</div>
-
-        <p class="mt-3" style="font-size:.85rem;color:var(--text-muted);margin-bottom:.4rem">
-          Or trigger manually with @-mention to also tag the people responsible:
-        </p>
-        <div class="type-this">@RJL-zap mediation checklist @Sarah @Marcus</div>
-
-        <div class="what-happens mt-1 mb-3">
-          <strong>Bot immediately posts:</strong>
-          <ul class="mt-1">
-            <li>Confirm mediation is calendared</li>
-            <li>Schedule client prep session</li>
-            <li>Reserve conference room</li>
-            <li>Send invoice to client</li>
-            <li>Confirm mediator payment</li>
-          </ul>
-        </div>
-
-        <div class="timeline-strip">
-          <div class="tl-row"><span class="tl-badge badge-now">Day 1</span> Check-in: are prep steps complete?</div>
-          <div class="tl-row"><span class="tl-badge badge-soon">Day 3</span> Invoice status follow-up</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Mediator payment confirmation</div>
+        <div class="callout blue mt-2">
+          <i class="bi bi-info-circle me-1"></i>
+          The <strong>Calendar Statute of Limitations</strong> variant auto-fires 48 hours after a new channel is created — see the Automatic section above.
         </div>
       </div>
     </div>
@@ -704,125 +823,6 @@
           <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation</div>
           <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Attorney Intro -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-intro">
-        <i class="bi bi-person-check"></i> Attorney Intro
-        <span class="trigger-tag both" title="Auto-fires when an attorney is named in the channel description; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Reminds the attorney to make initial contact with a new client. <strong>Auto-fires when an attorney is named in the channel description</strong> (see below). Can also be triggered manually:</p>
-
-        <div class="type-label">Manual trigger (tag the attorney)</div>
-        <div class="type-this">@RJL-zap attorney intro @AttorneyName</div>
-
-        <div class="timeline-strip mt-1">
-          <div class="tl-row"><span class="tl-badge badge-soon">1 hour</span> Bot posts task: attorney has 72 hrs to contact client. Reply <span class="done-word">done</span> when complete.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">48 hours</span> If no <span class="done-word">done</span> reply — escalation message tags configured supervisors.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Paralegal Intro -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-intro">
-        <i class="bi bi-telephone"></i> Paralegal Intro
-        <span class="trigger-tag both" title="Auto-fires when a paralegal is named in the channel description; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Reminds the paralegal to make initial contact with a new client. <strong>Auto-fires when a paralegal is named in the channel description</strong> (see below). Can also be triggered manually:</p>
-
-        <div class="type-label">Manual trigger (tag the paralegal)</div>
-        <div class="type-this">@RJL-zap paralegal intro @ParalegalName</div>
-
-        <div class="timeline-strip mt-1">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: contact client within 24 hrs. Reply <span class="done-word">done</span> when complete.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Case Setup -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-setup">
-        <i class="bi bi-clipboard-check"></i> Case Setup
-        <span class="trigger-tag both" title="Auto-fires 15 min after channel creation; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Confirms intake documents have been saved. <strong>Auto-fires 15 minutes after a new public channel is created.</strong> You can also trigger it manually any time:</p>
-
-        <div class="type-label">Manual trigger (tag the person responsible)</div>
-        <div class="type-this">@RJL-zap case setup @PersonName</div>
-
-        <div class="what-happens mt-1 mb-3">
-          <strong>Bot immediately asks them to confirm:</strong>
-          <ul class="mt-1 mb-0">
-            <li>Signed contract saved in Dropbox</li>
-            <li>Intake sheet completed</li>
-            <li>CTA signed and saved (if applicable)</li>
-          </ul>
-        </div>
-
-        <div class="timeline-strip">
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Document Verification -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-setup">
-        <i class="bi bi-shield-check"></i> Legal Case Document Verification
-        <span class="trigger-tag both" title="Auto-fires 24 hours after channel creation; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Verifies all required case documents are properly filed. <strong>Auto-fires 24 hours after a new public channel is created</strong> so nothing slips through after the initial Case Setup checklist. Can also be triggered manually:</p>
-
-        <div class="type-label">Manual trigger (tag the person responsible)</div>
-        <div class="type-this">@RJL-zap document verification @PersonName</div>
-
-        <div class="what-happens mt-1 mb-3">
-          <strong>Bot asks them to verify:</strong>
-          <ul class="mt-1 mb-0">
-            <li>Signed retainer / contract is in Dropbox</li>
-            <li>Intake sheet is complete and saved</li>
-            <li>CTA is signed and saved (if applicable)</li>
-            <li>Conflict check has been documented</li>
-            <li>Client contact information is in the case management system</li>
-            <li>Initial case notes are recorded</li>
-          </ul>
-        </div>
-
-        <div class="timeline-strip">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts checklist. Reply <span class="done-word">verified</span> when all items are confirmed.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">verified</span> reply — escalation tags backup contacts.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Check Pickup -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-pickup">
-        <i class="bi bi-cash-coin"></i> Client Check Pickup
-        <span class="trigger-tag both" title="Auto-fires when a configured user posts 'law firm can be paid'; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Reminds the responsible person to schedule pickup of a client's settlement check. They have 7 days — the bot escalates on day 5 if nothing is scheduled.</p>
-
-        <p style="font-size:.88rem;background:#f0fdf4;border-left:3px solid #22c55e;padding:.6rem .85rem;border-radius:0 6px 6px 0;margin-bottom:.75rem">
-          <strong>Auto-fires</strong> when a configured trigger user posts a message containing <code style="background:rgba(0,0,0,.06);padding:.05rem .3rem;border-radius:3px">law firm can be paid</code>. The person who posted gets tagged in the scheduling reminder. Set the trigger user(s) in admin settings under <em>Check Pickup — Auto-Trigger Users</em>.
-        </p>
-
-        <div class="type-label">Manual trigger (tag the person responsible)</div>
-        <div class="type-this">@RJL-zap check pickup @PersonName</div>
-
-        <div class="timeline-strip mt-1">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>
@@ -900,35 +900,16 @@
       </div>
     </div>
 
-    <!-- New Case + Review (side by side) -->
-    <div class="row g-3">
-      <div class="col-md-6">
-        <div class="cmd-card h-100">
-          <div class="cmd-header hdr-simple">
-            <i class="bi bi-folder-plus"></i> New Case Assignment
-            <span class="trigger-tag both" title="Auto-fires on first message in a new channel; also manual"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
-          </div>
-          <div class="cmd-body">
-            <p>Notifies the configured case assignee (e.g. Laura). <strong>Auto-fires on the first user message in a newly created channel.</strong> Can also be triggered manually any time:</p>
-            <div class="type-label">Manual trigger</div>
-            <div class="type-this">@RJL-zap new case</div>
-            <div class="type-label mt-2">Or with extra people</div>
-            <div class="type-this">@RJL-zap new case @SomeoneElse</div>
-          </div>
-        </div>
+    <!-- 5-Star Review Prompt -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-simple">
+        <i class="bi bi-star"></i> 5-Star Review Prompt
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
       </div>
-      <div class="col-md-6">
-        <div class="cmd-card h-100">
-          <div class="cmd-header hdr-simple">
-            <i class="bi bi-star"></i> 5-Star Review Prompt
-            <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
-          </div>
-          <div class="cmd-body">
-            <p>Posts a prompt asking whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
-            <div class="type-label">Type this (tag the people to notify)</div>
-            <div class="type-this">@RJL-zap ready for review @PersonName</div>
-          </div>
-        </div>
+      <div class="cmd-body">
+        <p>Posts a prompt asking whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
+        <div class="type-label">Type this (tag the people to notify)</div>
+        <div class="type-this">@RJL-zap ready for review @PersonName</div>
       </div>
     </div>
 
