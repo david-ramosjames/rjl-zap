@@ -600,8 +600,10 @@ def handle_channel_created(event, client):
                  ch.get("name", "?"), channel_id)
 
 
-_TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)>", re.IGNORECASE)
-_TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)>", re.IGNORECASE)
+# Slack renders user mentions as either `<@U123>` or `<@U123|displayName>` —
+# match both forms.
+_TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
+_TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 
 
 def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> None:
@@ -614,6 +616,10 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> N
     bot_id = client.auth_test()["user_id"]
     attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic_text, exclude=bot_id)
     paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic_text, exclude=bot_id)
+    log.info(
+        "topic/purpose parse for #%s — attorney=%s paralegal=%s text=%r",
+        channel_id, attorney_id, paralegal_id, topic_text[:300],
+    )
 
     if attorney_id and storage.set_intro_fired_for(channel_id, "attorney", attorney_id):
         log.info("auto-firing attorney_intro for %s in #%s", attorney_id, channel_id)
@@ -655,7 +661,7 @@ def _topic_user_ids(client, channel_id: str) -> list[str]:
         bot_id = None
     seen: list[str] = []
     for source in (topic, purpose):
-        for uid in re.findall(r"<@([A-Z0-9]+)>", source):
+        for uid in re.findall(r"<@([A-Z0-9]+)(?:\|[^>]*)?>", source):
             if uid != bot_id and uid not in seen:
                 seen.append(uid)
     return seen
@@ -678,12 +684,18 @@ def handle_message(event, client):
     if not channel_id:
         return
 
-    # Channel description / topic was set or changed → parse for intros
+    # Channel description / topic was set or changed → parse for intros.
+    # Slack populates the `text` field with @-mention substitutions (`<@USERID>`)
+    # but the bare `topic`/`purpose` field is the literal stored value, which
+    # may or may not have substitutions depending on how it was set. Pass both
+    # so the regex has the best chance of matching.
     if subtype == "channel_topic":
-        _maybe_fire_intros_from_topic(client, channel_id, event.get("topic") or "")
+        combined = f"{event.get('text') or ''}\n{event.get('topic') or ''}"
+        _maybe_fire_intros_from_topic(client, channel_id, combined)
         return
     if subtype == "channel_purpose":
-        _maybe_fire_intros_from_topic(client, channel_id, event.get("purpose") or "")
+        combined = f"{event.get('text') or ''}\n{event.get('purpose') or ''}"
+        _maybe_fire_intros_from_topic(client, channel_id, combined)
         return
 
     # Skip bot messages, message subtypes (channel_join, etc.), and thread replies
