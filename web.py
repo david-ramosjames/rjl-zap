@@ -56,6 +56,13 @@ SETTINGS = [
                 "disable the auto-trigger.",
     },
     {
+        "key": "review_request_trigger_user_ids",
+        "label": "Review Request — Auto-Trigger Users",
+        "help": "Slack user IDs whose messages auto-trigger the 5-star review "
+                "prompt (3-minute delay) when they include \"RJL has been paid\". "
+                "Comma-separated. Leave empty to disable the auto-trigger.",
+    },
+    {
         "key": "new_case_assignee_user_ids",
         "label": "New Case — Default Assignee(s)",
         "help": "Always tagged when @Jamie new case fires (e.g. Laura: UA63X86AJ). Comma-separated.",

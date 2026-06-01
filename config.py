@@ -342,3 +342,4 @@ CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60
 # Phrase that auto-triggers Check Pickup. Only fires when the message
 # author is in the `check_pickup_trigger_user_ids` admin setting.
 CHECK_PICKUP_AUTO_PHRASE = "law firm can be paid"
+REVIEW_REQUEST_AUTO_PHRASE = "RJL has been paid"

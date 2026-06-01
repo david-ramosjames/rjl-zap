@@ -719,6 +719,26 @@
         </div>
       </div>
     </div>
+
+    <!-- 5-Star Review Prompt -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-simple">
+        <i class="bi bi-star"></i> 5-Star Review Prompt
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires 3 minutes after a configured trigger user posts a message containing <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">RJL has been paid</code>.</strong> The delay gives the team a moment to finish the Slack thread before the prompt appears. Set the allowed users in admin settings under <em>Review Request — Auto-Trigger Users</em>.</p>
+
+        <div class="type-label">Manual trigger (tag the relevant people)</div>
+        <div class="type-this">@RJL-zap ready for review @PersonName</div>
+
+        <div class="callout blue mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>No follow-up.</strong> This is a one-shot prompt — the bot posts once and does not escalate. The extra contacts configured under <em>Review Request — Additional Contacts</em> are always tagged.
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- ── MANUAL COMMANDS ── -->
@@ -900,18 +920,6 @@
       </div>
     </div>
 
-    <!-- 5-Star Review Prompt -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-simple">
-        <i class="bi bi-star"></i> 5-Star Review Prompt
-        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Posts a prompt asking whether this client should be asked for a 5-star review. One message, no follow-up. Tag the relevant people in the message.</p>
-        <div class="type-label">Type this (tag the people to notify)</div>
-        <div class="type-this">@RJL-zap ready for review @PersonName</div>
-      </div>
-    </div>
 
   </section>
 

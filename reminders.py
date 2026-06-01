@@ -56,11 +56,10 @@ def _tick(client) -> None:
                              msg["done_keyword"], msg["id"])
                     storage.mark_scheduled_sent(msg["id"])
                     continue
-            client.chat_postMessage(
-                channel=msg["channel_id"],
-                thread_ts=msg["thread_ts"],
-                text=msg["text"],
-            )
+            post_kwargs: dict = {"channel": msg["channel_id"], "text": msg["text"]}
+            if msg["thread_ts"]:
+                post_kwargs["thread_ts"] = msg["thread_ts"]
+            client.chat_postMessage(**post_kwargs)
             storage.mark_scheduled_sent(msg["id"])
         except Exception:
             log.exception("failed to send scheduled message id=%s", msg["id"])

@@ -17,7 +17,7 @@ from config import (
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
-    CHECK_PICKUP_AUTO_PHRASE,
+    CHECK_PICKUP_AUTO_PHRASE, REVIEW_REQUEST_AUTO_PHRASE,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
     DOC_VERIFICATION,
@@ -652,6 +652,31 @@ def handle_message(event, client):
                 )
             except Exception:
                 log.exception("auto check_pickup failed for channel=%s", channel_id)
+            return
+
+    # Auto-fire 5-star review prompt when a configured user posts "RJL has been paid"
+    # (3-minute delay so the message lands after the case is settled in Slack)
+    if REVIEW_REQUEST_AUTO_PHRASE.lower() in lowered:
+        trigger_users = _ids_from_config("review_request_trigger_user_ids")
+        author = event.get("user", "")
+        if trigger_users and author in trigger_users and not _bot_is_mentioned(client, text):
+            log.info("auto-firing review_request from user=%s in #%s", author, channel_id)
+            try:
+                extras = " ".join(f"<@{uid}>" for uid in _ids_from_config(REVIEW_REQUEST.extras_setting_key))
+                msg_text = (
+                    REVIEW_REQUEST.message
+                    .replace("{mentions}", f"<@{author}>")
+                    .replace("{extras}", extras)
+                    .strip()
+                )
+                storage.schedule_message(
+                    channel_id=channel_id,
+                    thread_ts="",
+                    send_after=time.time() + 3 * 60,
+                    text=msg_text,
+                )
+            except Exception:
+                log.exception("auto review_request scheduling failed for channel=%s", channel_id)
             return
 
     # First user message in a newly-created channel → fire new_case
