@@ -18,6 +18,7 @@ from config import (
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
     CHECK_PICKUP_AUTO_PHRASE, REVIEW_REQUEST_AUTO_PHRASE,
+    CLIENT_INTAKE, CLIENT_INTAKE_DELAY_SECONDS,
     COMPLETION_EMOJI, COMPLETION_REPLY,
     DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
     DOC_VERIFICATION,
@@ -157,6 +158,7 @@ def handle_app_mention(event, client):
             (CHECK_PICKUP, "check_pickup_backup_user_ids", "check_pickup"),
             (CASE_SETUP, "case_setup_escalation_user_ids", "case_setup"),
             (DOC_VERIFICATION, "doc_verification_escalation_user_ids", "doc_verification"),
+            (CLIENT_INTAKE, "client_intake_escalation_user_ids", "client_intake"),
         ]
         for cfg, setting_key, name in followup_matches:
             if cfg.phrase in lowered:
@@ -183,6 +185,7 @@ def handle_app_mention(event, client):
                 f"`{ATTORNEY_INTRO.phrase}`",
                 f"`{PARALEGAL_INTRO.phrase}`",
                 f"`{CASE_SETUP.phrase}`",
+                f"`{CLIENT_INTAKE.phrase}`",
                 f"`{CHECK_PICKUP.phrase}`",
                 f"`{NEW_CASE.phrase}`",
                 f"`{REVIEW_REQUEST.phrase}`",
@@ -433,6 +436,19 @@ def fire_due_lifecycle_triggers(client) -> None:
                 )
             except Exception:
                 log.exception("auto doc_verification failed for channel=%s", row["channel_id"])
+
+    intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
+    if intake_assignees:
+        for row in storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS):
+            if storage.mark_lifecycle_fired(row["channel_id"], "client_intake"):
+                try:
+                    _auto_start_followup(
+                        client, row["channel_id"], CLIENT_INTAKE,
+                        "client_intake_escalation_user_ids", "client_intake",
+                        participants=intake_assignees,
+                    )
+                except Exception:
+                    log.exception("auto client_intake failed for channel=%s", row["channel_id"])
 
     sol_trigger = TRIGGERS.get("calendar_sol")
     if sol_trigger is not None:

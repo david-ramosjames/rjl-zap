@@ -487,6 +487,10 @@
             <strong>Case Setup</strong> checklist posts.
           </div>
           <div class="tl-row">
+            <span class="tl-badge badge-soon">+1 hr</span>
+            <strong>Client Intake</strong> request posts to the assigned collector.
+          </div>
+          <div class="tl-row">
             <span class="tl-badge badge-warn">+24 hrs</span>
             <strong>Document Verification</strong> checklist posts.
           </div>
@@ -554,6 +558,43 @@
 
         <div class="timeline-strip">
           <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Client Intake -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-setup">
+        <i class="bi bi-person-vcard"></i> Client Intake
+        <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Auto-fires 1 hour after a new public channel is created.</strong> Tags the assigned collector and asks them to gather the new client's intake details in the thread. If no <span class="done-word">done</span> reply comes back within 24 hours, the bot reminds them and tags the escalation contacts.</p>
+
+        <div class="type-label">Manual trigger (tag the collector)</div>
+        <div class="type-this">@RJL-zap client intake @PersonName</div>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Bot asks the collector for:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Full legal name</li>
+            <li>Phone number</li>
+            <li>Email address</li>
+            <li>Mailing address</li>
+            <li>Government ID</li>
+            <li>SSN</li>
+            <li>Emergency contact</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-now">+1 hr from channel creation</span> Initial request posts in the channel tagging the assigned collector.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">+24 hrs after request</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-person me-1"></i>
+          <strong>Set the collector in admin settings.</strong> The auto-trigger only fires when at least one user ID is configured under <em>Client Intake — Assigned Collector(s)</em>.
         </div>
       </div>
     </div>
@@ -1055,6 +1096,7 @@
             <li><strong>Immediately:</strong> Bot joins the channel.</li>
             <li><strong>First user message:</strong> New Case Assignment fires — pings the configured assignee.</li>
             <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved.</li>
+            <li><strong>+1 hour:</strong> Client Intake request posts — assigned collector gathers client details.</li>
             <li><strong>+24 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed.</li>
             <li><strong>+48 hours:</strong> Calendar Statute of Limitations checklist posts — calendar the SOL deadline and advance reminders.</li>
             <li><strong>When the channel description is set:</strong> If it includes <em>Attorney @X | Paralegal @Y</em>, Attorney Intro and Paralegal Intro fire for those specific people. Re-fires if a different person is named later.</li>

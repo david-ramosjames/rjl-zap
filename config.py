@@ -325,6 +325,32 @@ DOC_VERIFICATION = FollowUpConfig(
 )
 
 
+CLIENT_INTAKE = FollowUpConfig(
+    phrase="client intake",
+    done_keyword="done",
+    initial_delay_seconds=0,            # auto-fire scheduling handled at the lifecycle level
+    check_delay_seconds=24 * 60 * 60,   # 24 hours
+    initial_message=(
+        ":clipboard: *Client Intake — {{mentions}}*\n\n"
+        "Please collect the following from the new client and reply *done* in this thread "
+        "once everything is captured:\n\n"
+        ":bust_in_silhouette: Full legal name\n"
+        ":telephone_receiver: Phone number\n"
+        ":email: Email address\n"
+        ":house: Mailing address\n"
+        ":id: Government ID (DL, passport, etc.)\n"
+        ":lock: SSN\n"
+        ":sos: Emergency contact (name + number)"
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Client Intake Still Pending* :warning:\n\n"
+        "{{mentions}} — it has been 24 hours and no confirmation has been received.\n"
+        "Please collect the client intake details above and reply *done* in this thread.\n\n"
+        "{{escalation}}"
+    ),
+)
+
+
 COMPLETION_EMOJI = "white_check_mark"
 COMPLETION_REPLY = "COMPLETE"
 REMINDER_CHECK_INTERVAL_SECONDS = 300
@@ -338,6 +364,7 @@ NEW_CASE_ON_FIRST_MESSAGE = True
 CASE_SETUP_DELAY_SECONDS = 15 * 60
 DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60
 CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60
+CLIENT_INTAKE_DELAY_SECONDS = 60 * 60
 
 # Phrase that auto-triggers Check Pickup. Only fires when the message
 # author is in the `check_pickup_trigger_user_ids` admin setting.

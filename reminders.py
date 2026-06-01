@@ -74,7 +74,7 @@ def _tick(client) -> None:
     skip_triggers = {
         "mediation_checklist", "disbursement",
         "attorney_intro", "case_setup", "paralegal_intro", "check_pickup",
-        "doc_verification",
+        "doc_verification", "client_intake",
     }
     for wf in storage.open_workflows_due_for_reminder(cutoff):
         if wf["trigger_name"] in skip_triggers:

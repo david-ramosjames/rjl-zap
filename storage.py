@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS channel_lifecycle (
     case_setup_fired_at REAL,
     doc_verification_fired_at REAL,
     calendar_sol_fired_at REAL,
+    client_intake_fired_at REAL,
     attorney_intro_fired_for TEXT,
     paralegal_intro_fired_for TEXT
 );
@@ -69,6 +70,7 @@ def init_db() -> None:
             ("channel_lifecycle",  "attorney_intro_fired_for", "TEXT"),
             ("channel_lifecycle",  "paralegal_intro_fired_for", "TEXT"),
             ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
+            ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -296,6 +298,7 @@ _LIFECYCLE_COLS = {
     "case_setup": "case_setup_fired_at",
     "doc_verification": "doc_verification_fired_at",
     "calendar_sol": "calendar_sol_fired_at",
+    "client_intake": "client_intake_fired_at",
 }
 
 

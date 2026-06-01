@@ -56,6 +56,18 @@ SETTINGS = [
                 "disable the auto-trigger.",
     },
     {
+        "key": "client_intake_assignee_user_ids",
+        "label": "Client Intake — Assigned Collector(s)",
+        "help": "Slack user IDs tagged 1 hour after a new channel is created to collect "
+                "client intake details (e.g. U07SDBC2146). Comma-separated. "
+                "Leave empty to disable the auto Client Intake trigger.",
+    },
+    {
+        "key": "client_intake_escalation_user_ids",
+        "label": "Client Intake — Escalation Contacts",
+        "help": "Tagged in the 24-hour reminder if no 'done' reply. Comma-separated.",
+    },
+    {
         "key": "review_request_trigger_user_ids",
         "label": "Review Request — Auto-Trigger Users",
         "help": "Slack user IDs whose messages auto-trigger the 5-star review "
