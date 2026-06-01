@@ -597,6 +597,29 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> N
             log.exception("auto paralegal_intro failed for channel=%s", channel_id)
 
 
+def _topic_user_ids(client, channel_id: str) -> list[str]:
+    """Return the @-mentioned user IDs from the channel topic + purpose,
+    de-duplicated, with the bot itself filtered out."""
+    try:
+        info = client.conversations_info(channel=channel_id)
+        ch = info.get("channel") or {}
+        topic   = (ch.get("topic")   or {}).get("value", "") or ""
+        purpose = (ch.get("purpose") or {}).get("value", "") or ""
+    except Exception:
+        log.debug("conversations.info failed for %s", channel_id, exc_info=True)
+        return []
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        bot_id = None
+    seen: list[str] = []
+    for source in (topic, purpose):
+        for uid in re.findall(r"<@([A-Z0-9]+)>", source):
+            if uid != bot_id and uid not in seen:
+                seen.append(uid)
+    return seen
+
+
 def _first_match(pattern, text: str, exclude: str | None = None) -> str | None:
     for m in pattern.finditer(text):
         uid = m.group(1)
@@ -662,10 +685,12 @@ def handle_message(event, client):
         if trigger_users and author in trigger_users and not _bot_is_mentioned(client, text):
             log.info("auto-firing review_request from user=%s in #%s", author, channel_id)
             try:
+                topic_ids = _topic_user_ids(client, channel_id)
+                mention_str = " ".join(f"<@{uid}>" for uid in topic_ids)
                 extras = " ".join(f"<@{uid}>" for uid in _ids_from_config(REVIEW_REQUEST.extras_setting_key))
                 msg_text = (
                     REVIEW_REQUEST.message
-                    .replace("{mentions}", f"<@{author}>")
+                    .replace("{mentions}", mention_str)
                     .replace("{extras}", extras)
                     .strip()
                 )
