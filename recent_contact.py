@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import re
-import threading
 from datetime import datetime
 from typing import Optional
 
@@ -192,8 +191,3 @@ def log_contact(client, event: dict, contact_type: str, details: str) -> bool:
         return False
 
 
-def log_contact_async(client, event: dict, contact_type: str, details: str) -> None:
-    """Fire-and-forget so we don't block the Slack handler."""
-    threading.Thread(
-        target=log_contact, args=(client, event, contact_type, details), daemon=True
-    ).start()

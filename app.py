@@ -88,14 +88,29 @@ def _log_recent_contact(client, event: dict) -> None:
         )
         return
 
-    recent_contact.log_contact_async(client, event, contact_type, details)
     icon = _CONTACT_ICONS.get(contact_type, ":pencil:")
     summary = f" — _{details}_" if details else ""
-    client.chat_postMessage(
-        channel=channel,
-        thread_ts=parent_ts,
-        text=f"{icon} Logged *{contact_type}*{summary}",
-    )
+
+    def _write_and_reply():
+        try:
+            ok = recent_contact.log_contact(client, event, contact_type, details)
+        except Exception:
+            log.exception("recent contact write crashed")
+            ok = False
+        if ok:
+            reply = f"{icon} Logged *{contact_type}*{summary}"
+        else:
+            reply = (
+                f":warning: Couldn't write the *{contact_type}* entry to the Recent Contact sheet. "
+                f"Usually a Google config issue — ask an admin to check the Railway logs and that the "
+                f"Sheets API is enabled for the service account's GCP project."
+            )
+        try:
+            client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=reply)
+        except Exception:
+            log.exception("could not post recent contact reply")
+
+    threading.Thread(target=_write_and_reply, daemon=True).start()
 
 
 def _post_help(client, channel: str, parent_ts: str) -> None:
