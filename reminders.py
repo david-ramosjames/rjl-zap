@@ -21,20 +21,42 @@ def _loop(client) -> None:
         time.sleep(REMINDER_CHECK_INTERVAL_SECONDS)
 
 
-def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str) -> bool:
+def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
+    """Returns True if the thread has a non-bot reply containing `keyword`,
+    False if it definitely does not, or None if we couldn't tell (API error).
+    Callers should treat None as 'don't escalate yet — try again next tick'
+    so a transient Slack outage doesn't fire a false escalation."""
     try:
-        resp = client.conversations_replies(channel=channel_id, ts=thread_ts)
-        messages = resp.get("messages", [])
-        kw = keyword.lower()
-        # Skip the first message (the parent); ignore bot messages
-        return any(
-            kw in (m.get("text") or "").lower()
-            for m in messages[1:]
-            if not m.get("bot_id")
-        )
+        resp = client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
     except Exception:
         log.exception("could not fetch thread replies channel=%s ts=%s", channel_id, thread_ts)
-        return False
+        return None
+
+    try:
+        bot_user_id = client.auth_test().get("user_id")
+    except Exception:
+        bot_user_id = None
+
+    messages = resp.get("messages", []) or []
+    kw = keyword.lower()
+    matches: list[str] = []
+    skipped_bot = 0
+    for m in messages[1:]:  # messages[0] is the parent
+        if m.get("bot_id") or (bot_user_id and m.get("user") == bot_user_id):
+            skipped_bot += 1
+            continue
+        text = (m.get("text") or "").lower()
+        if kw in text:
+            matches.append(m.get("ts", "?"))
+
+    log.info(
+        "thread reply check channel=%s ts=%s keyword=%s — replies=%d "
+        "skipped_bot=%d matches=%s",
+        channel_id, thread_ts, keyword,
+        max(0, len(messages) - 1),
+        skipped_bot, matches or "[]",
+    )
+    return bool(matches)
 
 
 def _tick(client) -> None:
@@ -51,7 +73,18 @@ def _tick(client) -> None:
     for msg in storage.due_scheduled_messages(now):
         try:
             if msg["check_replies_first"] and msg["done_keyword"]:
-                if _thread_has_reply(client, msg["channel_id"], msg["thread_ts"], msg["done_keyword"]):
+                result = _thread_has_reply(
+                    client, msg["channel_id"], msg["thread_ts"], msg["done_keyword"],
+                )
+                if result is None:
+                    # API failure — don't escalate blind. Leave the row unsent
+                    # so we retry on the next tick.
+                    log.warning(
+                        "deferring scheduled msg id=%s — thread reply check failed",
+                        msg["id"],
+                    )
+                    continue
+                if result:
                     log.info("thread already has '%s' reply — skipping scheduled msg id=%s",
                              msg["done_keyword"], msg["id"])
                     storage.mark_scheduled_sent(msg["id"])
