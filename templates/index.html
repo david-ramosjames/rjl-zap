@@ -602,7 +602,7 @@
     <!-- Document Verification -->
     <div class="cmd-card">
       <div class="cmd-header hdr-setup">
-        <i class="bi bi-shield-check"></i> Legal Case Document Verification
+        <i class="bi bi-shield-check"></i> Case Document Verification
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
@@ -612,20 +612,24 @@
         <div class="type-this">@RJL-zap document verification @PersonName</div>
 
         <div class="what-happens mt-1 mb-3">
-          <strong>Bot asks them to verify:</strong>
+          <strong>Bot asks them to confirm the following are saved in the Dropbox case folder:</strong>
           <ul class="mt-1 mb-0">
-            <li>Signed retainer / contract is in Dropbox</li>
-            <li>Intake sheet is complete and saved</li>
-            <li>CTA is signed and saved (if applicable)</li>
-            <li>Conflict check has been documented</li>
-            <li>Client contact information is in the case management system</li>
-            <li>Initial case notes are recorded</li>
+            <li>Medicare/Medicaid Card</li>
+            <li>Health Insurance Card</li>
+            <li>Outstanding Bills</li>
+            <li>1P Insurance Card</li>
+            <li>1P Policy Dec Page</li>
+            <li>3P Insurance Card</li>
           </ul>
         </div>
 
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.6rem">
+          The auto-trigger tags whoever is configured under <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings, and reminds them to alert the paralegal about any outstanding items.
+        </p>
+
         <div class="timeline-strip">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts checklist. Reply <span class="done-word">verified</span> when all items are confirmed.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">verified</span> reply — escalation tags backup contacts.</div>
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts checklist. Reply <span class="done-word">confirmed</span> when all documents are saved.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">24 hours</span> If no <span class="done-word">confirmed</span> reply — escalation tags backup contacts.</div>
         </div>
       </div>
     </div>

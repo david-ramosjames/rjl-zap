@@ -300,26 +300,28 @@ REVIEW_REQUEST = SimplePostConfig(
 
 DOC_VERIFICATION = FollowUpConfig(
     phrase="document verification",
-    done_keyword="verified",
+    done_keyword="confirmed",
     initial_delay_seconds=0,
     check_delay_seconds=24 * 60 * 60,
     initial_message=(
-        ":mag: *Legal Case Document Verification — {{mentions}}*\n\n"
-        "It has been 24 hours since this case channel was created. "
-        "Please verify the following are properly filed:\n\n"
-        ":white_check_mark: Signed retainer / contract is in Dropbox\n"
-        ":white_check_mark: Intake sheet is complete and saved\n"
-        ":white_check_mark: CTA is signed and saved (if applicable)\n"
-        ":white_check_mark: Conflict check has been documented\n"
-        ":white_check_mark: Client contact information is in the case management system\n"
-        ":white_check_mark: Initial case notes are recorded\n\n"
-        "Reply *verified* in this thread once all items are confirmed in place."
+        ":file_folder: *CASE DOCUMENT VERIFICATION* :file_folder:\n\n"
+        "{{mentions}} Please confirm you have received and saved the following "
+        "documents into the Dropbox case folder:\n\n"
+        "1) Medicare/Medicaid Card :white_check_mark:\n"
+        "2) Health Insurance Card :white_check_mark:\n"
+        "3) Outstanding Bills :white_check_mark:\n"
+        "4) 1P Insurance Card :white_check_mark:\n"
+        "5) 1P Policy Dec Page :white_check_mark:\n"
+        "6) 3P Insurance Card :white_check_mark:\n\n"
+        "Please reply *confirmed* in this thread once all documents have been "
+        "confirmed and saved to the case folder. Also alert the paralegal of "
+        "any items that remain outstanding."
     ),
     escalation_message=(
         ":warning: *REMINDER: Document Verification Outstanding* :warning:\n\n"
         "{{mentions}} — it has been 24 hours since the verification request and "
         "no confirmation has been received. Please complete the verification and "
-        "reply *verified* in this thread.\n\n"
+        "reply *confirmed* in this thread.\n\n"
         "{{escalation}}"
     ),
 )
