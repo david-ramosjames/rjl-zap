@@ -425,11 +425,26 @@ def _auto_start_followup(
 
 def fire_due_lifecycle_triggers(client) -> None:
     """Called from the reminder loop. Fires case_setup (T+15min),
-    doc_verification (T+24h), and calendar_sol (T+48h) for any
-    channel that's past its delay but hasn't fired yet."""
+    client_intake (T+1h), doc_verification (T+24h), and calendar_sol
+    (T+48h) for any channel that's past its delay but hasn't fired yet."""
     now = time.time()
 
-    for row in storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS):
+    case_setup_due = storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS)
+    doc_ver_due    = storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS)
+    intake_due     = storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS)
+    sol_due        = storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS)
+    intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
+
+    if case_setup_due or doc_ver_due or intake_due or sol_due:
+        log.info(
+            "lifecycle sweep — case_setup=%d doc_verification=%d "
+            "client_intake=%d (assignees_configured=%s) calendar_sol=%d",
+            len(case_setup_due), len(doc_ver_due),
+            len(intake_due), bool(intake_assignees),
+            len(sol_due),
+        )
+
+    for row in case_setup_due:
         if storage.mark_lifecycle_fired(row["channel_id"], "case_setup"):
             try:
                 _auto_start_followup(
@@ -439,7 +454,7 @@ def fire_due_lifecycle_triggers(client) -> None:
             except Exception:
                 log.exception("auto case_setup failed for channel=%s", row["channel_id"])
 
-    for row in storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS):
+    for row in doc_ver_due:
         if storage.mark_lifecycle_fired(row["channel_id"], "doc_verification"):
             try:
                 _auto_start_followup(
@@ -449,9 +464,15 @@ def fire_due_lifecycle_triggers(client) -> None:
             except Exception:
                 log.exception("auto doc_verification failed for channel=%s", row["channel_id"])
 
-    intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
+    if intake_due and not intake_assignees:
+        log.warning(
+            "%d channel(s) past the 1-hour Client Intake delay, but "
+            "'client_intake_assignee_user_ids' is empty — auto-trigger disabled. "
+            "Set it in admin settings to enable.",
+            len(intake_due),
+        )
     if intake_assignees:
-        for row in storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS):
+        for row in intake_due:
             if storage.mark_lifecycle_fired(row["channel_id"], "client_intake"):
                 try:
                     _auto_start_followup(
@@ -464,7 +485,7 @@ def fire_due_lifecycle_triggers(client) -> None:
 
     sol_trigger = TRIGGERS.get("calendar_sol")
     if sol_trigger is not None:
-        for row in storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS):
+        for row in sol_due:
             if storage.mark_lifecycle_fired(row["channel_id"], "calendar_sol"):
                 try:
                     _auto_start_trigger_workflow(client, row["channel_id"], sol_trigger)
@@ -845,12 +866,29 @@ def _maybe_finalize(client, workflow_id: int) -> None:
 
 def main() -> None:
     storage.init_db()
+    _log_startup_config()
     reminders.start_reminder_loop(app.client)
     threading.Thread(target=web.start, daemon=True).start()
     if os.getenv("AUTO_JOIN_CHANNELS", "1") not in ("0", "false", "False", ""):
         auto_join.join_all_public_channels_async(app.client)
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+
+
+def _log_startup_config() -> None:
+    """One-line snapshot of which auto-triggers will actually fire, so
+    misconfigured settings are visible on every deploy."""
+    keys = [
+        ("client_intake_assignee_user_ids",  "Client Intake auto-trigger"),
+        ("disbursement_authorized_user_ids", "Disbursement phrase trigger"),
+        ("check_pickup_trigger_user_ids",    "Check Pickup phrase trigger"),
+        ("review_request_trigger_user_ids",  "Review Request phrase trigger"),
+        ("case_setup_participant_user_ids",  "Case Setup / Doc Verification participants"),
+    ]
+    for key, label in keys:
+        ids = _ids_from_config(key)
+        log.info("config check — %s: %s (key=%s)",
+                 label, f"{len(ids)} user(s) configured" if ids else "DISABLED (empty)", key)
 
 
 if __name__ == "__main__":
