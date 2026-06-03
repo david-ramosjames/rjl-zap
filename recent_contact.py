@@ -12,7 +12,8 @@ import storage
 
 log = logging.getLogger(__name__)
 
-PHRASE = "recent contact"
+PHRASES = ("recent contact", "client contact")
+PHRASE = PHRASES[0]  # canonical / for any external reference
 
 # Canonical type label -> aliases. Order matters: more specific aliases
 # (e.g. "left voicemail") are listed before single-word variants.
@@ -43,12 +44,14 @@ HEADERS = [
 
 
 def is_recent_contact(text: str) -> bool:
-    """True if the @-mention contains the trigger phrase."""
-    return PHRASE in text.lower()
+    """True if the @-mention contains any of the trigger phrases."""
+    lowered = text.lower()
+    return any(p in lowered for p in PHRASES)
 
 
 def parse(text: str) -> tuple[Optional[str], str]:
-    """Extract (canonical_type, details) from a `recent contact ...` message.
+    """Extract (canonical_type, details) from a `recent contact ...` or
+    `client contact ...` message.
 
     Returns (None, "") if no type can be detected so the caller can
     prompt the user with usage. Otherwise returns the matched type and
@@ -57,10 +60,16 @@ def parse(text: str) -> tuple[Optional[str], str]:
     cleaned = re.sub(r"<@[A-Z0-9]+>", "", text)
     lowered = cleaned.lower()
 
-    idx = lowered.find(PHRASE)
-    if idx < 0:
+    matched_phrase: Optional[str] = None
+    idx = -1
+    for p in PHRASES:
+        i = lowered.find(p)
+        if i >= 0 and (idx < 0 or i < idx):
+            idx = i
+            matched_phrase = p
+    if idx < 0 or matched_phrase is None:
         return None, ""
-    after_phrase = cleaned[idx + len(PHRASE):].lstrip(" :—-\"'")
+    after_phrase = cleaned[idx + len(matched_phrase):].lstrip(" :—-\"'")
     after_lower = after_phrase.lower()
 
     matched_type: Optional[str] = None

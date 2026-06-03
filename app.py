@@ -58,12 +58,13 @@ _CONTACT_ICONS = {
 _RECENT_CONTACT_USAGE = (
     ":information_source: *Recent Contact* — log a client interaction to the tracker.\n"
     "Format: `@RJL-zap recent contact <type> - <details>`\n"
+    "(`client contact` works too.)\n"
     "Types: `email`, `text`, `call`, `voicemail`, `letter`, `mail`, `fax`, `visit`, `other`\n\n"
     "Examples:\n"
     "• `@RJL-zap recent contact email - Re: discovery responses sent`\n"
-    "• `@RJL-zap recent contact call - 15 min, discussed depo prep`\n"
+    "• `@RJL-zap client contact call - 15 min, discussed depo prep`\n"
     "• `@RJL-zap recent contact visit - client came in to sign release`\n"
-    "• `@RJL-zap recent contact voicemail - left vm re: settlement offer`"
+    "• `@RJL-zap client contact voicemail - left vm re: settlement offer`"
 )
 
 
@@ -127,7 +128,7 @@ def _post_help(client, channel: str, parent_ts: str) -> None:
             f"• `@RJL-zap attorney intro @attorney` — 72-hour client contact reminder\n"
             f"• `@RJL-zap case setup @person` — intake document checklist\n"
             f"• `@RJL-zap new case` — notify the case assignee\n"
-            f"• `@RJL-zap recent contact <type> - <details>` — log a client interaction\n"
+            f"• `@RJL-zap recent contact <type> - <details>` (or `client contact`) — log a client interaction\n"
             f"   types: email, text, call, voicemail, letter, mail, fax, visit, other\n"
         ),
     )
