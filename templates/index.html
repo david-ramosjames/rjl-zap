@@ -368,9 +368,9 @@
 <!-- ── NAV ── -->
 <div class="page-nav">
   <a href="#overview">Overview</a>
+  <a href="#commands">Ad-hoc commands</a>
   <a href="#how-it-works">How it works</a>
   <a href="#auto-triggers">Automatic</a>
-  <a href="#commands">Manual only</a>
   <a href="#thread-replies">Thread replies</a>
   <a href="#faq">FAQ</a>
 </div>
@@ -401,6 +401,147 @@
       <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">commands</code>,
       <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">what can you do</code>)
       in any channel — the bot will reply in the thread with a link to this page.
+    </div>
+  </section>
+
+  <!-- ── AD-HOC COMMANDS ── -->
+  <section id="commands" class="mb-5">
+    <div class="section-label">Ad-hoc commands</div>
+    <p style="color:var(--text-muted);font-size:.9rem;max-width:680px;line-height:1.6;margin-bottom:1.25rem">
+      These don't fit the channel-lifecycle flow — they're commands you @-mention any time a specific case event happens or when you've contacted a client. Use them as often as you need.
+    </p>
+
+    <!-- Calendar Checklists -->
+    <div class="cmd-card">
+      <div class="cmd-header hdr-calendar">
+        <i class="bi bi-calendar-check"></i> Calendar Checklists
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p>Use these when a key case event happens and deadlines need to go on the calendar. The bot posts a checklist in the thread and nudges every 24 hours until every item is ✅.</p>
+
+        <div class="cmd-grid">
+          <div>
+            <div class="type-label">Answer Filed</div>
+            <div class="type-this">@RJL-zap answer filed</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar Initial Disclosures</li>
+                <li>Calendar Chapter 18 deadline</li>
+                <li>Calendar controverting affidavit</li>
+                <li>Update case management calendar</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <div class="type-label">Discovery Requests Received</div>
+            <div class="type-this" style="font-size:.77rem">@RJL-zap discovery requests received</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar 30-day response deadline</li>
+                <li>Calendar draft review deadline</li>
+                <li>Assign drafter for responses</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <div class="type-label">Scheduling Order Agreed</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap scheduling order agreed</div>
+            <div class="what-happens">
+              <ul>
+                <li>Calendar discovery cutoff</li>
+                <li>Calendar expert disclosures</li>
+                <li>Calendar dispositive motions</li>
+                <li>Calendar trial date</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout green mt-3">
+          <i class="bi bi-check2-circle me-1"></i>
+          <strong>Completing items:</strong> React ✅ on each thread item as you calendar it.
+          Once every item has a ✅, the bot closes the checklist and stops reminding automatically.
+        </div>
+
+        <div class="callout blue mt-2">
+          <i class="bi bi-info-circle me-1"></i>
+          The <strong>Calendar Statute of Limitations</strong> variant auto-fires 48 hours after a new channel is created — see the Automatic section below.
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Contact -->
+    <div class="cmd-card">
+      <div class="cmd-header" style="background:#ecfeff;color:#155e75">
+        <i class="bi bi-chat-dots"></i> Recent Contact
+        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
+      </div>
+      <div class="cmd-body">
+        <p>Logs any client interaction to the Recent Contact Google Sheet — emails, texts, calls, voicemails, letters, mail, faxes, and in-person visits. Use this any time you've reached out to or heard from a client.</p>
+
+        <div class="type-label">Format</div>
+        <div class="type-this">@RJL-zap recent contact &lt;type&gt; - &lt;details&gt;</div>
+
+        <div class="cmd-grid mt-3">
+          <div>
+            <div class="type-label">Email</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact email - Re: discovery responses</div>
+          </div>
+          <div>
+            <div class="type-label">Phone Call</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact call - discussed depo prep, 15 min</div>
+          </div>
+          <div>
+            <div class="type-label">In-Person Visit</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact visit - client came in to sign release</div>
+          </div>
+          <div>
+            <div class="type-label">Voicemail</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact voicemail - left vm re: settlement offer</div>
+          </div>
+          <div>
+            <div class="type-label">Text Message</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact text - confirmed appt tomorrow 10am</div>
+          </div>
+          <div>
+            <div class="type-label">Letter / Mail / Fax</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact mail - sent signed release</div>
+          </div>
+        </div>
+
+        <div class="what-happens mt-3">
+          <strong>Accepted types:</strong> <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">email</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">text</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">call</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">voicemail</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">letter</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">mail</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">fax</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">visit</code>,
+          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">other</code>
+          <br>
+          Synonyms also work — e.g. <em>called</em>, <em>texted</em>, <em>spoke with</em>, <em>met with</em>, <em>dropped by</em>, <em>left vm</em>.
+        </div>
+
+        <div class="what-happens mt-3">
+          <strong>Row schema:</strong>
+          <ul class="mt-1 mb-0">
+            <li>Timestamp (UTC)</li>
+            <li>Slack channel name &amp; ID</li>
+            <li>Case number &amp; case name (parsed from channel name, e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">smith-john-12345</code>)</li>
+            <li>Type (canonical: email / text / call / voicemail / letter / mail / fax / visit / other)</li>
+            <li>Details (the text after the type)</li>
+            <li>Full original Slack message</li>
+            <li>Logged by (the person who typed the command)</li>
+          </ul>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-gear me-1"></i>
+          <strong>Setup required:</strong> An admin must paste the service account JSON into the <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> env var on Railway, set the spreadsheet ID in admin settings, and share the sheet with the service account email.
+        </div>
+      </div>
     </div>
   </section>
 
@@ -788,88 +929,19 @@
       </div>
     </div>
 
-  </section>
-
-  <!-- ── MANUAL COMMANDS ── -->
-  <section id="commands" class="mb-5">
-    <div class="section-label">Manual only</div>
-    <p style="color:var(--text-muted);font-size:.9rem;max-width:680px;line-height:1.6;margin-bottom:1.25rem">
-      These don't fire on their own — they're driven entirely by you @-mentioning the bot when something happens that doesn't fit the natural channel-lifecycle flow.
-    </p>
-
-    <!-- Calendar Checklists -->
-    <div class="cmd-card">
-      <div class="cmd-header hdr-calendar">
-        <i class="bi bi-calendar-check"></i> Calendar Checklists
-        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Use these when a key case event happens and deadlines need to go on the calendar. The bot posts a checklist in the thread and nudges every 24 hours until every item is ✅.</p>
-
-        <div class="cmd-grid">
-          <div>
-            <div class="type-label">Answer Filed</div>
-            <div class="type-this">@RJL-zap answer filed</div>
-            <div class="what-happens">
-              <ul>
-                <li>Calendar Initial Disclosures</li>
-                <li>Calendar Chapter 18 deadline</li>
-                <li>Calendar controverting affidavit</li>
-                <li>Update case management calendar</li>
-              </ul>
-            </div>
-          </div>
-          <div>
-            <div class="type-label">Discovery Requests Received</div>
-            <div class="type-this" style="font-size:.77rem">@RJL-zap discovery requests received</div>
-            <div class="what-happens">
-              <ul>
-                <li>Calendar 30-day response deadline</li>
-                <li>Calendar draft review deadline</li>
-                <li>Assign drafter for responses</li>
-              </ul>
-            </div>
-          </div>
-          <div>
-            <div class="type-label">Scheduling Order Agreed</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap scheduling order agreed</div>
-            <div class="what-happens">
-              <ul>
-                <li>Calendar discovery cutoff</li>
-                <li>Calendar expert disclosures</li>
-                <li>Calendar dispositive motions</li>
-                <li>Calendar trial date</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="callout green mt-3">
-          <i class="bi bi-check2-circle me-1"></i>
-          <strong>Completing items:</strong> React ✅ on each thread item as you calendar it.
-          Once every item has a ✅, the bot closes the checklist and stops reminding automatically.
-        </div>
-
-        <div class="callout blue mt-2">
-          <i class="bi bi-info-circle me-1"></i>
-          The <strong>Calendar Statute of Limitations</strong> variant auto-fires 48 hours after a new channel is created — see the Automatic section above.
-        </div>
-      </div>
-    </div>
-
     <!-- 30-Day Disbursement -->
     <div class="cmd-card">
       <div class="cmd-header hdr-disburse">
         <i class="bi bi-currency-dollar"></i>
         30-Day Disbursement Timer
-        <span class="trigger-tag manual" style="margin-left:auto"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
+        <span class="trigger-tag auto" style="margin-left:auto"><i class="bi bi-arrow-repeat"></i> Auto</span>
         <span class="restricted-tag" style="margin-left:.4rem"><i class="bi bi-lock-fill me-1"></i>Restricted</span>
       </div>
       <div class="cmd-body">
-        <p>Starts the full 30-day disbursement workflow. <strong>Only authorized users can run this</strong> — others will get a "not authorized" reply. The bot reads the channel topic to find who to tag.</p>
+        <p><strong>Auto-fires when a configured user posts a message containing <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">start disbursement</code>.</strong> No @-mention of the bot is needed. Other users posting the phrase are silently ignored. Set the allowed users in admin settings under <em>Disbursement — Auto-Trigger Users</em>.</p>
 
-        <div class="type-label">Type this</div>
-        <div class="type-this">@RJL-zap start disbursement</div>
+        <div class="type-label">Just type this in any channel (authorized users only)</div>
+        <div class="type-this">start disbursement</div>
 
         <div class="callout amber">
           <i class="bi bi-people me-1"></i>
@@ -896,81 +968,8 @@
       </div>
     </div>
 
-    <!-- Recent Contact -->
-    <div class="cmd-card">
-      <div class="cmd-header" style="background:#ecfeff;color:#155e75">
-        <i class="bi bi-chat-dots"></i> Recent Contact
-        <span class="trigger-tag manual"><i class="bi bi-hand-index-thumb-fill"></i> Manual</span>
-      </div>
-      <div class="cmd-body">
-        <p>Logs any client interaction to the Recent Contact Google Sheet — emails, texts, calls, voicemails, letters, mail, faxes, and in-person visits. Use this any time you've reached out to or heard from a client.</p>
-
-        <div class="type-label">Format</div>
-        <div class="type-this">@RJL-zap recent contact &lt;type&gt; - &lt;details&gt;</div>
-
-        <div class="cmd-grid mt-3">
-          <div>
-            <div class="type-label">Email</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact email - Re: discovery responses</div>
-          </div>
-          <div>
-            <div class="type-label">Phone Call</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact call - discussed depo prep, 15 min</div>
-          </div>
-          <div>
-            <div class="type-label">In-Person Visit</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact visit - client came in to sign release</div>
-          </div>
-          <div>
-            <div class="type-label">Voicemail</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact voicemail - left vm re: settlement offer</div>
-          </div>
-          <div>
-            <div class="type-label">Text Message</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact text - confirmed appt tomorrow 10am</div>
-          </div>
-          <div>
-            <div class="type-label">Letter / Mail / Fax</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact mail - sent signed release</div>
-          </div>
-        </div>
-
-        <div class="what-happens mt-3">
-          <strong>Accepted types:</strong> <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">email</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">text</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">call</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">voicemail</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">letter</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">mail</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">fax</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">visit</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">other</code>
-          <br>
-          Synonyms also work — e.g. <em>called</em>, <em>texted</em>, <em>spoke with</em>, <em>met with</em>, <em>dropped by</em>, <em>left vm</em>.
-        </div>
-
-        <div class="what-happens mt-3">
-          <strong>Row schema:</strong>
-          <ul class="mt-1 mb-0">
-            <li>Timestamp (UTC)</li>
-            <li>Slack channel name &amp; ID</li>
-            <li>Case number &amp; case name (parsed from channel name, e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">smith-john-12345</code>)</li>
-            <li>Type (canonical: email / text / call / voicemail / letter / mail / fax / visit / other)</li>
-            <li>Details (the text after the type)</li>
-            <li>Full original Slack message</li>
-            <li>Logged by (the person who typed the command)</li>
-          </ul>
-        </div>
-
-        <div class="callout amber mt-3">
-          <i class="bi bi-gear me-1"></i>
-          <strong>Setup required:</strong> An admin must paste the service account JSON into the <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> env var on Railway, set the spreadsheet ID in admin settings, and share the sheet with the service account email.
-        </div>
-      </div>
-    </div>
-
-
   </section>
+
 
   <!-- ── THREAD REPLIES ── -->
   <section id="thread-replies" class="mb-5">

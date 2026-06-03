@@ -162,9 +162,9 @@ def handle_app_mention(event, client):
         if MEDIATION.phrase in lowered:
             _start_mediation(client, event["channel"], event["ts"], text)
             return
-        if DISBURSEMENT.phrase in lowered:
-            _start_disbursement(client, event["channel"], event["ts"], event.get("user", ""))
-            return
+        # Note: Disbursement no longer responds to @-mentions — it is
+        # triggered by an authorized user posting "start disbursement"
+        # as a plain channel message. See handle_message.
         # Order matters: 'paralegal intro' and 'attorney intro' share the suffix "intro",
         # and 'check pickup' must be matched before any potential collisions.
         followup_matches = [
@@ -196,7 +196,6 @@ def handle_app_mention(event, client):
         all_phrases = (
             [
                 f"`{MEDIATION.phrase}`",
-                f"`{DISBURSEMENT.phrase}`",
                 f"`{ATTORNEY_INTRO.phrase}`",
                 f"`{PARALEGAL_INTRO.phrase}`",
                 f"`{CASE_SETUP.phrase}`",
@@ -262,18 +261,13 @@ def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> Non
              channel, parent_ts, participants)
 
 
-def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> None:
+def _start_disbursement(client, channel: str, user_id: str) -> None:
+    """Auto-fire the 30-day disbursement sequence as a brand-new top-level
+    thread. Triggered by a configured user posting `start disbursement`
+    in any channel — no @-mention needed."""
     authorized = _ids_from_config("disbursement_authorized_user_ids")
-    if authorized and user_id not in authorized:
-        client.chat_postMessage(
-            channel=channel,
-            thread_ts=parent_ts,
-            text=":no_entry: Sorry, you're not authorized to start the disbursement workflow.",
-        )
+    if not authorized or user_id not in authorized:
         log.warning("unauthorized disbursement attempt by user=%s", user_id)
-        return
-
-    if storage.workflow_by_thread(channel, parent_ts):
         return
 
     try:
@@ -288,11 +282,13 @@ def _start_disbursement(client, channel: str, parent_ts: str, user_id: str) -> N
     participants = [uid for uid in mentioned if uid != bot_id][:3]
     mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
 
-    client.chat_postMessage(
+    resp = client.chat_postMessage(
         channel=channel,
-        thread_ts=parent_ts,
         text=DISBURSEMENT_MASTER_CHECKLIST.format(mentions=mention_str),
     )
+    parent_ts = resp["ts"]
+    if storage.workflow_by_thread(channel, parent_ts):
+        return
 
     now = time.time()
     for delay, template in DISBURSEMENT.sequence:
@@ -748,6 +744,17 @@ def handle_message(event, client):
     if MEDIATION.phrase in lowered and not _bot_is_mentioned(client, text):
         _start_mediation(client, channel_id, event["ts"], text)
         return
+
+    # Auto-fire 30-Day Disbursement when an authorized user posts "start disbursement"
+    # No @-mention required — the message itself is the trigger.
+    if DISBURSEMENT.phrase in lowered:
+        author = event.get("user", "")
+        if author and not _bot_is_mentioned(client, text):
+            try:
+                _start_disbursement(client, channel_id, author)
+            except Exception:
+                log.exception("auto disbursement failed for channel=%s", channel_id)
+            return
 
     # Auto-fire Check Pickup when a configured user posts the trigger phrase
     # (legacy Zapier "law firm can be paid" from:@paralegal trigger).

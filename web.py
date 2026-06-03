@@ -11,8 +11,11 @@ flask_app = Flask(__name__)
 SETTINGS = [
     {
         "key": "disbursement_authorized_user_ids",
-        "label": "Disbursement — Authorized Users",
-        "help": "Only these user IDs can trigger @Jamie start disbursement. Comma-separated.",
+        "label": "Disbursement — Auto-Trigger Users",
+        "help": "Slack user IDs whose messages auto-start the 30-day "
+                "disbursement workflow when they include the phrase "
+                "\"start disbursement\". Comma-separated. Leave empty "
+                "to disable the auto-trigger entirely (no manual fallback).",
     },
     {
         "key": "attorney_intro_escalation_user_ids",
