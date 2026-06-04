@@ -8,6 +8,7 @@ class TriggerConfig:
     phrase: str            # case-insensitive substring match against the @-mention text
     announcement: str      # parent message posted as a thread reply
     items: List[str]       # checklist items, each posted as its own thread reply
+    mentions_setting_key: str = ""  # admin setting whose user IDs replace {mentions} in `announcement`
 
 
 TRIGGERS: Dict[str, TriggerConfig] = {
@@ -46,12 +47,13 @@ TRIGGERS: Dict[str, TriggerConfig] = {
     "calendar_sol": TriggerConfig(
         name="calendar_sol",
         phrase="calendar sol",
-        announcement=":rotating_light: *Calendar Statute of Limitations* — please confirm the SOL is calendared",
+        announcement=":rotating_light: *Calendar Statute of Limitations* — {mentions} please confirm the SOL is calendared",
         items=[
             ":date: Calendar Statute of Limitations deadline (note the exact date in the case file)",
             ":date: Set calendar reminder 30 days before SOL",
             ":date: Set calendar reminder 7 days before SOL",
         ],
+        mentions_setting_key="calendar_sol_user_ids",
     ),
 }
 

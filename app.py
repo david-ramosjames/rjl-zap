@@ -493,11 +493,23 @@ def fire_due_lifecycle_triggers(client) -> None:
                     log.exception("auto calendar_sol failed for channel=%s", row["channel_id"])
 
 
+def _render_trigger_announcement(trigger: TriggerConfig) -> str:
+    """Substitute `{mentions}` in a trigger's announcement with the user IDs
+    configured under `trigger.mentions_setting_key`. Falls back to an empty
+    string if no setting key is set (so non-mention triggers pass through
+    unchanged)."""
+    if not trigger.mentions_setting_key:
+        return trigger.announcement
+    ids = _ids_from_config(trigger.mentions_setting_key)
+    mention_str = " ".join(f"<@{uid}>" for uid in ids)
+    return trigger.announcement.replace("{mentions}", mention_str).replace("  ", " ").strip()
+
+
 def _auto_start_trigger_workflow(client, channel: str, trigger: TriggerConfig) -> None:
     """Auto-start a TriggerConfig workflow at the top level of a channel
     (no @-mention required). Posts the announcement as a new parent
     message, then runs the same item/reaction flow as _start_workflow."""
-    resp = client.chat_postMessage(channel=channel, text=trigger.announcement)
+    resp = client.chat_postMessage(channel=channel, text=_render_trigger_announcement(trigger))
     parent_ts = resp["ts"]
     if storage.workflow_by_thread(channel, parent_ts):
         return
@@ -528,7 +540,7 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
     if storage.workflow_by_thread(channel, parent_ts):
         return
 
-    client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=trigger.announcement)
+    client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=_render_trigger_announcement(trigger))
 
     item_records: list[tuple[str, str]] = []
     for item in trigger.items:

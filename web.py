@@ -33,6 +33,14 @@ SETTINGS = [
         "help": "Tagged in the 24-hour reminder if no 'verified' reply. Comma-separated.",
     },
     {
+        "key": "calendar_sol_user_ids",
+        "label": "Calendar SOL — Assigned User(s)",
+        "help": "Tagged in the SOL announcement when the Calendar Statute "
+                "of Limitations checklist auto-fires (48 hrs after channel "
+                "creation) or is triggered manually. Comma-separated. "
+                "Leave empty to omit the tag.",
+    },
+    {
         "key": "case_setup_participant_user_ids",
         "label": "Case Setup / Doc Verification — Auto-Tagged Participants",
         "help": "Comma-separated Slack user IDs to @-mention when the bot "
