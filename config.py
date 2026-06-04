@@ -338,11 +338,13 @@ CLIENT_INTAKE = FollowUpConfig(
         "once everything is captured:\n\n"
         ":bust_in_silhouette: Full legal name\n"
         ":telephone_receiver: Phone number\n"
+        ":iphone: Text-capable? (yes / no)\n"
         ":email: Email address\n"
         ":house: Mailing address\n"
         ":id: Government ID (DL, passport, etc.)\n"
         ":lock: SSN\n"
-        ":sos: Emergency contact (name + number)"
+        ":sos: Emergency contact (name + number)\n"
+        ":globe_with_meridians: Preferred language"
     ),
     escalation_message=(
         ":warning: *REMINDER: Client Intake Still Pending* :warning:\n\n"
