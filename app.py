@@ -267,9 +267,20 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     thread. Triggered by a configured user posting `start disbursement`
     in any channel — no @-mention needed."""
     authorized = _ids_from_config("disbursement_authorized_user_ids")
-    if not authorized or user_id not in authorized:
-        log.warning("unauthorized disbursement attempt by user=%s", user_id)
+    if not authorized:
+        log.warning(
+            "disbursement phrase posted by user=%s but "
+            "disbursement_authorized_user_ids is empty — trigger disabled",
+            user_id,
+        )
         return
+    if user_id not in authorized:
+        log.warning(
+            "unauthorized disbursement attempt by user=%s (authorized=%s)",
+            user_id, authorized,
+        )
+        return
+    log.info("auto-firing disbursement triggered by user=%s in channel=%s", user_id, channel)
 
     try:
         info = client.conversations_info(channel=channel)
@@ -764,12 +775,28 @@ def handle_message(event, client):
         _maybe_fire_intros_from_topic(client, channel_id, combined)
         return
 
-    # Skip bot messages, message subtypes (channel_join, etc.), and thread replies
-    if event.get("bot_id") or subtype or event.get("thread_ts"):
+    # Skip bot messages and message subtypes (channel_join, file_share, etc.).
+    # NOTE: we deliberately do NOT skip thread replies here — phrase triggers
+    # (start disbursement / law firm can be paid / RJL has been paid /
+    # mediation checklist) should fire even when posted inside a thread.
+    if event.get("bot_id") or subtype:
         return
 
     text = event.get("text") or ""
     lowered = text.lower()
+
+    # Diagnostic: log whenever any auto-trigger phrase appears in a user
+    # message, so a future "trigger didn't fire" report can be debugged
+    # from Railway logs (author, thread context, raw text).
+    if (MEDIATION.phrase in lowered
+            or DISBURSEMENT.phrase in lowered
+            or CHECK_PICKUP_AUTO_PHRASE in lowered
+            or REVIEW_REQUEST_AUTO_PHRASE.lower() in lowered):
+        log.info(
+            "trigger phrase detected channel=%s author=%s in_thread=%s text=%r",
+            channel_id, event.get("user", ""),
+            bool(event.get("thread_ts")), text[:200],
+        )
 
     # Auto-fire Mediation Checklist on any message containing the phrase
     # (matches the legacy Zapier "search for 'Mediation Checklist'" trigger).
