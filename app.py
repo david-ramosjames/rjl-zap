@@ -17,6 +17,7 @@ from config import (
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
+    NEW_CASE_DELAY_SECONDS,
     CHECK_PICKUP_AUTO_PHRASE, REVIEW_REQUEST_AUTO_PHRASE,
     CLIENT_INTAKE, CLIENT_INTAKE_DELAY_SECONDS,
     COMPLETION_EMOJI, COMPLETION_REPLY,
@@ -435,25 +436,38 @@ def _auto_start_followup(
 
 
 def fire_due_lifecycle_triggers(client) -> None:
-    """Called from the reminder loop. Fires case_setup (T+15min),
-    client_intake (T+1h), doc_verification (T+24h), and calendar_sol
-    (T+48h) for any channel that's past its delay but hasn't fired yet."""
+    """Called from the reminder loop. Fires new_case (T+200s),
+    case_setup (T+15min), client_intake (T+1h), doc_verification
+    (T+24h), and calendar_sol (T+48h) for any channel that's past
+    its delay but hasn't fired yet."""
     now = time.time()
 
+    new_case_due   = storage.lifecycle_due(now, "new_case", NEW_CASE_DELAY_SECONDS)
     case_setup_due = storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS)
     doc_ver_due    = storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS)
     intake_due     = storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS)
     sol_due        = storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS)
     intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
 
-    if case_setup_due or doc_ver_due or intake_due or sol_due:
+    if new_case_due or case_setup_due or doc_ver_due or intake_due or sol_due:
         log.info(
-            "lifecycle sweep — case_setup=%d doc_verification=%d "
+            "lifecycle sweep — new_case=%d case_setup=%d doc_verification=%d "
             "client_intake=%d (assignees_configured=%s) calendar_sol=%d",
+            len(new_case_due),
             len(case_setup_due), len(doc_ver_due),
             len(intake_due), bool(intake_assignees),
             len(sol_due),
         )
+
+    if NEW_CASE_ON_FIRST_MESSAGE:
+        for row in new_case_due:
+            if storage.mark_lifecycle_fired(row["channel_id"], "new_case"):
+                log.info("auto-firing new_case for #%s (%ds after creation)",
+                         row["channel_id"], NEW_CASE_DELAY_SECONDS)
+                try:
+                    _do_simple_post_top_level(client, row["channel_id"], NEW_CASE)
+                except Exception:
+                    log.exception("auto new_case failed for channel=%s", row["channel_id"])
 
     for row in case_setup_due:
         if storage.mark_lifecycle_fired(row["channel_id"], "case_setup"):
@@ -616,7 +630,6 @@ def handle_member_joined(event, client):
         return
 
     _ensure_channel_lifecycle(channel_id, created_at)
-    _maybe_fire_new_case_on_creation(client, channel_id, created_at)
 
     if topic:
         _maybe_fire_intros_from_topic(client, channel_id, topic)
@@ -625,25 +638,6 @@ def handle_member_joined(event, client):
 
 
 _STALE_CHANNEL_SECONDS = 24 * 60 * 60
-
-
-def _maybe_fire_new_case_on_creation(client, channel_id: str, created_at: float) -> None:
-    """Fire New Case Assignment as soon as the bot sees a freshly-created
-    channel. Safe to call from multiple events (channel_created,
-    member_joined_channel) — mark_new_case_fired is atomic so only one
-    caller actually posts. Suppressed for stale channels (>24 hrs old) so
-    the startup auto-join sweep doesn't fire new_case retroactively."""
-    if not NEW_CASE_ON_FIRST_MESSAGE:
-        return
-    if time.time() - created_at > _STALE_CHANNEL_SECONDS:
-        return
-    if not storage.mark_new_case_fired(channel_id):
-        return  # already fired
-    log.info("auto-firing new_case on channel creation for #%s", channel_id)
-    try:
-        _do_simple_post_top_level(client, channel_id, NEW_CASE)
-    except Exception:
-        log.exception("new_case post failed for channel=%s", channel_id)
 
 
 def _ensure_channel_lifecycle(channel_id: str, created_at: float) -> dict | None:
@@ -672,9 +666,8 @@ def handle_channel_created(event, client):
         # Slack gives `created` as epoch seconds; fall back to now if missing.
         created_at = float(ch.get("created") or time.time())
         _ensure_channel_lifecycle(channel_id, created_at)
-        log.info("recorded channel lifecycle for #%s (%s)",
-                 ch.get("name", "?"), channel_id)
-        _maybe_fire_new_case_on_creation(client, channel_id, created_at)
+        log.info("recorded channel lifecycle for #%s (%s) — new_case will fire in %ds",
+                 ch.get("name", "?"), channel_id, NEW_CASE_DELAY_SECONDS)
 
 
 # Slack renders user mentions as either `<@U123>` or `<@U123|displayName>` —

@@ -367,6 +367,7 @@ REMINDER_CHECK_INTERVAL_SECONDS = 300
 #   - case_setup → 15 minutes after channel creation
 #   - doc_verification → 24 hours after channel creation
 NEW_CASE_ON_FIRST_MESSAGE = True
+NEW_CASE_DELAY_SECONDS = 200
 CASE_SETUP_DELAY_SECONDS = 15 * 60
 DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60
 CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60

@@ -295,6 +295,7 @@ def lifecycle_due(now: float, kind: str, delay_seconds: float) -> List[dict]:
 
 
 _LIFECYCLE_COLS = {
+    "new_case": "new_case_fired_at",
     "case_setup": "case_setup_fired_at",
     "doc_verification": "doc_verification_fired_at",
     "calendar_sol": "calendar_sol_fired_at",
