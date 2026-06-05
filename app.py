@@ -628,6 +628,7 @@ def handle_member_joined(event, client):
     try:
         info = client.conversations_info(channel=channel_id)
         ch = info.get("channel") or {}
+        name = ch.get("name", "") or ""
         topic   = (ch.get("topic")   or {}).get("value", "") or ""
         purpose = (ch.get("purpose") or {}).get("value", "") or ""
         created_at = float(ch.get("created") or time.time())
@@ -635,31 +636,48 @@ def handle_member_joined(event, client):
         log.debug("conversations.info failed for %s", channel_id, exc_info=True)
         return
 
-    _ensure_channel_lifecycle(channel_id, created_at)
+    _ensure_channel_lifecycle(channel_id, created_at, channel_name=name)
 
     if topic:
-        _maybe_fire_intros_from_topic(client, channel_id, topic)
+        _maybe_fire_intros_from_topic(client, channel_id, topic, channel_name=name)
     if purpose:
-        _maybe_fire_intros_from_topic(client, channel_id, purpose)
+        _maybe_fire_intros_from_topic(client, channel_id, purpose, channel_name=name)
 
 
 _STALE_CHANNEL_SECONDS = 24 * 60 * 60
 
 
-def _ensure_channel_lifecycle(channel_id: str, created_at: float) -> dict | None:
-    """Idempotently record lifecycle for the channel using the channel's real
-    creation time. For channels older than _STALE_CHANNEL_SECONDS, pre-mark
-    every lifecycle trigger as already fired so the bot doesn't fire
-    new_case / case_setup / etc. retroactively when it first sees an old
-    channel."""
+def _ensure_channel_lifecycle(channel_id: str, created_at: float, channel_name: str = "") -> dict | None:
+    """Idempotently record lifecycle for the channel. Pre-marks every
+    lifecycle trigger as already fired in two cases:
+
+      1. The channel is older than _STALE_CHANNEL_SECONDS (so joining via
+         the startup auto-join sweep doesn't fire stale automations).
+      2. The channel name doesn't end in -<digits> (firm convention for
+         case channels — e.g. lacayoarauzjose-1559). Channels without a
+         case number still get the bot, but lifecycle automations stay
+         silent until someone runs a manual command.
+    """
     storage.record_channel_created(channel_id, created_at)
-    if time.time() - created_at > _STALE_CHANNEL_SECONDS:
+
+    is_stale = time.time() - created_at > _STALE_CHANNEL_SECONDS
+    # Only suppress on case-number rule when we actually know the name.
+    # An empty name (e.g. from a fallback path that couldn't look it up)
+    # falls through to the normal flow rather than silently suppressing.
+    no_case_number = bool(channel_name) and not _has_case_number(channel_name)
+
+    if is_stale or no_case_number:
         lc = storage.channel_lifecycle(channel_id) or {}
         if not lc.get("new_case_fired_at"):
             storage.mark_new_case_fired(channel_id)
         for kind in ("case_setup", "doc_verification", "calendar_sol", "client_intake"):
             if not lc.get(f"{kind}_fired_at"):
                 storage.mark_lifecycle_fired(channel_id, kind)
+        if no_case_number and not is_stale:
+            log.info("lifecycle pre-suppressed — channel '%s' (%s) has no case number; "
+                     "auto-triggers will stay silent",
+                     channel_name, channel_id)
+
     return storage.channel_lifecycle(channel_id)
 
 
@@ -671,15 +689,21 @@ def handle_channel_created(event, client):
     if channel_id:
         # Slack gives `created` as epoch seconds; fall back to now if missing.
         created_at = float(ch.get("created") or time.time())
-        _ensure_channel_lifecycle(channel_id, created_at)
-        log.info("recorded channel lifecycle for #%s (%s) — new_case will fire in %ds",
-                 ch.get("name", "?"), channel_id, NEW_CASE_DELAY_SECONDS)
+        name = ch.get("name", "") or ""
+        _ensure_channel_lifecycle(channel_id, created_at, channel_name=name)
+        log.info("recorded channel lifecycle for #%s (%s) — case_number=%s, "
+                 "new_case will fire in %ds (suppressed if no case number)",
+                 name or "?", channel_id, _has_case_number(name), NEW_CASE_DELAY_SECONDS)
 
 
 # Slack renders user mentions as either `<@U123>` or `<@U123|displayName>` —
 # match both forms.
 _TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 _TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
+# Case channels end in -<digits>, e.g. "lacayoarauzjose-1559". Auto-triggers
+# only fire for matching channels; everything else still gets the bot but
+# stays silent until someone runs a manual @-mention command.
+_CASE_NUMBER_RE     = re.compile(r"-\d+$")
 # Match a thread reply that *starts* with done / complete / completed (so
 # "done" / "Done." / "complete!" / "COMPLETED" / "complete all 3" all close
 # the workflow, but "I'm done" / "halfway done" / "almost complete" do not).
@@ -689,11 +713,23 @@ _CLOSE_REPLY_RE     = re.compile(r"^\s*(?:done|complete|completed)\b", re.IGNORE
 _LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
 
 
-def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> None:
+def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
+                                  channel_name: str | None = None) -> None:
     """Parse the channel topic/purpose for `Attorney @X` / `Paralegal @Y`
     mentions and auto-fire the respective intro workflows for those people.
-    Re-fires if a different person is named than before."""
+    Gated by the channel-name case-number convention: channels whose name
+    does not end in -<digits> get no auto-intros (the firm reserves these
+    automations for case channels)."""
     if not channel_id or not topic_text:
+        return
+
+    name = channel_name if channel_name is not None else _lookup_channel_name(client, channel_id)
+    if not _has_case_number(name):
+        log.info(
+            "intros skipped — channel '%s' (%s) has no case number; "
+            "manual @-mention still works",
+            name, channel_id,
+        )
         return
 
     bot_id = client.auth_test()["user_id"]
@@ -725,6 +761,19 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> N
             )
         except Exception:
             log.exception("auto paralegal_intro failed for channel=%s", channel_id)
+
+
+def _lookup_channel_name(client, channel_id: str) -> str:
+    try:
+        info = client.conversations_info(channel=channel_id)
+        return (info.get("channel") or {}).get("name", "") or ""
+    except Exception:
+        log.debug("could not fetch channel name for %s", channel_id, exc_info=True)
+        return ""
+
+
+def _has_case_number(channel_name: str) -> bool:
+    return bool(_CASE_NUMBER_RE.search(channel_name or ""))
 
 
 def _topic_user_ids(client, channel_id: str) -> list[str]:

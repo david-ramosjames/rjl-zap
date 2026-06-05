@@ -138,6 +138,11 @@
       background: #fffbeb;
       color: #78350f;
     }
+    .callout.red {
+      border-left-color: #dc2626;
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
 
     /* ── COMMAND CARDS ── */
     .cmd-card {
@@ -648,6 +653,11 @@
             <span class="tl-badge badge-soon">Phrase posted</span>
             <strong>Mediation Checklist</strong> (anyone) or <strong>Check Pickup</strong> (configured users only).
           </div>
+        </div>
+
+        <div class="callout red mt-3">
+          <i class="bi bi-hash me-1"></i>
+          <strong>Case-number gate.</strong> Every channel-creation and description-set auto-trigger above only fires in channels whose name ends in a case number — e.g. <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">lacayoarauzjose-1559</code> or <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">smith-john-12345</code>. Channels without a trailing <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">-&lt;number&gt;</code> (e.g. <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">general</code>, <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">team-updates</code>) still get the bot, but stay silent — use manual @-mention commands if you need a workflow there. Phrase triggers (Mediation, Disbursement, Check Pickup, Review Request) are not gated and work everywhere.
         </div>
 
         <div class="callout amber mt-3">
