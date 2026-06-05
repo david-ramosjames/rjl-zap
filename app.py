@@ -219,10 +219,16 @@ def handle_app_mention(event, client):
         )
         return
 
-    if COMPLETION_REPLY.lower() in text.lower():
+    # Accept @-mentions with `complete`, `completed`, or `done` as
+    # workflow-close keywords (matches the no-@-mention close handler
+    # in handle_message — keep the keyword set the same for consistency).
+    lowered_text = text.lower()
+    if any(kw in lowered_text for kw in ("complete", "done")):
         wf = storage.workflow_by_thread(event["channel"], parent_ts)
         if wf and not wf.get("completed_at"):
             storage.force_complete_workflow(wf["id"])
+            log.info("workflow %s (id=%s) closed via @-mention close keyword in channel=%s",
+                     wf["trigger_name"], wf["id"], event["channel"])
             client.chat_postMessage(
                 channel=event["channel"],
                 thread_ts=parent_ts,
@@ -553,7 +559,7 @@ def _auto_start_trigger_workflow(client, channel: str, trigger: TriggerConfig) -
         thread_ts=parent_ts,
         text=(
             f"React :{COMPLETION_EMOJI}: on each item above when done, "
-            f"or reply by mentioning me with `{COMPLETION_REPLY}` to close the checklist."
+            f"or reply *done* / *complete* in this thread to close the checklist."
         ),
     )
     storage.create_workflow(channel, parent_ts, trigger.name, item_records)
@@ -583,7 +589,7 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
         thread_ts=parent_ts,
         text=(
             f"React :{COMPLETION_EMOJI}: on each item above when done, "
-            f"or reply by mentioning me with `{COMPLETION_REPLY}` to close the checklist."
+            f"or reply *done* / *complete* in this thread to close the checklist."
         ),
     )
 
@@ -674,10 +680,13 @@ def handle_channel_created(event, client):
 # match both forms.
 _TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 _TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
-# Match a thread reply that *starts* with the word "done" (so "done", "done.",
-# "done!", "done all 3", "done :tada:" all close the workflow, but "I'm done"
-# or "halfway done" do not).
-_DONE_REPLY_RE      = re.compile(r"^\s*done\b", re.IGNORECASE)
+# Match a thread reply that *starts* with done / complete / completed (so
+# "done" / "Done." / "complete!" / "COMPLETED" / "complete all 3" all close
+# the workflow, but "I'm done" / "halfway done" / "almost complete" do not).
+# @-mentions at the start of the message are stripped before matching, so
+# "@RJL-zap done" works too.
+_CLOSE_REPLY_RE     = re.compile(r"^\s*(?:done|complete|completed)\b", re.IGNORECASE)
+_LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
 
 
 def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> None:
@@ -782,27 +791,37 @@ def handle_message(event, client):
     text = event.get("text") or ""
     lowered = text.lower()
 
-    # Thread reply starting with "done" → close the workflow for this thread
-    # (same effect as @-mention COMPLETE, but no @-mention required). Works
-    # for Calendar SOL, Calendar Checklists, Mediation, and any followup
-    # workflow record. Matched against the start of the message + word
-    # boundary so casual usage ("I'm done with this", "halfway done") is
-    # ignored.
+    # Thread reply starting with done / complete / completed → close the
+    # workflow for this thread (same effect as @-mention COMPLETE, but no
+    # @-mention required). Works for Calendar SOL, Calendar Checklists,
+    # Mediation, and any followup workflow record. Leading @-mentions are
+    # stripped so "@RJL-zap done" also closes.
     thread_ts = event.get("thread_ts")
-    if thread_ts and _DONE_REPLY_RE.match(text):
-        wf = storage.workflow_by_thread(channel_id, thread_ts)
-        if wf and not wf.get("completed_at"):
-            storage.force_complete_workflow(wf["id"])
-            log.info("workflow %s closed via 'done' reply in channel=%s",
-                     wf["trigger_name"], channel_id)
-            try:
-                client.chat_postMessage(
-                    channel=channel_id, thread_ts=thread_ts,
-                    text=":tada: Marked complete. Closing checklist.",
+    if thread_ts:
+        cleaned = _LEADING_MENTION_RE.sub("", text)
+        if _CLOSE_REPLY_RE.match(cleaned):
+            log.info(
+                "close keyword reply detected channel=%s thread_ts=%s author=%s text=%r",
+                channel_id, thread_ts, event.get("user", ""), text[:120],
+            )
+            wf = storage.workflow_by_thread(channel_id, thread_ts)
+            if wf and not wf.get("completed_at"):
+                storage.force_complete_workflow(wf["id"])
+                log.info("workflow %s (id=%s) closed via close-keyword reply in channel=%s",
+                         wf["trigger_name"], wf["id"], channel_id)
+                try:
+                    client.chat_postMessage(
+                        channel=channel_id, thread_ts=thread_ts,
+                        text=":tada: Marked complete. Closing checklist.",
+                    )
+                except Exception:
+                    log.exception("could not post done-close confirmation")
+                return
+            elif not wf:
+                log.info(
+                    "close keyword reply but no workflow found for channel=%s thread_ts=%s",
+                    channel_id, thread_ts,
                 )
-            except Exception:
-                log.exception("could not post done-close confirmation")
-            return
 
     # Diagnostic: log whenever any auto-trigger phrase appears in a user
     # message, so a future "trigger didn't fire" report can be debugged
