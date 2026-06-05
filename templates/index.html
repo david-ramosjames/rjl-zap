@@ -806,7 +806,12 @@
 
         <div class="callout amber mt-2">
           <i class="bi bi-person me-1"></i>
-          <strong>Who gets tagged?</strong> The announcement tags whoever is configured under <em>Calendar SOL — Assigned User(s)</em> in admin settings. Leave the setting empty to skip the tag.
+          <strong>Who gets tagged?</strong> Both the initial announcement and the 24-hour reminder tag whoever is configured under <em>Calendar SOL — Assigned User(s)</em> in admin settings. Leave the setting empty to fall back on the legalassistants group.
+        </div>
+
+        <div class="callout blue mt-2">
+          <i class="bi bi-reply me-1"></i>
+          <strong>Quick close:</strong> Reply <span class="done-word">done</span> in the thread (no @-mention needed) and the bot closes the checklist immediately.
         </div>
       </div>
     </div>
@@ -991,7 +996,12 @@
           <div class="col-md-4">
             <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Mark intro/setup complete</div>
             <div class="type-this">done</div>
-            <div class="small text-muted mt-1">Stops the escalation timer for attorney intro, paralegal intro, and case setup.</div>
+            <div class="small text-muted mt-1">Stops the escalation timer for attorney intro, paralegal intro, case setup, and client intake. Also closes Calendar SOL and other calendar checklists.</div>
+          </div>
+          <div class="col-md-4">
+            <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Confirm document verification</div>
+            <div class="type-this">confirmed</div>
+            <div class="small text-muted mt-1">Stops the escalation timer for the document verification workflow.</div>
           </div>
           <div class="col-md-4">
             <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Confirm check pickup scheduled</div>
@@ -1001,7 +1011,7 @@
           <div class="col-md-4">
             <div style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Close any workflow early</div>
             <div class="type-this">@RJL-zap COMPLETE</div>
-            <div class="small text-muted mt-1">Immediately closes the checklist and stops all reminders, even if not every ✅ is checked.</div>
+            <div class="small text-muted mt-1">Same as <span class="done-word">done</span> for reaction-tracked checklists — closes everything and stops reminders.</div>
           </div>
         </div>
 

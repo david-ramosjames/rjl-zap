@@ -59,6 +59,14 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
     return bool(matches)
 
 
+def _sol_assignee_mention() -> str:
+    """Return the space-joined @-mention string for users configured under
+    Calendar SOL — Assigned User(s). Empty string if nobody is set."""
+    raw = storage.get_config("calendar_sol_user_ids", default="") or ""
+    ids = [uid.strip() for uid in raw.split(",") if uid.strip()]
+    return " ".join(f"<@{uid}>" for uid in ids)
+
+
 def _tick(client) -> None:
     now = time.time()
 
@@ -117,11 +125,18 @@ def _tick(client) -> None:
             storage.mark_workflow_complete(wf["id"])
             continue
         bullets = "\n".join(f"• {i['item_text']}" for i in open_items)
+        # Calendar SOL reminder tags the same users as the initial announcement;
+        # everything else falls back to the legalassistants group.
+        if wf["trigger_name"] == "calendar_sol":
+            sol_mention = _sol_assignee_mention()
+            mention = f"{sol_mention} " if sol_mention else notify_mention
+        else:
+            mention = notify_mention
         client.chat_postMessage(
             channel=wf["channel_id"],
             thread_ts=wf["parent_ts"],
             text=(
-                f":alarm_clock: {notify_mention}Reminder — {len(open_items)} item(s) still need to be calendared:\n"
+                f":alarm_clock: {mention}Reminder — {len(open_items)} item(s) still need to be calendared:\n"
                 f"{bullets}"
             ),
         )

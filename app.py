@@ -674,6 +674,10 @@ def handle_channel_created(event, client):
 # match both forms.
 _TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 _TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
+# Match a thread reply that *starts* with the word "done" (so "done", "done.",
+# "done!", "done all 3", "done :tada:" all close the workflow, but "I'm done"
+# or "halfway done" do not).
+_DONE_REPLY_RE      = re.compile(r"^\s*done\b", re.IGNORECASE)
 
 
 def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str) -> None:
@@ -777,6 +781,28 @@ def handle_message(event, client):
 
     text = event.get("text") or ""
     lowered = text.lower()
+
+    # Thread reply starting with "done" → close the workflow for this thread
+    # (same effect as @-mention COMPLETE, but no @-mention required). Works
+    # for Calendar SOL, Calendar Checklists, Mediation, and any followup
+    # workflow record. Matched against the start of the message + word
+    # boundary so casual usage ("I'm done with this", "halfway done") is
+    # ignored.
+    thread_ts = event.get("thread_ts")
+    if thread_ts and _DONE_REPLY_RE.match(text):
+        wf = storage.workflow_by_thread(channel_id, thread_ts)
+        if wf and not wf.get("completed_at"):
+            storage.force_complete_workflow(wf["id"])
+            log.info("workflow %s closed via 'done' reply in channel=%s",
+                     wf["trigger_name"], channel_id)
+            try:
+                client.chat_postMessage(
+                    channel=channel_id, thread_ts=thread_ts,
+                    text=":tada: Marked complete. Closing checklist.",
+                )
+            except Exception:
+                log.exception("could not post done-close confirmation")
+            return
 
     # Diagnostic: log whenever any auto-trigger phrase appears in a user
     # message, so a future "trigger didn't fire" report can be debugged
