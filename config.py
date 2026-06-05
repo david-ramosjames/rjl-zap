@@ -359,7 +359,7 @@ CLIENT_INTAKE = FollowUpConfig(
 
 COMPLETION_EMOJI = "white_check_mark"
 COMPLETION_REPLY = "COMPLETE"
-REMINDER_CHECK_INTERVAL_SECONDS = 300
+REMINDER_CHECK_INTERVAL_SECONDS = 250
 
 # ── Channel-lifecycle automatic triggers ──
 # When a new public channel is created, the bot auto-joins it and fires these:
@@ -367,7 +367,7 @@ REMINDER_CHECK_INTERVAL_SECONDS = 300
 #   - case_setup → 15 minutes after channel creation
 #   - doc_verification → 24 hours after channel creation
 NEW_CASE_ON_FIRST_MESSAGE = True
-NEW_CASE_DELAY_SECONDS = 200
+NEW_CASE_DELAY_SECONDS = 180
 CASE_SETUP_DELAY_SECONDS = 15 * 60
 DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60
 CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60

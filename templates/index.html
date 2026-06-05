@@ -601,7 +601,7 @@
         <div class="row g-3 mt-1">
           <div class="col-md-4">
             <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-plus-circle me-1"></i>Channel creation</div>
-            <div class="small text-muted">New public channel → bot joins, then runs a timed sequence: +200 sec, +15 min, +1 hr, +24 hrs, +48 hrs.</div>
+            <div class="small text-muted">New public channel → bot joins, then runs a timed sequence: +180 sec, +15 min, +1 hr, +24 hrs, +48 hrs.</div>
           </div>
           <div class="col-md-4">
             <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-pencil-square me-1"></i>Channel description</div>
@@ -621,7 +621,7 @@
             Bot auto-joins the new public channel.
           </div>
           <div class="tl-row">
-            <span class="tl-badge badge-now">+200 sec</span>
+            <span class="tl-badge badge-now">+180 sec</span>
             <strong>New Case Assignment</strong> notifies the case assignee.
           </div>
           <div class="tl-row">
@@ -669,7 +669,7 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires ~200 seconds after a new public channel is created.</strong> Short delay gives the channel a moment to settle (description, members added) before the bot pings the configured case assignee (e.g. Laura). One message, no follow-up.</p>
+        <p><strong>Auto-fires ~180 seconds after a new public channel is created.</strong> Short delay gives the channel a moment to settle (description, members added) before the bot pings the configured case assignee (e.g. Laura). One message, no follow-up.</p>
         <div class="type-label">Manual trigger</div>
         <div class="type-this">@RJL-zap new case</div>
         <div class="type-label mt-2">Or with extra people</div>
@@ -1105,7 +1105,7 @@
           The bot watches for new public channels and runs this sequence with no @-mention required:
           <ol style="margin:.5rem 0 .25rem;padding-left:1.3rem">
             <li><strong>Immediately:</strong> Bot joins the channel.</li>
-            <li><strong>~200 seconds after creation:</strong> New Case Assignment fires — pings the configured assignee.</li>
+            <li><strong>~180 seconds after creation:</strong> New Case Assignment fires — pings the configured assignee.</li>
             <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved.</li>
             <li><strong>+1 hour:</strong> Client Intake request posts — assigned collector gathers client details.</li>
             <li><strong>+24 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed.</li>
