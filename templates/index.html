@@ -533,7 +533,7 @@
         <div class="what-happens mt-3">
           <strong>Row schema:</strong>
           <ul class="mt-1 mb-0">
-            <li>Timestamp (UTC)</li>
+            <li>Timestamp (Central Time, formatted so Google Sheets parses it as a real datetime — works with <code>=DAYS()</code>, sorting, etc.)</li>
             <li>Slack channel name &amp; ID</li>
             <li>Case number &amp; case name (parsed from channel name, e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">smith-john-12345</code>)</li>
             <li>Type (canonical: email / text / call / voicemail / letter / mail / fax / visit / other)</li>

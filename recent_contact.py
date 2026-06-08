@@ -8,6 +8,12 @@ import re
 from datetime import datetime
 from typing import Optional
 
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+ stdlib
+    _FIRM_TZ: Optional[object] = ZoneInfo("America/Chicago")
+except Exception:
+    _FIRM_TZ = None
+
 import storage
 
 log = logging.getLogger(__name__)
@@ -181,8 +187,18 @@ def log_contact(client, event: dict, contact_type: str, details: str) -> bool:
     logged_by = _user_label(client, event.get("user", ""))
 
     try:
+        # Use firm-local (Central) time and a format Google Sheets parses as
+        # a real datetime when value_input_option="USER_ENTERED" — that way
+        # =DAYS(), sorting, and other date math work in the sheet. The old
+        # "YYYY-MM-DD HH:MM:SS UTC" string was stored as text and broke
+        # downstream date calculations.
+        if _FIRM_TZ is not None:
+            ts = datetime.now(_FIRM_TZ)
+        else:
+            ts = datetime.utcnow()
+        logged_at = ts.strftime("%m/%d/%Y %H:%M:%S")
         ws.append_row([
-            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            logged_at,
             channel_name,
             case_no,
             case_name,
