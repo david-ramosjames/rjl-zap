@@ -807,6 +807,33 @@ def _first_match(pattern, text: str, exclude: str | None = None) -> str | None:
     return None
 
 
+# Belt-and-suspenders subtype-specific routes. The general @app.event("message")
+# handler below also catches these, but in some Bolt deployments the subtype
+# router fires while the generic handler doesn't (or vice-versa). Both running
+# is safe because _maybe_fire_intros_from_topic / set_intro_fired_for are
+# idempotent — the second call is a no-op.
+@app.event({"type": "message", "subtype": "channel_topic"})
+def handle_channel_topic_event(event, client):
+    channel_id = event.get("channel")
+    if not channel_id:
+        return
+    log.info("explicit channel_topic event channel=%s topic=%r text=%r",
+             channel_id, (event.get("topic") or "")[:200], (event.get("text") or "")[:200])
+    combined = f"{event.get('text') or ''}\n{event.get('topic') or ''}"
+    _maybe_fire_intros_from_topic(client, channel_id, combined)
+
+
+@app.event({"type": "message", "subtype": "channel_purpose"})
+def handle_channel_purpose_event(event, client):
+    channel_id = event.get("channel")
+    if not channel_id:
+        return
+    log.info("explicit channel_purpose event channel=%s purpose=%r text=%r",
+             channel_id, (event.get("purpose") or "")[:200], (event.get("text") or "")[:200])
+    combined = f"{event.get('text') or ''}\n{event.get('purpose') or ''}"
+    _maybe_fire_intros_from_topic(client, channel_id, combined)
+
+
 @app.event("message")
 def handle_message(event, client):
     """Handles channel topic/purpose updates and the keyword-driven
@@ -816,16 +843,27 @@ def handle_message(event, client):
     if not channel_id:
         return
 
+    # Diagnostic: log every subtype event the bot receives. Normal user
+    # messages (no subtype) are NOT logged here to avoid spam — they'll
+    # surface via the trigger-phrase-detected line further down if
+    # applicable.
+    if subtype:
+        log.info("subtype message event — subtype=%s channel=%s", subtype, channel_id)
+
     # Channel description / topic was set or changed → parse for intros.
     # Slack populates the `text` field with @-mention substitutions (`<@USERID>`)
     # but the bare `topic`/`purpose` field is the literal stored value, which
     # may or may not have substitutions depending on how it was set. Pass both
     # so the regex has the best chance of matching.
     if subtype == "channel_topic":
+        log.info("handling channel_topic in channel=%s topic=%r text=%r",
+                 channel_id, (event.get("topic") or "")[:200], (event.get("text") or "")[:200])
         combined = f"{event.get('text') or ''}\n{event.get('topic') or ''}"
         _maybe_fire_intros_from_topic(client, channel_id, combined)
         return
     if subtype == "channel_purpose":
+        log.info("handling channel_purpose in channel=%s purpose=%r text=%r",
+                 channel_id, (event.get("purpose") or "")[:200], (event.get("text") or "")[:200])
         combined = f"{event.get('text') or ''}\n{event.get('purpose') or ''}"
         _maybe_fire_intros_from_topic(client, channel_id, combined)
         return
