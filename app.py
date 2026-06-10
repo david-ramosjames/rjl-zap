@@ -448,11 +448,15 @@ def fire_due_lifecycle_triggers(client) -> None:
     its delay but hasn't fired yet."""
     now = time.time()
 
-    new_case_due   = storage.lifecycle_due(now, "new_case", NEW_CASE_DELAY_SECONDS)
-    case_setup_due = storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS)
-    doc_ver_due    = storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS)
-    intake_due     = storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS)
-    sol_due        = storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS)
+    # All automatic lifecycle alerts are hard-gated to channels created within
+    # _STALE_CHANNEL_SECONDS (5 days). A channel older than that never fires,
+    # even if a lifecycle row somehow has an unfired column.
+    age = _STALE_CHANNEL_SECONDS
+    new_case_due   = storage.lifecycle_due(now, "new_case", NEW_CASE_DELAY_SECONDS, max_age_seconds=age)
+    case_setup_due = storage.lifecycle_due(now, "case_setup", CASE_SETUP_DELAY_SECONDS, max_age_seconds=age)
+    doc_ver_due    = storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS, max_age_seconds=age)
+    intake_due     = storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS, max_age_seconds=age)
+    sol_due        = storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS, max_age_seconds=age)
     intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
 
     if new_case_due or case_setup_due or doc_ver_due or intake_due or sol_due:
@@ -644,7 +648,12 @@ def handle_member_joined(event, client):
         _maybe_fire_intros_from_topic(client, channel_id, purpose, channel_name=name)
 
 
-_STALE_CHANNEL_SECONDS = 24 * 60 * 60
+# A channel only qualifies for automatic alerts (lifecycle schedule + topic
+# intros) if it was created within this window. Channels older than this are
+# treated as "settled / pre-existing" — the bot still joins them and manual
+# @-mention commands still work, but no automation fires. All lifecycle delays
+# (max 48h) are well inside this window, so on-time fires are never blocked.
+_STALE_CHANNEL_SECONDS = 5 * 24 * 60 * 60  # 5 days
 
 
 def _ensure_channel_lifecycle(channel_id: str, created_at: float, channel_name: str = "") -> dict | None:

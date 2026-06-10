@@ -282,14 +282,22 @@ def mark_new_case_fired(channel_id: str) -> bool:
         return cur.rowcount > 0
 
 
-def lifecycle_due(now: float, kind: str, delay_seconds: float) -> List[dict]:
-    """Channels where `created_at + delay_seconds <= now` and the kind hasn't fired yet."""
+def lifecycle_due(now: float, kind: str, delay_seconds: float,
+                  max_age_seconds: float | None = None) -> List[dict]:
+    """Channels where `created_at + delay_seconds <= now` and the kind hasn't
+    fired yet. When `max_age_seconds` is given, also require the channel to
+    have been created within that window (`created_at >= now - max_age_seconds`)
+    so automatic alerts never fire for old / pre-existing channels."""
     col = _LIFECYCLE_COLS[kind]
+    clauses = [f"{col} IS NULL", "(created_at + ?) <= ?"]
+    params: list = [delay_seconds, now]
+    if max_age_seconds is not None:
+        clauses.append("created_at >= ?")
+        params.append(now - max_age_seconds)
     with connect() as conn:
         rows = conn.execute(
-            f"SELECT * FROM channel_lifecycle "
-            f"WHERE {col} IS NULL AND (created_at + ?) <= ?",
-            (delay_seconds, now),
+            "SELECT * FROM channel_lifecycle WHERE " + " AND ".join(clauses),
+            params,
         ).fetchall()
         return [dict(r) for r in rows]
 
