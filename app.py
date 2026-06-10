@@ -717,13 +717,22 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
                                   channel_name: str | None = None) -> None:
     """Parse the channel topic/purpose for `Attorney @X` / `Paralegal @Y`
     mentions and auto-fire the respective intro workflows for those people.
-    Gated by the channel-name case-number convention: channels whose name
-    does not end in -<digits> get no auto-intros (the firm reserves these
-    automations for case channels)."""
+
+    Two gates:
+      1. Case-number convention — channel name must end in -<digits>.
+      2. Freshness — the channel must have been created recently (within
+         _STALE_CHANNEL_SECONDS). Intros are meant to fire when a *new* case
+         channel first gets its attorney/paralegal assigned. Editing the
+         topic of an existing/settled channel (e.g. appending "(settled)")
+         must NOT fire intros or kick off any lifecycle automation.
+    """
     if not channel_id or not topic_text:
         return
 
-    name = channel_name if channel_name is not None else _lookup_channel_name(client, channel_id)
+    name, created_at = _lookup_channel_meta(client, channel_id)
+    if not name and channel_name:
+        name = channel_name
+
     if not _has_case_number(name):
         log.info(
             "intros skipped — channel '%s' (%s) has no case number; "
@@ -731,6 +740,23 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
             name, channel_id,
         )
         return
+
+    if created_at and (time.time() - created_at > _STALE_CHANNEL_SECONDS):
+        age_h = (time.time() - created_at) / 3600
+        log.info(
+            "intros skipped — channel '%s' (%s) was created %.0fh ago, not a "
+            "new case channel (topic edit, not initial assignment); "
+            "manual @-mention still works",
+            name, channel_id, age_h,
+        )
+        return
+
+    # Make sure the lifecycle row reflects the channel's REAL creation time so
+    # this topic event doesn't (re-)arm the time-based schedule. For a genuine
+    # new case channel the row already exists from handle_channel_created and
+    # this is a no-op; for anything else _ensure_channel_lifecycle suppresses.
+    if created_at:
+        _ensure_channel_lifecycle(channel_id, created_at, channel_name=name)
 
     bot_id = client.auth_test()["user_id"]
     attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic_text, exclude=bot_id)
@@ -764,12 +790,19 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
 
 
 def _lookup_channel_name(client, channel_id: str) -> str:
+    return _lookup_channel_meta(client, channel_id)[0]
+
+
+def _lookup_channel_meta(client, channel_id: str) -> tuple[str, float]:
+    """Return (name, created_at_epoch) for a channel. created_at is 0.0 if
+    the lookup fails or Slack omits it."""
     try:
         info = client.conversations_info(channel=channel_id)
-        return (info.get("channel") or {}).get("name", "") or ""
+        ch = info.get("channel") or {}
+        return (ch.get("name", "") or "", float(ch.get("created") or 0))
     except Exception:
-        log.debug("could not fetch channel name for %s", channel_id, exc_info=True)
-        return ""
+        log.debug("could not fetch channel meta for %s", channel_id, exc_info=True)
+        return ("", 0.0)
 
 
 def _has_case_number(channel_name: str) -> bool:

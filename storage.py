@@ -310,13 +310,25 @@ def set_intro_fired_for(channel_id: str, role: str, user_id: str) -> bool:
     the channel description is changed later."""
     col = {"attorney": "attorney_intro_fired_for",
            "paralegal": "paralegal_intro_fired_for"}[role]
+    now = time.time()
     with connect() as conn:
-        # Ensure a lifecycle row exists — channels created before the bot deployed
-        # won't have one.
-        conn.execute(
-            "INSERT OR IGNORE INTO channel_lifecycle (channel_id, created_at) VALUES (?, ?)",
-            (channel_id, time.time()),
-        )
+        exists = conn.execute(
+            "SELECT 1 FROM channel_lifecycle WHERE channel_id = ?", (channel_id,)
+        ).fetchone()
+        if not exists:
+            # We're learning about this channel via a topic edit, NOT via
+            # channel_created — so we don't know its real creation time.
+            # Create the row with every time-based trigger pre-marked as
+            # fired, so editing an existing channel's topic never kicks off
+            # a brand-new-case schedule (new_case / case_setup / doc_verification
+            # / calendar_sol / client_intake).
+            conn.execute(
+                "INSERT INTO channel_lifecycle "
+                "(channel_id, created_at, new_case_fired_at, case_setup_fired_at, "
+                " doc_verification_fired_at, calendar_sol_fired_at, client_intake_fired_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (channel_id, now, now, now, now, now, now),
+            )
         cur = conn.execute(
             f"UPDATE channel_lifecycle SET {col} = ? "
             f"WHERE channel_id = ? AND {col} IS NULL",
