@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     done_keyword TEXT
 );
 
+CREATE TABLE IF NOT EXISTS deferred_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    target_user_id TEXT,
+    fire_after REAL NOT NULL,
+    fired_at REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_deferred_pending ON deferred_actions(fired_at, fire_after);
+
 CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
@@ -222,6 +233,38 @@ def mark_scheduled_sent(message_id: int) -> None:
         conn.execute(
             "UPDATE scheduled_messages SET sent_at = ? WHERE id = ?",
             (time.time(), message_id),
+        )
+
+
+def schedule_deferred_action(channel_id: str, kind: str,
+                             target_user_id: Optional[str],
+                             fire_after: float) -> None:
+    """Queue a workflow-level action (e.g. attorney_intro) to fire in the
+    future. Unlike schedule_message (which just posts text), the reminder
+    loop dispatches deferred actions to a kind-specific handler in app.py."""
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO deferred_actions (channel_id, kind, target_user_id, fire_after) "
+            "VALUES (?, ?, ?, ?)",
+            (channel_id, kind, target_user_id, fire_after),
+        )
+
+
+def due_deferred_actions(now: float) -> List[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM deferred_actions WHERE fired_at IS NULL AND fire_after <= ? "
+            "ORDER BY fire_after",
+            (now,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_deferred_action_fired(action_id: int) -> None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE deferred_actions SET fired_at = ? WHERE id = ?",
+            (time.time(), action_id),
         )
 
 

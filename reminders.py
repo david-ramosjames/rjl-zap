@@ -71,11 +71,14 @@ def _tick(client) -> None:
     now = time.time()
 
     # Fire any auto channel-lifecycle triggers (case setup, doc verification)
+    # and any deferred per-channel actions (currently: attorney_intro, scheduled
+    # 1 hr after the paralegal intro fires).
     try:
         import app  # late import — avoids circular dep at module load
         app.fire_due_lifecycle_triggers(client)
+        app.fire_due_deferred_actions(client)
     except Exception:
-        log.exception("lifecycle trigger sweep failed")
+        log.exception("lifecycle/deferred trigger sweep failed")
 
     # Fire any scheduled follow-up messages (e.g. mediation sequence, escalations)
     for msg in storage.due_scheduled_messages(now):

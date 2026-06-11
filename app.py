@@ -441,6 +441,32 @@ def _auto_start_followup(
     log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
 
 
+def fire_due_deferred_actions(client) -> None:
+    """Drain the deferred_actions queue. Currently only attorney_intro is
+    deferred (1 hour after the paralegal is pinged), but the same path will
+    handle any future kind by dispatching on `row['kind']`."""
+    now = time.time()
+    for row in storage.due_deferred_actions(now):
+        kind = row["kind"]
+        channel_id = row["channel_id"]
+        target = row["target_user_id"]
+        log.info("firing deferred action kind=%s channel=%s target=%s",
+                 kind, channel_id, target)
+        try:
+            if kind == "attorney_intro":
+                _auto_start_followup(
+                    client, channel_id, ATTORNEY_INTRO,
+                    "attorney_intro_escalation_user_ids", "attorney_intro",
+                    participants=[target] if target else None,
+                )
+            else:
+                log.warning("unknown deferred action kind=%s id=%s", kind, row["id"])
+        except Exception:
+            log.exception("deferred action failed kind=%s channel=%s id=%s",
+                          kind, channel_id, row["id"])
+        storage.mark_deferred_action_fired(row["id"])
+
+
 def fire_due_lifecycle_triggers(client) -> None:
     """Called from the reminder loop. Fires new_case (T+200s),
     case_setup (T+15min), client_intake (T+1h), doc_verification
@@ -775,17 +801,10 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
         channel_id, attorney_id, paralegal_id, topic_text[:300],
     )
 
-    if attorney_id and storage.set_intro_fired_for(channel_id, "attorney", attorney_id):
-        log.info("auto-firing attorney_intro for %s in #%s", attorney_id, channel_id)
-        try:
-            _auto_start_followup(
-                client, channel_id, ATTORNEY_INTRO,
-                "attorney_intro_escalation_user_ids", "attorney_intro",
-                participants=[attorney_id],
-            )
-        except Exception:
-            log.exception("auto attorney_intro failed for channel=%s", channel_id)
-
+    # Paralegal intro fires immediately so the paralegal starts client contact
+    # right away. Attorney intro is deferred by ATTORNEY_INTRO.initial_delay_seconds
+    # (1 hour) so the attorney isn't pinged at the same instant — gives the
+    # paralegal time to make first contact before the attorney is paged.
     if paralegal_id and storage.set_intro_fired_for(channel_id, "paralegal", paralegal_id):
         log.info("auto-firing paralegal_intro for %s in #%s", paralegal_id, channel_id)
         try:
@@ -796,6 +815,25 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
             )
         except Exception:
             log.exception("auto paralegal_intro failed for channel=%s", channel_id)
+
+    if attorney_id and storage.set_intro_fired_for(channel_id, "attorney", attorney_id):
+        delay = max(0.0, float(ATTORNEY_INTRO.initial_delay_seconds))
+        if delay <= 0:
+            log.info("auto-firing attorney_intro for %s in #%s", attorney_id, channel_id)
+            try:
+                _auto_start_followup(
+                    client, channel_id, ATTORNEY_INTRO,
+                    "attorney_intro_escalation_user_ids", "attorney_intro",
+                    participants=[attorney_id],
+                )
+            except Exception:
+                log.exception("auto attorney_intro failed for channel=%s", channel_id)
+        else:
+            log.info("deferring attorney_intro for %s in #%s by %.0fs",
+                     attorney_id, channel_id, delay)
+            storage.schedule_deferred_action(
+                channel_id, "attorney_intro", attorney_id, time.time() + delay,
+            )
 
 
 def _lookup_channel_name(client, channel_id: str) -> str:
