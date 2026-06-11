@@ -301,26 +301,51 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     participants = [uid for uid in mentioned if uid != bot_id][:3]
     mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
 
+    # Specific mentions for the per-step templates:
+    # {paralegal} — pulled from the channel topic via the same regex used by
+    # the paralegal intro auto-trigger. Falls back to a plain "@paralegal"
+    # string if the topic doesn't name one.
+    paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic, exclude=bot_id)
+    paralegal_mention = f"<@{paralegal_id}>" if paralegal_id else "@paralegal"
+    # {legalassistants} — same subteam mention the reminder loop uses for
+    # checklist nudges, falling back to a plain label if no group is set.
+    group_id = storage.get_config("notify_group_id")
+    group_name = storage.get_config("notify_group_name", default="legalassistants")
+    legalassistants_mention = (
+        f"<!subteam^{group_id}|{group_name}>" if group_id else "@legalassistants"
+    )
+
+    def _render(template: str) -> str:
+        return template.format(
+            mentions=mention_str,
+            paralegal=paralegal_mention,
+            legalassistants=legalassistants_mention,
+        )
+
     resp = client.chat_postMessage(
         channel=channel,
-        text=DISBURSEMENT_MASTER_CHECKLIST.format(mentions=mention_str),
+        text=_render(DISBURSEMENT_MASTER_CHECKLIST),
     )
     parent_ts = resp["ts"]
     if storage.workflow_by_thread(channel, parent_ts):
         return
 
+    # Each step in the sequence posts as its OWN top-level channel message
+    # (thread_ts="") so replies stay scoped to that specific task instead of
+    # piling up under the master checklist.
     now = time.time()
     for delay, template in DISBURSEMENT.sequence:
         storage.schedule_message(
             channel_id=channel,
-            thread_ts=parent_ts,
+            thread_ts="",
             send_after=now + delay,
-            text=template.format(mentions=mention_str),
+            text=_render(template),
         )
 
     storage.create_workflow(channel, parent_ts, "disbursement", [])
-    log.info("started disbursement workflow channel=%s parent_ts=%s triggered_by=%s participants=%s",
-             channel, parent_ts, user_id, participants)
+    log.info("started disbursement workflow channel=%s parent_ts=%s triggered_by=%s "
+             "participants=%s paralegal=%s",
+             channel, parent_ts, user_id, participants, paralegal_id)
 
 
 def _start_followup_workflow(

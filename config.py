@@ -136,22 +136,19 @@ DISBURSEMENT = DisbursementConfig(
             "Tag me with `COMPLETE` in this thread when everything is done."
         )),
         (3 * _H, (
-            ":no_entry: *Action needed — {mentions}*\n\n"
-            "• Cancel any outstanding orders related to this case\n"
-            "• Begin gathering all invoices, liens, and expense records\n"
-            "• Confirm settlement authority is in place"
+            ":clipboard: *CANCEL ORDERS AND GATHER INVOICES*\n\n"
+            "{paralegal} please confirm all pending orders (Medical records, Skribe, mediation, experts, etc) have been cancelled to avoid cancellation fees.\n"
+            "{paralegal} please confirm that any outstanding invoices have been obtained and saved in the case folder.\n"
+            "Please note in a thread any orders or invoices that remain pending."
         )),
         (22 * _H, (
-            ":hospital: *Medical Bills Check-In — {mentions}*\n\n"
-            "• Have all medical bills been collected?\n"
-            "• Have reduction requests been sent to providers?\n"
-            "• Any outstanding liens that need follow-up?"
+            ":hospital: *MEDICAL BILLS*\n\n"
+            "{paralegal} please confirm if subro has been opened and requested final balance (please note in thread if there is no subro on this case).\n"
+            "Please note any outstanding medical bills that have been requested."
         )),
         (24 * _H, (
-            ":handshake: *Case Settlement Confirmation — {mentions}*\n\n"
-            "• Is the settlement amount confirmed and agreed?\n"
-            "• Has the signed settlement agreement been received?\n"
-            "• Has confirmation gone to all parties?"
+            ":clipboard: *CASE SETTLEMENT*\n\n"
+            "{legalassistants} please confirm that all future Litigation Events and SOL deadlines for this case have been removed from the calendar."
         )),
         (3 * _D, (
             ":scissors: *Reductions Update — {mentions}*\n\n"
