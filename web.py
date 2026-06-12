@@ -18,6 +18,20 @@ SETTINGS = [
                 "to disable the auto-trigger entirely (no manual fallback).",
     },
     {
+        "key": "disbursement_ana_user_id",
+        "label": "Disbursement — Ana's Slack ID",
+        "help": "Single Slack user ID tagged as 'Ana' in the disbursement "
+                "overview (Send reductions, Send drafting instructions, "
+                "etc.). Falls back to the literal text '@ana' if empty.",
+    },
+    {
+        "key": "disbursement_jon_user_id",
+        "label": "Disbursement — Jon's Slack ID",
+        "help": "Single Slack user ID tagged as 'Jon' in the disbursement "
+                "overview (Confirm check received and deposited, Verify "
+                "RJL expenses). Falls back to the literal text '@jon' if empty.",
+    },
+    {
         "key": "attorney_intro_escalation_user_ids",
         "label": "Attorney Intro — Escalation Contacts",
         "help": "Tagged in the 48-hour reminder if no 'done' reply. Comma-separated.",

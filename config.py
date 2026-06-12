@@ -84,34 +84,36 @@ MEDIATION = MediationConfig(
 _H = 3600       # seconds in an hour
 _D = 86400      # seconds in a day
 
-DISBURSEMENT_MASTER_CHECKLIST = """:hourglass_flowing_sand: *30-Day Disbursement Workflow Started* — {mentions}
+DISBURSEMENT_MASTER_CHECKLIST = """:spiral_calendar_pad: *DISBURSEMENT OVERVIEW* :spiral_calendar_pad:
 
-*📋 Phase 1 — Case Settlement*
-• Confirm settlement amount and authority
-• Obtain signed settlement agreement
-• Send settlement confirmation to all parties
+The following tasks need to be completed for the disbursement.
 
-*🏥 Phase 2 — Medical Bills & Reductions*
-• Gather all outstanding medical bills
-• Request reductions from providers
-• Confirm final lien amounts
+:clipboard: *CASE SETTLEMENT*
+1) {legalassistants} Cancel & remove all future Lit Events and SOL deadlines from the calendar
+2) {paralegal} Cancel all pending orders (Skribe, mediation, experts)
+3) {paralegal} Gather any outstanding invoices
 
-*📝 Phase 3 — Drafting & Release*
-• Draft settlement release
-• Obtain client signature on release
-• Send executed release to defense counsel
+:hospital: *MEDICAL BILLS & REDUCTIONS*
+1) {paralegal} Open or update subro
+2) {paralegal} Gather and confirm medical bills
+3) {attorney} Propose reductions
+4) {ana} Send reductions
+5) {attorney} Approve reductions
 
-*💰 Phase 4 — Funding*
-• Confirm receipt of settlement funds
-• Issue checks for liens and expenses
-• Confirm all deposits cleared
+:memo: *DRAFTING & RELEASE*
+1) {ana} Send drafting instructions and W-9
+2) {attorney} Obtain release
+3) {ana} & {paralegal} Client sign release
+4) {ana} Return release
 
-*💵 Phase 5 — Disbursement*
-• Reconcile all expenses
-• Prepare final disbursement statement
-• Disburse net proceeds to client
+:moneybag: *FUNDING*
+1) {attorney} & {ana} Confirm check issued and tracking
+2) {jon} & {ana} Confirm check received and deposited
 
-React ✅ on each phase above as it is completed."""
+:dollar: *DISBURSEMENT*
+1) {jon} & {ana} Verify RJL expenses
+2) {ana} Draft disbursement
+3) {attorney} Review & Approve disbursement"""
 
 
 @dataclass

@@ -968,11 +968,11 @@
 
         <div class="callout amber">
           <i class="bi bi-people me-1"></i>
-          <strong>Who gets tagged?</strong> The master checklist tags up to 3 people from the channel topic. Each scheduled step tags the right role for its task:
+          <strong>Who gets tagged?</strong> The master overview and each scheduled step pull mentions from a mix of the channel topic and the admin settings:
           <ul class="mb-0 mt-2">
-            <li><strong>Paralegal</strong> (parsed from the topic, e.g. <em>Paralegal @Lyliana</em>) is tagged on the cancel-orders and medical-bills steps.</li>
-            <li><strong>@legalassistants</strong> (the subteam, configured in admin settings) is tagged on the case-settlement step.</li>
-            <li>Other check-ins tag the topic team.</li>
+            <li><strong>Paralegal</strong> &amp; <strong>Attorney</strong> — parsed from the channel topic (<em>Attorney @Jesus | Paralegal @Lyliana</em>). Used throughout the overview (settlement, medical bills, reductions, release, funding, approval).</li>
+            <li><strong>Ana</strong> &amp; <strong>Jon</strong> — fixed firm contacts. Set their Slack user IDs in admin settings under <em>Disbursement — Ana's Slack ID</em> and <em>Disbursement — Jon's Slack ID</em>. Without them the overview reads "@ana" / "@jon" as plain text.</li>
+            <li><strong>@legalassistants</strong> (the subteam configured in admin settings) is tagged on the calendar-clearance step.</li>
           </ul>
         </div>
 

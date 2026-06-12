@@ -301,12 +301,21 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     participants = [uid for uid in mentioned if uid != bot_id][:3]
     mention_str = " ".join(f"<@{uid}>" for uid in participants) if participants else "team"
 
-    # Specific mentions for the per-step templates:
-    # {paralegal} — pulled from the channel topic via the same regex used by
-    # the paralegal intro auto-trigger. Falls back to a plain "@paralegal"
-    # string if the topic doesn't name one.
+    # Specific mentions for the per-step templates and the master overview:
+    # {paralegal} and {attorney} — pulled from the channel topic via the same
+    # regexes used by the intro auto-triggers. Fall back to plain "@paralegal"
+    # / "@attorney" labels if the topic doesn't name one.
     paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic, exclude=bot_id)
+    attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic, exclude=bot_id)
     paralegal_mention = f"<@{paralegal_id}>" if paralegal_id else "@paralegal"
+    attorney_mention  = f"<@{attorney_id}>"  if attorney_id  else "@attorney"
+    # {ana} and {jon} — fixed firm contacts configured in admin settings.
+    # Stored as single user IDs (not lists). Fall back to literal labels
+    # so the overview still reads sensibly if an admin hasn't filled them in.
+    ana_id = storage.get_config("disbursement_ana_user_id").strip()
+    jon_id = storage.get_config("disbursement_jon_user_id").strip()
+    ana_mention = f"<@{ana_id}>" if ana_id else "@ana"
+    jon_mention = f"<@{jon_id}>" if jon_id else "@jon"
     # {legalassistants} — same subteam mention the reminder loop uses for
     # checklist nudges, falling back to a plain label if no group is set.
     group_id = storage.get_config("notify_group_id")
@@ -319,6 +328,9 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
         return template.format(
             mentions=mention_str,
             paralegal=paralegal_mention,
+            attorney=attorney_mention,
+            ana=ana_mention,
+            jon=jon_mention,
             legalassistants=legalassistants_mention,
         )
 
