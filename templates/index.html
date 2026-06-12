@@ -917,14 +917,14 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires when a configured trigger user posts a message containing <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">law firm can be paid</code>.</strong> The person who posted gets tagged as responsible for scheduling pickup. Set the allowed users in admin settings under <em>Check Pickup — Auto-Trigger Users</em>.</p>
+        <p><strong>Auto-fires when a configured trigger user posts a message containing <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">law firm can be paid</code>.</strong> The person who posted gets tagged as responsible for scheduling pickup, and the <strong>attorney from the channel topic</strong> is tagged alongside them so the supervising attorney is in the loop from the start. Set the allowed users in admin settings under <em>Check Pickup — Auto-Trigger Users</em>.</p>
 
         <div class="type-label">Manual trigger (tag the person responsible)</div>
         <div class="type-this">@RJL-zap check pickup @PersonName</div>
 
         <div class="timeline-strip mt-1">
-          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task: schedule client check pickup within 7 days. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply — escalation tags backup contacts.</div>
+          <div class="tl-row"><span class="tl-badge badge-now">Now</span> Bot posts task tagging the triggering user + the attorney from the topic. Reply <span class="done-word">scheduled</span> when on the calendar.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">5 days</span> If no <span class="done-word">scheduled</span> reply — escalation re-tags the same people plus backup contacts from <em>Check Pickup — Backup Contacts</em>.</div>
         </div>
       </div>
     </div>

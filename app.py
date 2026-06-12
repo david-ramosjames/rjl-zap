@@ -877,6 +877,25 @@ def _lookup_channel_name(client, channel_id: str) -> str:
     return _lookup_channel_meta(client, channel_id)[0]
 
 
+def _attorney_from_channel_topic(client, channel_id: str) -> str | None:
+    """Pull the attorney user ID from the channel topic, e.g.
+    "Attorney @Jesus | Paralegal @Lyliana" → U_JESUS. None on miss or
+    lookup failure."""
+    try:
+        info = client.conversations_info(channel=channel_id)
+        topic = ((info.get("channel") or {}).get("topic") or {}).get("value", "") or ""
+    except Exception:
+        log.debug("topic lookup failed for %s", channel_id, exc_info=True)
+        return None
+    if not topic:
+        return None
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        bot_id = None
+    return _first_match(_TOPIC_ATTORNEY_RE, topic, exclude=bot_id)
+
+
 def _lookup_channel_meta(client, channel_id: str) -> tuple[str, float]:
     """Return (name, created_at_epoch) for a channel. created_at is 0.0 if
     the lookup fails or Slack omits it."""
@@ -1065,12 +1084,21 @@ def handle_message(event, client):
         trigger_users = _ids_from_config("check_pickup_trigger_user_ids")
         author = event.get("user", "")
         if trigger_users and author in trigger_users and not _bot_is_mentioned(client, text):
-            log.info("auto-firing check_pickup from user=%s in #%s", author, channel_id)
+            # Tag the triggering user AND the attorney from the channel topic
+            # (if one is named), so the supervising attorney is in the loop
+            # from the moment the pickup is needed — not only when the 5-day
+            # backup escalation fires.
+            attorney_id = _attorney_from_channel_topic(client, channel_id)
+            participants = [author]
+            if attorney_id and attorney_id != author:
+                participants.append(attorney_id)
+            log.info("auto-firing check_pickup from user=%s in #%s (attorney=%s)",
+                     author, channel_id, attorney_id)
             try:
                 _auto_start_followup(
                     client, channel_id, CHECK_PICKUP,
                     "check_pickup_backup_user_ids", "check_pickup",
-                    participants=[author],
+                    participants=participants,
                 )
             except Exception:
                 log.exception("auto check_pickup failed for channel=%s", channel_id)
