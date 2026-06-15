@@ -952,6 +952,37 @@
       </div>
     </div>
 
+    <!-- Client Contact Status (30 / 45 day no-contact alerts) -->
+    <div class="cmd-card">
+      <div class="cmd-header" style="background:#fef2f2;color:#991b1b">
+        <i class="bi bi-clipboard2-pulse"></i> Client Contact Status Alerts
+        <span class="trigger-tag auto"><i class="bi bi-arrow-repeat"></i> Auto</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Once-a-day sweep of the Client Contact Status Google Sheet.</strong> For every case whose <em>Days Since Contact</em> (column G) has reached a threshold, the bot posts to the matching case channel and tags everyone named in the channel topic.</p>
+
+        <div class="timeline-strip mt-1">
+          <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first reminder that the client hasn't been contacted. Tags topic users with a prompt to log the next outreach via <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact</code>.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">45 days</span> <strong>:rotating_light: Reminder</strong> — escalation message that the lapse is still open. Same topic-user tagging.</div>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-link-45deg me-1"></i>
+          <strong>How channels are matched:</strong> the bot looks up the case channel by parsing the trailing <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">-&lt;case-number&gt;</code> from each public channel name. Case <code>232</code> in the sheet matches a channel named e.g. <code>charliebrown-232</code>. Cases without a matching channel are silently skipped (logged for diagnostics).
+        </div>
+
+        <div class="callout blue mt-2">
+          <i class="bi bi-arrow-repeat me-1"></i>
+          <strong>Re-arms after a logged contact.</strong> Each alert is keyed on the case + threshold + Last Interaction date. Once someone logs a new contact and the sheet's Last Interaction column updates, the case can fire the 30-day warning again the next time it lapses past 30 days.
+        </div>
+
+        <div class="callout amber mt-2">
+          <i class="bi bi-gear me-1"></i>
+          <strong>Setup:</strong> requires the <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> env var (same one Recent Contact uses) and the spreadsheet ID set under <em>Client Contact Status — Google Sheet ID</em>. Share the sheet with the service account email. Read-only — the bot never writes to this tracker.
+        </div>
+      </div>
+    </div>
+
     <!-- 30-Day Disbursement -->
     <div class="cmd-card">
       <div class="cmd-header hdr-disburse">

@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS channel_lifecycle (
     paralegal_intro_fired_for TEXT
 );
 
+CREATE TABLE IF NOT EXISTS client_contact_alerts (
+    case_no TEXT NOT NULL,
+    threshold INTEGER NOT NULL,
+    last_interaction TEXT NOT NULL DEFAULT '',
+    alerted_at REAL NOT NULL,
+    PRIMARY KEY (case_no, threshold)
+);
+
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, send_after);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_pending ON channel_lifecycle(created_at);
@@ -265,6 +273,35 @@ def mark_deferred_action_fired(action_id: int) -> None:
         conn.execute(
             "UPDATE deferred_actions SET fired_at = ? WHERE id = ?",
             (time.time(), action_id),
+        )
+
+
+def should_send_client_contact_alert(case_no: str, threshold: int,
+                                     last_interaction: str) -> bool:
+    """True iff no (case, threshold) alert has been recorded for the given
+    last_interaction value. Re-arms whenever last_interaction changes — i.e.
+    if someone logs a contact and the case lapses again, the alert can fire
+    a second time with the new Last Interaction date."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT last_interaction FROM client_contact_alerts "
+            "WHERE case_no = ? AND threshold = ?",
+            (case_no, threshold),
+        ).fetchone()
+    return row is None or row["last_interaction"] != last_interaction
+
+
+def record_client_contact_alert(case_no: str, threshold: int,
+                                last_interaction: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO client_contact_alerts "
+            "(case_no, threshold, last_interaction, alerted_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(case_no, threshold) DO UPDATE SET "
+            "  last_interaction = excluded.last_interaction, "
+            "  alerted_at = excluded.alerted_at",
+            (case_no, threshold, last_interaction, time.time()),
         )
 
 

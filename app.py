@@ -504,6 +504,146 @@ def fire_due_deferred_actions(client) -> None:
         storage.mark_deferred_action_fired(row["id"])
 
 
+# How often the Client Contact Status sweep runs. Sheet only needs to be
+# polled occasionally — 24 h is plenty for "30-day no-contact" alerts.
+_CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
+_CLIENT_CONTACT_LAST_SWEPT_KEY = "client_contact_last_swept_at"
+
+
+def _channel_id_by_case_number(client) -> dict[str, str]:
+    """Walk every public channel and build a {case_no: channel_id} map by
+    parsing the trailing -<digits> from each channel name (firm convention).
+    One call to conversations.list per page (~1000 channels each) — fine
+    even at the firm's 1465+ channels."""
+    result: dict[str, str] = {}
+    cursor: str | None = None
+    while True:
+        try:
+            resp = client.conversations_list(
+                types="public_channel",
+                exclude_archived=True,
+                limit=1000,
+                cursor=cursor,
+            )
+        except Exception:
+            log.exception("conversations.list failed in case-number lookup")
+            return result
+        for ch in resp.get("channels", []):
+            name = ch.get("name", "") or ""
+            m = _CASE_NUMBER_RE.search(name)
+            if m:
+                # Match was r"-\d+$" — strip the leading dash.
+                case_no = name[m.start() + 1 :]
+                result.setdefault(case_no, ch["id"])
+        cursor = (resp.get("response_metadata") or {}).get("next_cursor")
+        if not cursor:
+            return result
+
+
+def fire_client_contact_alerts(client) -> None:
+    """Once-daily sweep over the Client Contact Status sheet. Posts a
+    30-day no-contact warning to each case channel that's lapsed, and a
+    45-day reminder when the lapse continues. Tags users named in the
+    channel topic. Deduped per (case, threshold, last_interaction) so a
+    fresh contact entry re-arms the alert."""
+    last_swept_raw = storage.get_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, default="0")
+    try:
+        last_swept = float(last_swept_raw)
+    except ValueError:
+        last_swept = 0.0
+    now = time.time()
+    if now - last_swept < _CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS:
+        return
+
+    log.info("client contact status sweep starting")
+    storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
+
+    import client_contact_status as ccs
+
+    rows = list(ccs.iter_rows())
+    if not rows:
+        log.info("client contact sweep: 0 rows (sheet empty or unconfigured)")
+        return
+
+    overdue = [r for r in rows if r.days_since_contact >= 30]
+    if not overdue:
+        log.info("client contact sweep: %d row(s), none overdue", len(rows))
+        return
+
+    by_case = _channel_id_by_case_number(client)
+    log.info("client contact sweep: %d overdue row(s), %d case channels indexed",
+             len(overdue), len(by_case))
+
+    posted_30 = posted_45 = 0
+    for row in overdue:
+        channel_id = by_case.get(row.case_no)
+        if not channel_id:
+            log.info("client contact: no channel for case %s (%s)",
+                     row.case_no, row.client_name)
+            continue
+
+        # 45-day takes precedence — if a case is past 45, only the reminder
+        # fires (and we also record the 30-day so it never back-fires later).
+        if row.days_since_contact >= 45:
+            if not storage.should_send_client_contact_alert(
+                row.case_no, 45, row.last_interaction
+            ):
+                continue
+            text = _format_client_contact_text(client, channel_id, row, threshold=45)
+            try:
+                client.chat_postMessage(channel=channel_id, text=text)
+                storage.record_client_contact_alert(row.case_no, 45, row.last_interaction)
+                # Suppress a now-pointless 30-day alert at the same last_interaction.
+                storage.record_client_contact_alert(row.case_no, 30, row.last_interaction)
+                posted_45 += 1
+                log.info("client contact 45d reminder posted case=%s channel=%s days=%d",
+                         row.case_no, channel_id, row.days_since_contact)
+            except Exception:
+                log.exception("client contact 45d post failed case=%s channel=%s",
+                              row.case_no, channel_id)
+        else:  # 30 <= days < 45
+            if not storage.should_send_client_contact_alert(
+                row.case_no, 30, row.last_interaction
+            ):
+                continue
+            text = _format_client_contact_text(client, channel_id, row, threshold=30)
+            try:
+                client.chat_postMessage(channel=channel_id, text=text)
+                storage.record_client_contact_alert(row.case_no, 30, row.last_interaction)
+                posted_30 += 1
+                log.info("client contact 30d warning posted case=%s channel=%s days=%d",
+                         row.case_no, channel_id, row.days_since_contact)
+            except Exception:
+                log.exception("client contact 30d post failed case=%s channel=%s",
+                              row.case_no, channel_id)
+
+    log.info("client contact sweep done: 30d=%d 45d=%d", posted_30, posted_45)
+
+
+def _format_client_contact_text(client, channel_id: str, row, threshold: int) -> str:
+    """Render the alert body, tagging every user mentioned in the channel
+    topic / purpose. Falls back to 'team' if the topic doesn't mention
+    anyone (so the message still reads sensibly)."""
+    topic_users = _topic_user_ids(client, channel_id)
+    mention = " ".join(f"<@{uid}>" for uid in topic_users) if topic_users else "team"
+    client_label = f"*{row.client_name}*" if row.client_name else "the client"
+    last_clause = f" since {row.last_interaction}" if row.last_interaction else ""
+
+    if threshold == 30:
+        return (
+            f":warning: *Client not contacted in {row.days_since_contact} days* — {mention}\n\n"
+            f"{client_label} has not been contacted{last_clause}. "
+            f"Please reach out and log the outcome with "
+            f"`@RJL-zap recent contact <type> - <details>`."
+        )
+    return (
+        f":rotating_light: *REMINDER: Client not contacted in {row.days_since_contact} days* "
+        f":rotating_light: — {mention}\n\n"
+        f"{client_label} still has not been contacted{last_clause}. "
+        f"Please reach out today and log the contact in the Recent Contact tracker."
+    )
+
+
 def fire_due_lifecycle_triggers(client) -> None:
     """Called from the reminder loop. Fires new_case (T+200s),
     case_setup (T+15min), client_intake (T+1h), doc_verification

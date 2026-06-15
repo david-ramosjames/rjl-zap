@@ -139,6 +139,20 @@ SETTINGS = [
         "help": "Worksheet tab name within the spreadsheet. Default: Recent Contact "
                 "(auto-created with headers if it doesn't exist).",
     },
+    {
+        "key": "client_contact_spreadsheet_id",
+        "label": "Client Contact Status — Google Sheet ID",
+        "help": "Spreadsheet ID for the Client Contact Status tracker (case no in "
+                "column A, days-since-contact in column G). Found in the sheet URL "
+                "between /d/ and /edit. Read-only — same service account JSON as "
+                "Recent Contact. Sheet must be shared with the service account email.",
+    },
+    {
+        "key": "client_contact_sheet_name",
+        "label": "Client Contact Status — Tab Name",
+        "help": "Worksheet tab name within the spreadsheet. Default: Client Contact "
+                "Status.",
+    },
 ]
 
 
