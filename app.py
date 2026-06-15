@@ -56,16 +56,23 @@ _CONTACT_ICONS = {
     "other":     ":pencil:",
 }
 
+# Phone calls / texts / voicemails are tracked automatically by the firm's
+# phone system and feed into the Client Contact Status sheet directly, so
+# they don't need to be logged here. Recent Contact covers the contact
+# methods that aren't auto-tracked.
+_AUTO_TRACKED_CONTACT_TYPES = {"call", "text", "voicemail"}
+
 _RECENT_CONTACT_USAGE = (
     ":information_source: *Recent Contact* — log a client interaction to the tracker.\n"
     "Format: `@RJL-zap recent contact <type> - <details>`\n"
     "(`client contact` works too.)\n"
-    "Types: `email`, `text`, `call`, `voicemail`, `letter`, `mail`, `fax`, `visit`, `other`\n\n"
+    "Types: `email`, `letter`, `mail`, `fax`, `visit`, `other`\n"
+    "_Phone calls, texts, and voicemails are tracked automatically — no need to log them here._\n\n"
     "Examples:\n"
     "• `@RJL-zap recent contact email - Re: discovery responses sent`\n"
-    "• `@RJL-zap client contact call - 15 min, discussed depo prep`\n"
-    "• `@RJL-zap recent contact visit - client came in to sign release`\n"
-    "• `@RJL-zap client contact voicemail - left vm re: settlement offer`"
+    "• `@RJL-zap client contact visit - client came in to sign release`\n"
+    "• `@RJL-zap recent contact mail - sent signed release`\n"
+    "• `@RJL-zap client contact fax - records request faxed to provider`"
 )
 
 
@@ -77,6 +84,21 @@ def _log_recent_contact(client, event: dict) -> None:
     contact_type, details = recent_contact.parse(text)
     if not contact_type:
         client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=_RECENT_CONTACT_USAGE)
+        return
+
+    # Phone calls, texts, and voicemails are auto-tracked by the firm's
+    # phone system and flow directly into the Client Contact Status sheet,
+    # so logging them here would be redundant. Gently redirect.
+    if contact_type in _AUTO_TRACKED_CONTACT_TYPES:
+        client.chat_postMessage(
+            channel=channel, thread_ts=parent_ts,
+            text=(
+                f":telephone_receiver: *{contact_type.title()}* contacts are tracked "
+                f"automatically — no need to log them via `recent contact`. "
+                f"Use this command for email, in-person, mail, fax, or other contact "
+                f"types that aren't picked up by the phone system."
+            ),
+        )
         return
 
     if not storage.get_config("recent_contact_spreadsheet_id").strip():
@@ -509,6 +531,30 @@ def fire_due_deferred_actions(client) -> None:
 _CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 _CLIENT_CONTACT_LAST_SWEPT_KEY = "client_contact_last_swept_at"
 
+# Client Contact alerts only fire during firm-local business hours so the
+# team doesn't get pinged at midnight or on weekends. Mon-Fri, inclusive
+# start, exclusive end (so 17 means "through 4:59 PM").
+_CLIENT_CONTACT_BUSINESS_HOUR_START = 9   # 9 AM Central
+_CLIENT_CONTACT_BUSINESS_HOUR_END   = 17  # 5 PM Central
+try:
+    from zoneinfo import ZoneInfo
+    _CLIENT_CONTACT_TZ: object | None = ZoneInfo("America/Chicago")
+except Exception:
+    _CLIENT_CONTACT_TZ = None
+
+
+def _within_business_hours() -> bool:
+    """True iff firm-local time is a weekday between 9 AM and 5 PM Central.
+    Falls back to True (no gating) if zoneinfo isn't available, so the
+    sweep still functions in a degraded environment."""
+    if _CLIENT_CONTACT_TZ is None:
+        return True
+    from datetime import datetime
+    now = datetime.now(_CLIENT_CONTACT_TZ)
+    if now.weekday() >= 5:  # 5 = Sat, 6 = Sun
+        return False
+    return _CLIENT_CONTACT_BUSINESS_HOUR_START <= now.hour < _CLIENT_CONTACT_BUSINESS_HOUR_END
+
 
 def _channel_id_by_case_number(client) -> dict[str, str]:
     """Walk every public channel and build a {case_no: channel_id} map by
@@ -552,6 +598,12 @@ def fire_client_contact_alerts(client) -> None:
     # the ID. Silent here (no log) — startup config snapshot already shows
     # whether the sheet is configured.
     if not storage.get_config("client_contact_spreadsheet_id").strip():
+        return
+
+    # Only fire alerts during firm-local business hours (Mon-Fri, 9 AM - 5 PM
+    # Central). The 24 h gate doesn't get touched outside that window, so the
+    # next eligible business-hours tick runs the sweep cleanly.
+    if not _within_business_hours():
         return
 
     last_swept_raw = storage.get_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, default="0")
@@ -640,8 +692,11 @@ def fire_client_contact_alerts(client) -> None:
 def _format_client_contact_text(client, channel_id: str, row, threshold: int) -> str:
     """Render the alert body, tagging every user mentioned in the channel
     topic / purpose. Falls back to 'team' if the topic doesn't mention
-    anyone (so the message still reads sensibly)."""
-    topic_users = _topic_user_ids(client, channel_id)
+    anyone (so the message still reads sensibly). Pulls from the channel
+    TOPIC only — the description/purpose is ignored even when it also has
+    @-mentions, so cases with stale or different description metadata
+    don't tag people who shouldn't be pinged."""
+    topic_users = _topic_user_ids(client, channel_id, include_purpose=False)
     mention = " ".join(f"<@{uid}>" for uid in topic_users) if topic_users else "team"
     client_label = f"*{row.client_name}*" if row.client_name else "the client"
     last_clause = f" since {row.last_interaction}" if row.last_interaction else ""
@@ -1069,9 +1124,12 @@ def _has_case_number(channel_name: str) -> bool:
     return bool(_CASE_NUMBER_RE.search(channel_name or ""))
 
 
-def _topic_user_ids(client, channel_id: str) -> list[str]:
-    """Return the @-mentioned user IDs from the channel topic + purpose,
-    de-duplicated, with the bot itself filtered out."""
+def _topic_user_ids(client, channel_id: str, include_purpose: bool = True) -> list[str]:
+    """Return the @-mentioned user IDs from the channel topic (and, by
+    default, the description/purpose), de-duplicated, with the bot itself
+    filtered out. Pass include_purpose=False to read the topic *only* —
+    used by the Client Contact alert, where the firm wants the topic to
+    be the single source of truth for who gets pinged."""
     try:
         info = client.conversations_info(channel=channel_id)
         ch = info.get("channel") or {}
@@ -1084,8 +1142,9 @@ def _topic_user_ids(client, channel_id: str) -> list[str]:
         bot_id = client.auth_test()["user_id"]
     except Exception:
         bot_id = None
+    sources = (topic, purpose) if include_purpose else (topic,)
     seen: list[str] = []
-    for source in (topic, purpose):
+    for source in sources:
         for uid in re.findall(r"<@([A-Z0-9]+)(?:\|[^>]*)?>", source):
             if uid != bot_id and uid not in seen:
                 seen.append(uid)

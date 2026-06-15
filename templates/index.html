@@ -495,39 +495,37 @@
             <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact email - Re: discovery responses</div>
           </div>
           <div>
-            <div class="type-label">Phone Call</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact call - discussed depo prep, 15 min</div>
-          </div>
-          <div>
             <div class="type-label">In-Person Visit</div>
             <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact visit - client came in to sign release</div>
           </div>
           <div>
-            <div class="type-label">Voicemail</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact voicemail - left vm re: settlement offer</div>
-          </div>
-          <div>
-            <div class="type-label">Text Message</div>
-            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact text - confirmed appt tomorrow 10am</div>
-          </div>
-          <div>
-            <div class="type-label">Letter / Mail / Fax</div>
+            <div class="type-label">Letter / Mail</div>
             <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact mail - sent signed release</div>
           </div>
+          <div>
+            <div class="type-label">Fax</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact fax - records request faxed to provider</div>
+          </div>
+          <div>
+            <div class="type-label">Other</div>
+            <div class="type-this" style="font-size:.8rem">@RJL-zap recent contact other - portal message sent</div>
+          </div>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-telephone me-1"></i>
+          <strong>Phone calls, texts, and voicemails are tracked automatically</strong> by the firm's phone system — no need to log them via <code>recent contact</code>. The bot will gently redirect if you do. Use this command for the contact types the phone system doesn't capture.
         </div>
 
         <div class="what-happens mt-3">
           <strong>Accepted types:</strong> <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">email</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">text</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">call</code>,
-          <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">voicemail</code>,
           <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">letter</code>,
           <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">mail</code>,
           <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">fax</code>,
           <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">visit</code>,
           <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">other</code>
           <br>
-          Synonyms also work — e.g. <em>called</em>, <em>texted</em>, <em>spoke with</em>, <em>met with</em>, <em>dropped by</em>, <em>left vm</em>.
+          Synonyms also work — e.g. <em>mailed</em>, <em>met with</em>, <em>dropped by</em>, <em>in person</em>, <em>faxed</em>.
         </div>
 
         <div class="what-happens mt-3">
@@ -959,11 +957,21 @@
         <span class="trigger-tag auto"><i class="bi bi-arrow-repeat"></i> Auto</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Once-a-day sweep of the Client Contact Status Google Sheet.</strong> For every case whose <em>Days Since Contact</em> (column G) has reached a threshold, the bot posts to the matching case channel and tags everyone named in the channel topic.</p>
+        <p><strong>Once-a-day sweep of the Client Contact Status Google Sheet, weekdays during business hours.</strong> For every case whose <em>Days Since Contact</em> (column G) has reached a threshold, the bot posts to the matching case channel and tags users from the channel topic.</p>
 
         <div class="timeline-strip mt-1">
           <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first reminder that the client hasn't been contacted. Tags topic users with a prompt to log the next outreach via <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact</code>.</div>
           <div class="tl-row"><span class="tl-badge badge-esc">45 days</span> <strong>:rotating_light: Reminder</strong> — escalation message that the lapse is still open. Same topic-user tagging.</div>
+        </div>
+
+        <div class="callout blue mt-3">
+          <i class="bi bi-clock me-1"></i>
+          <strong>Business hours only:</strong> the sweep only fires Mon-Fri, 9 AM – 5 PM Central. A case that crosses the threshold over a weekend or overnight is alerted on the next business-hours tick. The 24-hour gate also means at most one alert per case per day.
+        </div>
+
+        <div class="callout blue mt-2">
+          <i class="bi bi-chat-square-text me-1"></i>
+          <strong>Topic-only tagging:</strong> the bot reads only the channel's <em>topic</em> for @-mentions — never the description. So if your topic says <em>Attorney @Kody | Paralegal @Adrian</em> and the description names someone different, only @Kody and @Adrian get pinged.
         </div>
 
         <div class="callout amber mt-3">
