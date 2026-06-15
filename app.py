@@ -546,6 +546,14 @@ def fire_client_contact_alerts(client) -> None:
     45-day reminder when the lapse continues. Tags users named in the
     channel topic. Deduped per (case, threshold, last_interaction) so a
     fresh contact entry re-arms the alert."""
+    # Bail before touching the gate timestamp if the spreadsheet ID isn't
+    # configured — otherwise the first tick after deploy would record "just
+    # swept", and the sweep would stay silent for 24 h after the admin sets
+    # the ID. Silent here (no log) — startup config snapshot already shows
+    # whether the sheet is configured.
+    if not storage.get_config("client_contact_spreadsheet_id").strip():
+        return
+
     last_swept_raw = storage.get_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, default="0")
     try:
         last_swept = float(last_swept_raw)
@@ -556,14 +564,23 @@ def fire_client_contact_alerts(client) -> None:
         return
 
     log.info("client contact status sweep starting")
-    storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
 
     import client_contact_status as ccs
 
     rows = list(ccs.iter_rows())
     if not rows:
-        log.info("client contact sweep: 0 rows (sheet empty or unconfigured)")
+        # Configured but unreadable (auth failure, wrong ID, sheet shared
+        # with the wrong account, empty data). Do NOT update the gate —
+        # we want the admin to be able to fix it and see results next tick.
+        log.warning(
+            "client contact sweep: 0 readable rows — sheet misconfigured, "
+            "shared with the wrong account, or empty. Will retry next tick."
+        )
         return
+
+    # Configured AND read successfully — commit the gate so we wait 24 h
+    # before the next sweep, regardless of whether anything was overdue.
+    storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
 
     overdue = [r for r in rows if r.days_since_contact >= 30]
     if not overdue:
@@ -1315,6 +1332,7 @@ def _maybe_finalize(client, workflow_id: int) -> None:
 
 def main() -> None:
     storage.init_db()
+    _migrate_client_contact_gate()
     _log_startup_config()
     reminders.start_reminder_loop(app.client)
     threading.Thread(target=web.start, daemon=True).start()
@@ -1322,6 +1340,20 @@ def main() -> None:
         auto_join.join_all_public_channels_async(app.client)
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+
+
+def _migrate_client_contact_gate() -> None:
+    """One-shot: the first deploy of the Client Contact sweep had a bug
+    where the gate timestamp got recorded even when the spreadsheet ID
+    wasn't yet configured — so the first tick locked the sweep out for
+    24 hrs. This clears the stale timestamp once on the first boot after
+    the fix lands, so the next tick can run the sweep cleanly."""
+    marker = "client_contact_gate_v2_migrated"
+    if storage.get_config(marker):
+        return
+    storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, "0")
+    storage.set_config(marker, str(time.time()))
+    log.info("client contact gate timestamp reset (one-shot v2 migration)")
 
 
 def _log_startup_config() -> None:
