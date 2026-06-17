@@ -634,7 +634,7 @@ def fire_client_contact_alerts(client) -> None:
     # before the next sweep, regardless of whether anything was overdue.
     storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
 
-    overdue = [r for r in rows if r.days_since_contact >= 30]
+    overdue = [r for r in rows if r.days_since_contact >= _CLIENT_CONTACT_THRESHOLDS[0]]
     if not overdue:
         log.info("client contact sweep: %d row(s), none overdue", len(rows))
         return
@@ -643,7 +643,9 @@ def fire_client_contact_alerts(client) -> None:
     log.info("client contact sweep: %d overdue row(s), %d case channels indexed",
              len(overdue), len(by_case))
 
-    posted_30 = posted_45 = 0
+    # Track posts per threshold for the summary log
+    posted: dict[int, int] = {t: 0 for t in _CLIENT_CONTACT_THRESHOLDS}
+
     for row in overdue:
         channel_id = by_case.get(row.case_no)
         if not channel_id:
@@ -651,68 +653,97 @@ def fire_client_contact_alerts(client) -> None:
                      row.case_no, row.client_name)
             continue
 
-        # 45-day takes precedence — if a case is past 45, only the reminder
-        # fires (and we also record the 30-day so it never back-fires later).
-        if row.days_since_contact >= 45:
-            if not storage.should_send_client_contact_alert(
-                row.case_no, 45, row.last_interaction
-            ):
-                continue
-            text = _format_client_contact_text(client, channel_id, row, threshold=45)
-            try:
-                client.chat_postMessage(channel=channel_id, text=text)
-                storage.record_client_contact_alert(row.case_no, 45, row.last_interaction)
-                # Suppress a now-pointless 30-day alert at the same last_interaction.
-                storage.record_client_contact_alert(row.case_no, 30, row.last_interaction)
-                posted_45 += 1
-                log.info("client contact 45d reminder posted case=%s channel=%s days=%d",
-                         row.case_no, channel_id, row.days_since_contact)
-            except Exception:
-                log.exception("client contact 45d post failed case=%s channel=%s",
-                              row.case_no, channel_id)
-        else:  # 30 <= days < 45
-            if not storage.should_send_client_contact_alert(
-                row.case_no, 30, row.last_interaction
-            ):
-                continue
-            text = _format_client_contact_text(client, channel_id, row, threshold=30)
-            try:
-                client.chat_postMessage(channel=channel_id, text=text)
-                storage.record_client_contact_alert(row.case_no, 30, row.last_interaction)
-                posted_30 += 1
-                log.info("client contact 30d warning posted case=%s channel=%s days=%d",
-                         row.case_no, channel_id, row.days_since_contact)
-            except Exception:
-                log.exception("client contact 30d post failed case=%s channel=%s",
-                              row.case_no, channel_id)
+        # The HIGHEST threshold the case has crossed is the one that fires.
+        # (e.g. at 62 days both 25/30/45/60 apply — fire 60.) All lower
+        # crossed thresholds are then back-recorded so they can never
+        # back-fire later for this same Last Interaction.
+        crossed = [t for t in _CLIENT_CONTACT_THRESHOLDS if row.days_since_contact >= t]
+        if not crossed:
+            continue
+        current = crossed[-1]  # _CLIENT_CONTACT_THRESHOLDS is ascending
 
-    log.info("client contact sweep done: 30d=%d 45d=%d", posted_30, posted_45)
+        if not storage.should_send_client_contact_alert(
+            row.case_no, current, row.last_interaction
+        ):
+            continue
+
+        text = _format_client_contact_text(client, channel_id, row, threshold=current)
+        try:
+            client.chat_postMessage(channel=channel_id, text=text)
+            # Mark current AND all lower crossed thresholds as alerted, keyed
+            # on this Last Interaction. Re-arms automatically when column F
+            # updates in the sheet (new contact logged).
+            for t in crossed:
+                storage.record_client_contact_alert(row.case_no, t, row.last_interaction)
+            posted[current] += 1
+            log.info("client contact %dd alert posted case=%s channel=%s days=%d",
+                     current, row.case_no, channel_id, row.days_since_contact)
+        except Exception:
+            log.exception("client contact %dd post failed case=%s channel=%s",
+                          current, row.case_no, channel_id)
+
+    summary = " ".join(f"{t}d={posted[t]}" for t in _CLIENT_CONTACT_THRESHOLDS)
+    log.info("client contact sweep done: %s", summary)
+
+
+# Ascending list of "no-contact" day thresholds. A case fires the alert for
+# the HIGHEST threshold it has crossed; lower crossed thresholds are silently
+# back-recorded so they can never back-fire later. Tweak this list to add
+# / drop thresholds — _format_client_contact_text falls back to a generic
+# template for any threshold without dedicated copy.
+_CLIENT_CONTACT_THRESHOLDS = [25, 30, 45, 60, 75]
 
 
 def _format_client_contact_text(client, channel_id: str, row, threshold: int) -> str:
     """Render the alert body, tagging every user mentioned in the channel
-    topic / purpose. Falls back to 'team' if the topic doesn't mention
-    anyone (so the message still reads sensibly). Pulls from the channel
-    TOPIC only — the description/purpose is ignored even when it also has
-    @-mentions, so cases with stale or different description metadata
-    don't tag people who shouldn't be pinged."""
+    TOPIC only (description/purpose intentionally ignored). Severity language
+    escalates with the threshold."""
     topic_users = _topic_user_ids(client, channel_id, include_purpose=False)
     mention = " ".join(f"<@{uid}>" for uid in topic_users) if topic_users else "team"
     client_label = f"*{row.client_name}*" if row.client_name else "the client"
     last_clause = f" since {row.last_interaction}" if row.last_interaction else ""
+    days = row.days_since_contact
 
+    if threshold == 25:
+        return (
+            f":hourglass_flowing_sand: *Heads up: {days} days without contact* — {mention}\n\n"
+            f"{client_label} hasn't been contacted{last_clause}. Please reach out before the "
+            f"30-day mark to keep the case on track. Log the outreach with "
+            f"`@RJL-zap recent contact <type> - <details>`."
+        )
     if threshold == 30:
         return (
-            f":warning: *Client not contacted in {row.days_since_contact} days* — {mention}\n\n"
+            f":warning: *Client not contacted in {days} days* — {mention}\n\n"
             f"{client_label} has not been contacted{last_clause}. "
             f"Please reach out and log the outcome with "
             f"`@RJL-zap recent contact <type> - <details>`."
         )
+    if threshold == 45:
+        return (
+            f":rotating_light: *REMINDER: Client not contacted in {days} days* "
+            f":rotating_light: — {mention}\n\n"
+            f"{client_label} still has not been contacted{last_clause}. "
+            f"Please reach out today and log the contact in the Recent Contact tracker."
+        )
+    if threshold == 60:
+        return (
+            f":no_entry: *URGENT: {days} days without contact* — {mention}\n\n"
+            f"{client_label} has now gone {days} days without contact{last_clause}. "
+            f"This case needs immediate attention. Please reach out today and document any "
+            f"blockers in this thread."
+        )
+    if threshold == 75:
+        return (
+            f":bangbang: *CRITICAL: {days} days without contact* :bangbang: — {mention}\n\n"
+            f"{client_label} has gone {days}+ days without contact{last_clause}. "
+            f"Escalate to the supervising attorney and document why this case has lapsed."
+        )
+    # Generic fallback for any future threshold added to _CLIENT_CONTACT_THRESHOLDS
+    # without dedicated copy.
     return (
-        f":rotating_light: *REMINDER: Client not contacted in {row.days_since_contact} days* "
-        f":rotating_light: — {mention}\n\n"
-        f"{client_label} still has not been contacted{last_clause}. "
-        f"Please reach out today and log the contact in the Recent Contact tracker."
+        f":warning: *Client not contacted in {days} days* — {mention}\n\n"
+        f"{client_label} has not been contacted{last_clause}. Please reach out and log "
+        f"the outcome via `@RJL-zap recent contact`."
     )
 
 

@@ -960,8 +960,16 @@
         <p><strong>Once-a-day sweep of the Client Contact Status Google Sheet, weekdays during business hours.</strong> For every case whose <em>Days Since Contact</em> (column G) has reached a threshold, the bot posts to the matching case channel and tags users from the channel topic.</p>
 
         <div class="timeline-strip mt-1">
-          <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first reminder that the client hasn't been contacted. Tags topic users with a prompt to log the next outreach via <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact</code>.</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">45 days</span> <strong>:rotating_light: Reminder</strong> — escalation message that the lapse is still open. Same topic-user tagging.</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">25 days</span> <strong>:hourglass_flowing_sand: Heads up</strong> — early nudge to reach out before the 30-day mark.</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first formal reminder. Tags topic users with a prompt to log the next outreach via <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact</code>.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">45 days</span> <strong>:rotating_light: Reminder</strong> — escalation message that the lapse is still open.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">60 days</span> <strong>:no_entry: Urgent</strong> — case needs immediate attention; blockers should be documented in-thread.</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">75 days</span> <strong>:bangbang: Critical</strong> — escalate to the supervising attorney, document why the case has lapsed.</div>
+        </div>
+
+        <div class="callout blue mt-3">
+          <i class="bi bi-arrow-up-circle me-1"></i>
+          <strong>Highest threshold wins.</strong> Only one alert fires per case per day — whichever threshold the case has crossed highest. All lower crossed thresholds are silently back-recorded so they can't back-fire later. A case that jumps from a fresh contact straight to 70 days (e.g. data gap) gets the 60-day alert, not 25/30/45 in sequence.
         </div>
 
         <div class="callout blue mt-3">
