@@ -715,9 +715,10 @@ _CLIENT_CONTACT_THRESHOLDS = [25, 30, 45, 60, 75]
 
 def _format_client_contact_text(client, channel_id: str, row, threshold: int) -> str:
     """Render the alert body, tagging every user mentioned in the channel
-    TOPIC only (description/purpose intentionally ignored). Severity language
-    escalates with the threshold."""
-    topic_users = _topic_user_ids(client, channel_id, include_purpose=False)
+    topic. (The shared _topic_user_ids helper now reads the topic only —
+    description/purpose is ignored everywhere.) Severity language escalates
+    with the threshold."""
+    topic_users = _topic_user_ids(client, channel_id)
     mention = " ".join(f"<@{uid}>" for uid in topic_users) if topic_users else "team"
     client_label = f"*{row.client_name}*" if row.client_name else "the client"
     last_clause = f" since {row.last_interaction}" if row.last_interaction else ""
@@ -1174,17 +1175,17 @@ def _has_case_number(channel_name: str) -> bool:
     return bool(_CASE_NUMBER_RE.search(channel_name or ""))
 
 
-def _topic_user_ids(client, channel_id: str, include_purpose: bool = True) -> list[str]:
-    """Return the @-mentioned user IDs from the channel topic (and, by
-    default, the description/purpose), de-duplicated, with the bot itself
-    filtered out. Pass include_purpose=False to read the topic *only* —
-    used by the Client Contact alert, where the firm wants the topic to
-    be the single source of truth for who gets pinged."""
+def _topic_user_ids(client, channel_id: str) -> list[str]:
+    """Return the @-mentioned user IDs from the channel TOPIC only,
+    de-duplicated, with the bot itself filtered out. The channel
+    description/purpose is intentionally ignored — the firm uses the
+    topic as the single source of truth for who works the case, and
+    stale or different mentions in the description must never cause
+    the wrong people to be pinged."""
     try:
         info = client.conversations_info(channel=channel_id)
         ch = info.get("channel") or {}
-        topic   = (ch.get("topic")   or {}).get("value", "") or ""
-        purpose = (ch.get("purpose") or {}).get("value", "") or ""
+        topic = (ch.get("topic") or {}).get("value", "") or ""
     except Exception:
         log.debug("conversations.info failed for %s", channel_id, exc_info=True)
         return []
@@ -1192,12 +1193,10 @@ def _topic_user_ids(client, channel_id: str, include_purpose: bool = True) -> li
         bot_id = client.auth_test()["user_id"]
     except Exception:
         bot_id = None
-    sources = (topic, purpose) if include_purpose else (topic,)
     seen: list[str] = []
-    for source in sources:
-        for uid in re.findall(r"<@([A-Z0-9]+)(?:\|[^>]*)?>", source):
-            if uid != bot_id and uid not in seen:
-                seen.append(uid)
+    for uid in re.findall(r"<@([A-Z0-9]+)(?:\|[^>]*)?>", topic):
+        if uid != bot_id and uid not in seen:
+            seen.append(uid)
     return seen
 
 
