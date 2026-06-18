@@ -305,6 +305,17 @@ def record_client_contact_alert(case_no: str, threshold: int,
         )
 
 
+def alerted_case_numbers() -> set[str]:
+    """Every distinct case_no the bot has ever recorded a contact alert for.
+    Used by the sweep to detect cases that have dropped off the Client
+    Contact Status sheet (i.e. cases the firm has marked inactive)."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT case_no FROM client_contact_alerts"
+        ).fetchall()
+        return {r["case_no"] for r in rows}
+
+
 def get_config(key: str, env_fallback: str = "", default: str = "") -> str:
     with connect() as conn:
         row = conn.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()

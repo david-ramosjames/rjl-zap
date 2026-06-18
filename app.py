@@ -634,14 +634,33 @@ def fire_client_contact_alerts(client) -> None:
     # before the next sweep, regardless of whether anything was overdue.
     storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
 
+    # The sheet is the source of truth for what's "active". Any case the bot
+    # has alerted on in the past that's no longer in column A is treated as
+    # deactivated — no more alerts will ever fire for it (the sweep below
+    # only iterates rows that ARE in the sheet). We don't purge the dedup
+    # records: if the case is added back later with the same Last Interaction
+    # value, we'd rather stay quiet than fire a duplicate alert.
+    active_case_nos = {r.case_no for r in rows}
+    previously_alerted = storage.alerted_case_numbers()
+    deactivated = previously_alerted - active_case_nos
+    if deactivated:
+        log.info(
+            "client contact: %d case(s) previously alerted on are no longer in "
+            "the sheet — treated as deactivated, no further alerts will fire",
+            len(deactivated),
+        )
+
     overdue = [r for r in rows if r.days_since_contact >= _CLIENT_CONTACT_THRESHOLDS[0]]
     if not overdue:
         log.info("client contact sweep: %d row(s), none overdue", len(rows))
         return
 
     by_case = _channel_id_by_case_number(client)
-    log.info("client contact sweep: %d overdue row(s), %d case channels indexed",
-             len(overdue), len(by_case))
+    log.info(
+        "client contact sweep: %d active case(s) in sheet, %d overdue, "
+        "%d case channels indexed",
+        len(active_case_nos), len(overdue), len(by_case),
+    )
 
     # Track posts per threshold for the summary log
     posted: dict[int, int] = {t: 0 for t in _CLIENT_CONTACT_THRESHOLDS}

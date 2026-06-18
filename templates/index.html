@@ -987,6 +987,11 @@
           <strong>How channels are matched:</strong> the bot looks up the case channel by parsing the trailing <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">-&lt;case-number&gt;</code> from each public channel name. Case <code>232</code> in the sheet matches a channel named e.g. <code>charliebrown-232</code>. Cases without a matching channel are silently skipped (logged for diagnostics).
         </div>
 
+        <div class="callout green mt-2">
+          <i class="bi bi-check2-circle me-1"></i>
+          <strong>Sheet is the source of truth.</strong> The bot only alerts on cases that are <em>currently in the sheet</em>. If a case number is removed from column A (case closed, settled, withdrawn), no further reminders fire — there's nothing to opt out of. The next sweep just won't see the case. The log line <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">N case(s) previously alerted on are no longer in the sheet</code> shows how many cases dropped off since the bot started.
+        </div>
+
         <div class="callout blue mt-2">
           <i class="bi bi-arrow-repeat me-1"></i>
           <strong>Re-arms after a logged contact.</strong> Each alert is keyed on the case + threshold + Last Interaction date. Once someone logs a new contact and the sheet's Last Interaction column updates, the case can fire the 30-day warning again the next time it lapses past 30 days.
