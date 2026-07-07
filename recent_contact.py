@@ -28,6 +28,11 @@ CONTACT_TYPES: list[tuple[str, list[str]]] = [
     ("text",      ["text message", "texted", "text", "sms"]),
     ("voicemail", ["left voicemail", "left vm", "voicemail", "vm"]),
     ("call",      ["phone call", "spoke with", "spoke", "called", "call", "phone"]),
+    ("whatsapp",  ["whatsapp", "whats app", "whatsap", "wapp"]),
+    ("message",   ["facebook messenger", "fb messenger", "messenger", "facebook",
+                   "instagram", "ig dm", "signal", "telegram",
+                   "portal message", "client portal", "portal", "app message",
+                   "message", "msg", "dm"]),
     ("letter",    ["letter"]),
     ("mail",      ["mailed", "mail", "usps"]),
     ("fax",       ["faxed", "fax"]),
@@ -76,6 +81,11 @@ def parse(text: str) -> tuple[Optional[str], str]:
     if idx < 0 or matched_phrase is None:
         return None, ""
     after_phrase = cleaned[idx + len(matched_phrase):].lstrip(" :—-\"'")
+    # Strip a leading connector word ("via" / "by" / "through" / "on") so
+    # "recent client contact via WhatsApp - ..." parses the same as
+    # "recent contact whatsapp - ...".
+    after_phrase = re.sub(r"^(?:via|by|through|on)\b[\s:—-]*", "", after_phrase,
+                          flags=re.IGNORECASE).lstrip(" :—-\"'")
     after_lower = after_phrase.lower()
 
     matched_type: Optional[str] = None

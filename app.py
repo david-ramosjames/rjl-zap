@@ -49,6 +49,8 @@ _CONTACT_ICONS = {
     "text":      ":speech_balloon:",
     "voicemail": ":studio_microphone:",
     "call":      ":telephone_receiver:",
+    "whatsapp":  ":iphone:",
+    "message":   ":speech_balloon:",
     "letter":    ":envelope:",
     "mail":      ":mailbox:",
     "fax":       ":fax:",
@@ -65,13 +67,13 @@ _AUTO_TRACKED_CONTACT_TYPES = {"call", "text", "voicemail"}
 _RECENT_CONTACT_USAGE = (
     ":information_source: *Recent Contact* — log a client interaction to the tracker.\n"
     "Format: `@RJL-zap recent contact <type> - <details>`\n"
-    "(`client contact` works too.)\n"
-    "Types: `email`, `letter`, `mail`, `fax`, `visit`, `other`\n"
+    "(`client contact` works too, and you can say `via <type>`.)\n"
+    "Types: `email`, `whatsapp`, `message`, `letter`, `mail`, `fax`, `visit`, `other`\n"
     "_Phone calls, texts, and voicemails are tracked automatically — no need to log them here._\n\n"
     "Examples:\n"
     "• `@RJL-zap recent contact email - Re: discovery responses sent`\n"
-    "• `@RJL-zap client contact visit - client came in to sign release`\n"
-    "• `@RJL-zap recent contact mail - sent signed release`\n"
+    "• `@RJL-zap client contact via WhatsApp - sent client a case update`\n"
+    "• `@RJL-zap recent contact visit - client came in to sign release`\n"
     "• `@RJL-zap client contact fax - records request faxed to provider`"
 )
 
