@@ -168,11 +168,18 @@ DISBURSEMENT = DisbursementConfig(
             "• Have all lien holders responded?\n"
             "• Are final lien amounts confirmed?"
         )),
+        # Release, split into two triggers:
+        #   1) obtained / reviewed / approved  (at the Day-7 release slot)
+        #   2) signed & returned               (+45h after #1)
         (7 * _D, (
-            ":pen: *Release Signatures — {mentions}*\n\n"
-            "• Has the settlement release been drafted?\n"
-            "• Has the client signed the release?\n"
-            "• Has the executed release been sent to defense counsel?"
+            ":memo: *DRAFTING & RELEASE*\n\n"
+            "{attorney} please confirm all releases have been obtained, reviewed and approved.\n\n"
+            "{paralegal}, {ana} for visibility"
+        )),
+        (7 * _D + 45 * _H, (
+            ":memo: *DRAFTING & RELEASE*\n\n"
+            "{ana} & {paralegal} please confirm all releases have been signed and returned.\n\n"
+            "{attorney} for visibility"
         )),
         (14 * _D, (
             ":moneybag: *Funding & Check Issuance — {attorney} {ana}*\n\n"
