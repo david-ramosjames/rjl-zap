@@ -153,7 +153,7 @@ DISBURSEMENT = DisbursementConfig(
             "{legalassistants} please confirm that all future Litigation Events and SOL deadlines for this case have been removed from the calendar."
         )),
         (3 * _D, (
-            ":scissors: *Reductions Update — {mentions}*\n\n"
+            ":scissors: *Reductions Update — {attorney} {ana}*\n\n"
             "• Status on medical bill reductions?\n"
             "• Have all lien holders responded?\n"
             "• Are final lien amounts confirmed?"
@@ -165,18 +165,18 @@ DISBURSEMENT = DisbursementConfig(
             "• Has the executed release been sent to defense counsel?"
         )),
         (14 * _D, (
-            ":moneybag: *Funding & Check Issuance — {mentions}*\n\n"
+            ":moneybag: *Funding & Check Issuance — {attorney} {ana}*\n\n"
             "• Have settlement funds been received?\n"
             "• Have checks been issued for liens and expenses?\n"
             "• Have all deposits cleared?"
         )),
         (17 * _D, (
-            ":bank: *Deposit Confirmation — {mentions}*\n\n"
+            ":bank: *Deposit Confirmation — {attorney} {ana}*\n\n"
             "• Confirm all checks have been deposited and cleared\n"
             "• Any outstanding items before final disbursement?"
         )),
         (21 * _D, (
-            ":receipt: *Expense Reconciliation — {mentions}*\n\n"
+            ":receipt: *Expense Reconciliation — {attorney} {ana}*\n\n"
             "• Reconcile all case expenses\n"
             "• Prepare the final disbursement statement\n"
             "• Review with supervising attorney before disbursing to client"

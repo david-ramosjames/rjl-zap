@@ -1028,8 +1028,9 @@
           <i class="bi bi-people me-1"></i>
           <strong>Who gets tagged?</strong> The master overview and each scheduled step pull mentions from a mix of the channel topic and the admin settings:
           <ul class="mb-0 mt-2">
-            <li><strong>Paralegal</strong> &amp; <strong>Attorney</strong> — parsed from the channel topic (<em>Attorney @Jesus | Paralegal @Lyliana</em>). Used throughout the overview (settlement, medical bills, reductions, release, funding, approval).</li>
+            <li><strong>Paralegal</strong> &amp; <strong>Attorney</strong> — parsed from the channel topic (<em>Attorney @Jesus | Paralegal @Lyliana</em>). The paralegal is tagged on the early cancel-orders and medical-bills steps.</li>
             <li><strong>Ana</strong> &amp; <strong>Jon</strong> — fixed firm contacts. Set their Slack user IDs in admin settings under <em>Disbursement — Ana's Slack ID</em> and <em>Disbursement — Jon's Slack ID</em>. Without them the overview reads "@ana" / "@jon" as plain text.</li>
+            <li>The <strong>Reductions, Funding, Deposit, and Expense</strong> follow-ups tag the <strong>attorney + Ana</strong> (not the paralegal).</li>
             <li><strong>@legalassistants</strong> (the subteam configured in admin settings) is tagged on the calendar-clearance step.</li>
           </ul>
         </div>
@@ -1048,11 +1049,11 @@
           <div class="tl-row"><span class="tl-badge badge-now">3 hrs</span> CANCEL ORDERS AND GATHER INVOICES — tags the paralegal</div>
           <div class="tl-row"><span class="tl-badge badge-soon">22 hrs</span> MEDICAL BILLS — tags the paralegal</div>
           <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> CASE SETTLEMENT — tags @legalassistants</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Release signatures</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Funding &amp; check issuance</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update — tags the attorney + Ana</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Release signatures — tags the topic team</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Funding &amp; check issuance — tags the attorney + Ana</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation — tags the attorney + Ana</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation — tags the attorney + Ana</div>
           <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline</div>
         </div>
       </div>
