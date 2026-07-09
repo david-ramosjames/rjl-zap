@@ -119,8 +119,13 @@ The following tasks need to be completed for the disbursement.
 @dataclass
 class DisbursementConfig:
     phrase: str
-    # (delay_seconds, message_text) — {mentions} replaced with team extracted from channel topic
+    # (delay_seconds, message_text) — posted top-level, unconditionally.
     sequence: List[Tuple[float, str]] = field(default_factory=list)
+    # (delay_seconds, message_text) — posted IN the master thread, but only
+    # if the disbursement workflow is NOT yet marked complete. If someone has
+    # closed the workflow (reply "complete" / "@RJL-zap COMPLETE" in the
+    # master thread) before the fire time, these are silently skipped.
+    deadline_sequence: List[Tuple[float, str]] = field(default_factory=list)
 
 
 DISBURSEMENT = DisbursementConfig(
@@ -152,6 +157,11 @@ DISBURSEMENT = DisbursementConfig(
             ":clipboard: *CASE SETTLEMENT*\n\n"
             "{legalassistants} please confirm that all future Litigation Events and SOL deadlines for this case have been removed from the calendar."
         )),
+        # 2 hours after MEDICAL BILLS (22h) → 24h
+        (24 * _H, (
+            ":memo: *DRAFTING & RELEASE* — {ana}\n\n"
+            "Please confirm drafting instructions and W-9 have been sent."
+        )),
         (3 * _D, (
             ":scissors: *Reductions Update — {attorney} {ana}*\n\n"
             "• Status on medical bill reductions?\n"
@@ -181,13 +191,30 @@ DISBURSEMENT = DisbursementConfig(
             "• Prepare the final disbursement statement\n"
             "• Review with supervising attorney before disbursing to client"
         )),
+    ],
+    deadline_sequence=[
+        # These fire in the master thread ONLY if the disbursement isn't
+        # already complete. Reply "complete" / "@RJL-zap COMPLETE" in the
+        # master thread to close the workflow and cancel any that haven't
+        # fired yet.
+        (23 * _D, (
+            ":warning: *DISBURSEMENT DEADLINE 7 DAYS AWAY* :warning:\n\n"
+            "{attorney} we are 7 days away from 30 days since the settlement. "
+            "Please confirm in the thread if the disbursement is complete or on "
+            "track to be complete by the 30 day cut off.\n\n"
+            "{ana} please confirm when disbursement is drafted and reviewed + "
+            "approved with {attorney}.\n\n"
+            "{attorney}, {ana} please :triangular_flag_on_post: any blockers to "
+            "the disbursement being completed.\n\n"
+            "{jon} {laura}"
+        )),
         (30 * _D, (
-            ":rotating_light: *30-Day Disbursement Deadline — {mentions}*\n\n"
-            "Today is the target completion date. Please confirm:\n"
-            "• Net proceeds have been disbursed to the client\n"
-            "• Final disbursement statement is signed\n"
-            "• File is ready to close\n\n"
-            "Reply `@RJL-zap COMPLETE` in this thread to close out the workflow."
+            ":dollar: *DISBURSEMENT DEADLINE* :dollar:\n\n"
+            "{attorney} we are 30 days since the settlement. Please confirm in "
+            "the thread if the disbursement is complete.\n\n"
+            "{attorney}, {ana} please :triangular_flag_on_post: any blockers to "
+            "the disbursement being completed.\n\n"
+            "{jon} {laura}"
         )),
     ],
 )

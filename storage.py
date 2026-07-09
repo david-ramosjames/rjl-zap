@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     text TEXT NOT NULL,
     sent_at REAL,
     check_replies_first INTEGER NOT NULL DEFAULT 0,
-    done_keyword TEXT
+    done_keyword TEXT,
+    skip_if_complete_parent_ts TEXT
 );
 
 CREATE TABLE IF NOT EXISTS deferred_actions (
@@ -90,6 +91,7 @@ def init_db() -> None:
             ("channel_lifecycle",  "paralegal_intro_fired_for", "TEXT"),
             ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
             ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
+            ("scheduled_messages", "skip_if_complete_parent_ts", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -217,13 +219,16 @@ def schedule_message(
     text: str,
     check_replies_first: bool = False,
     done_keyword: str | None = None,
+    skip_if_complete_parent_ts: str | None = None,
 ) -> None:
     with connect() as conn:
         conn.execute(
             "INSERT INTO scheduled_messages "
-            "(channel_id, thread_ts, send_after, text, check_replies_first, done_keyword) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (channel_id, thread_ts, send_after, text, int(check_replies_first), done_keyword),
+            "(channel_id, thread_ts, send_after, text, check_replies_first, "
+            " done_keyword, skip_if_complete_parent_ts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (channel_id, thread_ts, send_after, text, int(check_replies_first),
+             done_keyword, skip_if_complete_parent_ts),
         )
 
 

@@ -333,13 +333,15 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic, exclude=bot_id)
     paralegal_mention = f"<@{paralegal_id}>" if paralegal_id else "@paralegal"
     attorney_mention  = f"<@{attorney_id}>"  if attorney_id  else "@attorney"
-    # {ana} and {jon} — fixed firm contacts configured in admin settings.
+    # {ana}, {jon}, {laura} — fixed firm contacts configured in admin settings.
     # Stored as single user IDs (not lists). Fall back to literal labels
     # so the overview still reads sensibly if an admin hasn't filled them in.
     ana_id = storage.get_config("disbursement_ana_user_id").strip()
     jon_id = storage.get_config("disbursement_jon_user_id").strip()
+    laura_id = storage.get_config("disbursement_laura_user_id").strip()
     ana_mention = f"<@{ana_id}>" if ana_id else "@ana"
     jon_mention = f"<@{jon_id}>" if jon_id else "@jon"
+    laura_mention = f"<@{laura_id}>" if laura_id else "@laura"
     # {legalassistants} — same subteam mention the reminder loop uses for
     # checklist nudges, falling back to a plain label if no group is set.
     group_id = storage.get_config("notify_group_id")
@@ -355,6 +357,7 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
             attorney=attorney_mention,
             ana=ana_mention,
             jon=jon_mention,
+            laura=laura_mention,
             legalassistants=legalassistants_mention,
         )
 
@@ -365,6 +368,10 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     parent_ts = resp["ts"]
     if storage.workflow_by_thread(channel, parent_ts):
         return
+
+    # Register the workflow FIRST so the deadline messages' skip-if-complete
+    # lookup (keyed on parent_ts) resolves to a real workflow row.
+    storage.create_workflow(channel, parent_ts, "disbursement", [])
 
     # Each step in the sequence posts as its OWN top-level channel message
     # (thread_ts="") so replies stay scoped to that specific task instead of
@@ -378,10 +385,22 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
             text=_render(template),
         )
 
-    storage.create_workflow(channel, parent_ts, "disbursement", [])
+    # Deadline messages post IN the master thread and self-cancel if the
+    # workflow has been closed (reply "complete" / "@RJL-zap COMPLETE" in the
+    # master thread) before their fire time.
+    for delay, template in DISBURSEMENT.deadline_sequence:
+        storage.schedule_message(
+            channel_id=channel,
+            thread_ts=parent_ts,
+            send_after=now + delay,
+            text=_render(template),
+            skip_if_complete_parent_ts=parent_ts,
+        )
+
     log.info("started disbursement workflow channel=%s parent_ts=%s triggered_by=%s "
-             "participants=%s paralegal=%s",
-             channel, parent_ts, user_id, participants, paralegal_id)
+             "participants=%s paralegal=%s steps=%d deadline_steps=%d",
+             channel, parent_ts, user_id, participants, paralegal_id,
+             len(DISBURSEMENT.sequence), len(DISBURSEMENT.deadline_sequence))
 
 
 def _start_followup_workflow(

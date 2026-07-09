@@ -1029,8 +1029,8 @@
           <strong>Who gets tagged?</strong> The master overview and each scheduled step pull mentions from a mix of the channel topic and the admin settings:
           <ul class="mb-0 mt-2">
             <li><strong>Paralegal</strong> &amp; <strong>Attorney</strong> — parsed from the channel topic (<em>Attorney @Jesus | Paralegal @Lyliana</em>). The paralegal is tagged on the early cancel-orders and medical-bills steps.</li>
-            <li><strong>Ana</strong> &amp; <strong>Jon</strong> — fixed firm contacts. Set their Slack user IDs in admin settings under <em>Disbursement — Ana's Slack ID</em> and <em>Disbursement — Jon's Slack ID</em>. Without them the overview reads "@ana" / "@jon" as plain text.</li>
-            <li>The <strong>Reductions, Funding, Deposit, and Expense</strong> follow-ups tag the <strong>attorney + Ana</strong> (not the paralegal).</li>
+            <li><strong>Ana</strong>, <strong>Jon</strong> &amp; <strong>Laura</strong> — fixed firm contacts. Set their Slack user IDs in admin settings under <em>Disbursement — Ana's / Jon's / Laura's Slack ID</em>. Without them the messages read "@ana" / "@jon" / "@laura" as plain text.</li>
+            <li>The <strong>Reductions, Funding, Deposit, and Expense</strong> follow-ups tag the <strong>attorney + Ana</strong> (not the paralegal). <strong>Drafting &amp; Release</strong> tags Ana. The <strong>Day 23 &amp; Day 30 deadline warnings</strong> tag the attorney, Ana, Jon, and Laura.</li>
             <li><strong>@legalassistants</strong> (the subteam configured in admin settings) is tagged on the calendar-clearance step.</li>
           </ul>
         </div>
@@ -1049,12 +1049,19 @@
           <div class="tl-row"><span class="tl-badge badge-now">3 hrs</span> CANCEL ORDERS AND GATHER INVOICES — tags the paralegal</div>
           <div class="tl-row"><span class="tl-badge badge-soon">22 hrs</span> MEDICAL BILLS — tags the paralegal</div>
           <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> CASE SETTLEMENT — tags @legalassistants</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> DRAFTING &amp; RELEASE — tags Ana (drafting instructions + W-9)</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update — tags the attorney + Ana</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Release signatures — tags the topic team</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 14</span> Funding &amp; check issuance — tags the attorney + Ana</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 17</span> Deposit confirmation — tags the attorney + Ana</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 21</span> Expense reconciliation — tags the attorney + Ana</div>
-          <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline</div>
+          <div class="tl-row"><span class="tl-badge badge-esc">Day 23</span> 7-day deadline warning — attorney, Ana, Jon, Laura <em>(only if not yet complete)</em></div>
+          <div class="tl-row"><span class="tl-badge badge-esc">Day 30</span> Final disbursement deadline — attorney, Ana, Jon, Laura <em>(only if not yet complete)</em></div>
+        </div>
+
+        <div class="callout green mt-3">
+          <i class="bi bi-check2-circle me-1"></i>
+          <strong>Deadline warnings self-cancel.</strong> The Day 23 and Day 30 warnings post <em>in the master disbursement thread</em> and only fire if the workflow is still open. Reply <span class="done-word">complete</span> (or <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">@RJL-zap COMPLETE</code>) in the master thread to close the workflow — any deadline warning that hasn't fired yet is then suppressed.
         </div>
       </div>
     </div>

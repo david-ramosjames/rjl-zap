@@ -32,6 +32,13 @@ SETTINGS = [
                 "RJL expenses). Falls back to the literal text '@jon' if empty.",
     },
     {
+        "key": "disbursement_laura_user_id",
+        "label": "Disbursement — Laura's Slack ID",
+        "help": "Single Slack user ID tagged as 'Laura' on the 7-day and "
+                "30-day disbursement deadline warnings. Falls back to the "
+                "literal text '@laura' if empty.",
+    },
+    {
         "key": "attorney_intro_escalation_user_ids",
         "label": "Attorney Intro — Escalation Contacts",
         "help": "Tagged in the 48-hour reminder if no 'done' reply. Comma-separated.",

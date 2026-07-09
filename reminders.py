@@ -85,6 +85,17 @@ def _tick(client) -> None:
     # Fire any scheduled follow-up messages (e.g. mediation sequence, escalations)
     for msg in storage.due_scheduled_messages(now):
         try:
+            # Deadline messages self-cancel if the parent workflow is already
+            # complete (e.g. disbursement +23d / +30d warnings). Keyed on the
+            # workflow's master parent_ts.
+            skip_parent = msg.get("skip_if_complete_parent_ts")
+            if skip_parent:
+                wf = storage.workflow_by_thread(msg["channel_id"], skip_parent)
+                if wf and wf.get("completed_at"):
+                    log.info("workflow complete — skipping deadline msg id=%s", msg["id"])
+                    storage.mark_scheduled_sent(msg["id"])
+                    continue
+
             if msg["check_replies_first"] and msg["done_keyword"]:
                 result = _thread_has_reply(
                     client, msg["channel_id"], msg["thread_ts"], msg["done_keyword"],
