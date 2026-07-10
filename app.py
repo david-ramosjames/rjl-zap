@@ -789,10 +789,10 @@ def _format_client_contact_text(client, channel_id: str, row, threshold: int) ->
 
 
 def fire_due_lifecycle_triggers(client) -> None:
-    """Called from the reminder loop. Fires new_case (T+200s),
-    case_setup (T+15min), client_intake (T+1h), doc_verification
-    (T+24h), and calendar_sol (T+48h) for any channel that's past
-    its delay but hasn't fired yet."""
+    """Called from the reminder loop. Fires new_case (T+180s),
+    case_setup (T+15min), calendar_sol (T+15min), client_intake (T+1h),
+    and doc_verification (T+48h) for any channel that's past its delay
+    but hasn't fired yet."""
     now = time.time()
 
     # All automatic lifecycle alerts are hard-gated to channels created within

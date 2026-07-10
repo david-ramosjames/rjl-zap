@@ -471,7 +471,7 @@
 
         <div class="callout blue mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          The <strong>Calendar Statute of Limitations</strong> variant auto-fires 48 hours after a new channel is created — see the Automatic section below.
+          The <strong>Calendar Statute of Limitations</strong> variant auto-fires ~15 minutes after a new channel is created — see the Automatic section below.
         </div>
       </div>
     </div>
@@ -610,7 +610,7 @@
         <div class="row g-3 mt-1">
           <div class="col-md-4">
             <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-plus-circle me-1"></i>Channel creation</div>
-            <div class="small text-muted">New public channel → bot joins, then runs a timed sequence: +180 sec, +15 min, +1 hr, +24 hrs, +48 hrs.</div>
+            <div class="small text-muted">New public channel → bot joins, then runs a timed sequence: +180 sec, +15 min (Case Setup + SOL), +1 hr, +48 hrs.</div>
           </div>
           <div class="col-md-4">
             <div style="font-weight:600;color:#14532d;margin-bottom:.35rem"><i class="bi bi-pencil-square me-1"></i>Channel description</div>
@@ -635,19 +635,15 @@
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-soon">+15 min</span>
-            <strong>Case Setup</strong> checklist posts.
+            <strong>Case Setup</strong> checklist &amp; <strong>Calendar SOL</strong> checklist post.
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-soon">+1 hr</span>
             <strong>Client Intake</strong> request posts to the assigned collector.
           </div>
           <div class="tl-row">
-            <span class="tl-badge badge-warn">+24 hrs</span>
-            <strong>Document Verification</strong> checklist posts.
-          </div>
-          <div class="tl-row">
             <span class="tl-badge badge-warn">+48 hrs</span>
-            <strong>Calendar SOL</strong> checklist posts.
+            <strong>Document Verification</strong> checklist posts.
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-soon">Description set</span>
@@ -764,7 +760,7 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires 24 hours after a new public channel is created</strong> so nothing slips through after the initial Case Setup checklist. Can also be triggered manually:</p>
+        <p><strong>Auto-fires 48 hours after a new public channel is created</strong> so nothing slips through once the case has had a couple days to gather documents. Can also be triggered manually:</p>
 
         <div class="type-label">Manual trigger (tag the person responsible)</div>
         <div class="type-this">@RJL-zap document verification @PersonName</div>
@@ -799,7 +795,7 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires 48 hours after a new public channel is created.</strong> Posts the SOL checklist and tracks completion via ✅ reactions. Can also be triggered manually:</p>
+        <p><strong>Auto-fires ~15 minutes after a new public channel is created</strong> — during the assignment phase, so the statute of limitations gets calendared right away rather than days later. Posts the SOL checklist and tracks completion via ✅ reactions. Can also be triggered manually:</p>
 
         <div class="type-label">Manual trigger</div>
         <div class="type-this">@RJL-zap calendar sol</div>
@@ -1198,10 +1194,9 @@
           <ol style="margin:.5rem 0 .25rem;padding-left:1.3rem">
             <li><strong>Immediately:</strong> Bot joins the channel.</li>
             <li><strong>~180 seconds after creation:</strong> New Case Assignment fires — pings the configured assignee.</li>
-            <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved.</li>
+            <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved — and the Calendar Statute of Limitations checklist posts so the SOL is calendared during the assignment phase.</li>
             <li><strong>+1 hour:</strong> Client Intake request posts — assigned collector gathers client details.</li>
-            <li><strong>+24 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed.</li>
-            <li><strong>+48 hours:</strong> Calendar Statute of Limitations checklist posts — calendar the SOL deadline and advance reminders.</li>
+            <li><strong>+48 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed once the case has had a couple days to gather documents.</li>
             <li><strong>When the channel description is set:</strong> If it includes <em>Attorney @X | Paralegal @Y</em>, Attorney Intro and Paralegal Intro fire for those specific people. Only fires the first time — later edits to the description do not re-fire.</li>
           </ol>
           The same workflows can also be triggered manually any time via @-mention — useful for private channels (where the bot needs to be <code style="background:#f3f4f6;border-radius:4px;padding:.05rem .4rem">/invite</code>'d) or to re-fire the checklist later.

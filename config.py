@@ -395,16 +395,20 @@ COMPLETION_REPLY = "COMPLETE"
 REMINDER_CHECK_INTERVAL_SECONDS = 250
 
 # ── Channel-lifecycle automatic triggers ──
-# When a new public channel is created, the bot auto-joins it and fires these:
-#   - new_case   → on the first user message in the channel
-#   - case_setup → 15 minutes after channel creation
-#   - doc_verification → 24 hours after channel creation
+# When a new public channel is created, the bot auto-joins it and fires these
+# (all timed from channel creation):
+#   - new_case        → +180 seconds
+#   - case_setup      → +15 minutes
+#   - calendar_sol    → +15 minutes  (moved up from +48h — calendar the SOL
+#                       during the assignment phase, not days later)
+#   - client_intake   → +1 hour
+#   - doc_verification→ +48 hours    (moved back from +24h to the old SOL slot)
 NEW_CASE_ON_FIRST_MESSAGE = True
 NEW_CASE_DELAY_SECONDS = 180
 CASE_SETUP_DELAY_SECONDS = 15 * 60
-DOC_VERIFICATION_DELAY_SECONDS = 24 * 60 * 60
-CALENDAR_SOL_DELAY_SECONDS = 48 * 60 * 60
+CALENDAR_SOL_DELAY_SECONDS = 15 * 60
 CLIENT_INTAKE_DELAY_SECONDS = 60 * 60
+DOC_VERIFICATION_DELAY_SECONDS = 48 * 60 * 60
 
 # Phrase that auto-triggers Check Pickup. Only fires when the message
 # author is in the `check_pickup_trigger_user_ids` admin setting.
