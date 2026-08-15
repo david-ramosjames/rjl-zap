@@ -74,13 +74,25 @@ def _tick(client) -> None:
     # any deferred per-channel actions (currently: attorney_intro, scheduled
     # 1 hr after the paralegal intro fires), and the once-daily Client Contact
     # Status sweep (30 / 45 day no-contact alerts read from the Google Sheet).
+    #
+    # Each sweep gets its OWN try/except: a failure in one must not skip the
+    # others. (Previously a single wrapper meant one lifecycle error silently
+    # starved the deferred-action queue for that whole tick.)
     try:
         import app  # late import — avoids circular dep at module load
-        app.fire_due_lifecycle_triggers(client)
-        app.fire_due_deferred_actions(client)
-        app.fire_client_contact_alerts(client)
     except Exception:
-        log.exception("lifecycle/deferred/client-contact trigger sweep failed")
+        log.exception("could not import app for trigger sweeps")
+        return
+
+    for sweep_name, sweep in (
+        ("lifecycle", app.fire_due_lifecycle_triggers),
+        ("deferred-actions", app.fire_due_deferred_actions),
+        ("client-contact", app.fire_client_contact_alerts),
+    ):
+        try:
+            sweep(client)
+        except Exception:
+            log.exception("%s trigger sweep failed", sweep_name)
 
     # Fire any scheduled follow-up messages (e.g. mediation sequence, escalations)
     for msg in storage.due_scheduled_messages(now):

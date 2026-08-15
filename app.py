@@ -521,30 +521,64 @@ def _auto_start_followup(
     log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
 
 
+# A deferred action that keeps failing (Slack outage, rate limit, revoked
+# scope) is retried on each tick up to this many times before we give up.
+_DEFERRED_ACTION_MAX_ATTEMPTS = 8
+
+
 def fire_due_deferred_actions(client) -> None:
     """Drain the deferred_actions queue. Currently only attorney_intro is
     deferred (1 hour after the paralegal is pinged), but the same path will
-    handle any future kind by dispatching on `row['kind']`."""
+    handle any future kind by dispatching on `row['kind']`.
+
+    A failed action is NOT marked delivered — it stays queued and retries on
+    the next tick, so one transient Slack error can't silently lose an intro.
+    """
     now = time.time()
     for row in storage.due_deferred_actions(now):
         kind = row["kind"]
         channel_id = row["channel_id"]
         target = row["target_user_id"]
-        log.info("firing deferred action kind=%s channel=%s target=%s",
-                 kind, channel_id, target)
+        log.info("firing deferred action kind=%s channel=%s target=%s attempts=%s",
+                 kind, channel_id, target, row.get("attempts", 0))
+
+        if kind != "attorney_intro":
+            log.warning("unknown deferred action kind=%s id=%s — discarding",
+                        kind, row["id"])
+            storage.mark_deferred_action_fired(row["id"])
+            continue
+
         try:
-            if kind == "attorney_intro":
-                _auto_start_followup(
-                    client, channel_id, ATTORNEY_INTRO,
-                    "attorney_intro_escalation_user_ids", "attorney_intro",
-                    participants=[target] if target else None,
-                )
-            else:
-                log.warning("unknown deferred action kind=%s id=%s", kind, row["id"])
+            _auto_start_followup(
+                client, channel_id, ATTORNEY_INTRO,
+                "attorney_intro_escalation_user_ids", "attorney_intro",
+                participants=[target] if target else None,
+            )
         except Exception:
-            log.exception("deferred action failed kind=%s channel=%s id=%s",
-                          kind, channel_id, row["id"])
+            attempts = storage.bump_deferred_action_attempt(row["id"])
+            if attempts >= _DEFERRED_ACTION_MAX_ATTEMPTS:
+                # Give up, but un-mark the intro so re-setting the channel
+                # topic can re-arm it rather than it being lost forever.
+                log.exception(
+                    "deferred %s failed %d times for channel=%s — giving up; "
+                    "clearing the intro marker so re-setting the channel topic "
+                    "will re-arm it",
+                    kind, attempts, channel_id,
+                )
+                storage.mark_deferred_action_fired(row["id"])
+                try:
+                    storage.clear_intro_fired_for(channel_id, "attorney")
+                except Exception:
+                    log.exception("could not clear attorney intro marker for %s", channel_id)
+            else:
+                log.exception(
+                    "deferred %s failed for channel=%s (attempt %d/%d) — will retry",
+                    kind, channel_id, attempts, _DEFERRED_ACTION_MAX_ATTEMPTS,
+                )
+            continue
+
         storage.mark_deferred_action_fired(row["id"])
+        log.info("deferred %s delivered for channel=%s target=%s", kind, channel_id, target)
 
 
 # How often the Client Contact Status sweep runs. Sheet only needs to be

@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS deferred_actions (
     kind TEXT NOT NULL,
     target_user_id TEXT,
     fire_after REAL NOT NULL,
-    fired_at REAL
+    fired_at REAL,
+    attempts INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_deferred_pending ON deferred_actions(fired_at, fire_after);
@@ -92,6 +93,7 @@ def init_db() -> None:
             ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
             ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
             ("scheduled_messages", "skip_if_complete_parent_ts", "TEXT"),
+            ("deferred_actions",   "attempts", "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -278,6 +280,33 @@ def mark_deferred_action_fired(action_id: int) -> None:
         conn.execute(
             "UPDATE deferred_actions SET fired_at = ? WHERE id = ?",
             (time.time(), action_id),
+        )
+
+
+def bump_deferred_action_attempt(action_id: int) -> int:
+    """Record a failed delivery attempt. Returns the new attempt count so the
+    caller can give up after N tries instead of retrying forever."""
+    with connect() as conn:
+        conn.execute(
+            "UPDATE deferred_actions SET attempts = attempts + 1 WHERE id = ?",
+            (action_id,),
+        )
+        row = conn.execute(
+            "SELECT attempts FROM deferred_actions WHERE id = ?", (action_id,)
+        ).fetchone()
+        return int(row["attempts"]) if row else 0
+
+
+def clear_intro_fired_for(channel_id: str, role: str) -> None:
+    """Un-mark an attorney/paralegal intro so it can fire again. Used as a
+    recovery path when a deferred intro exhausts its retries — re-setting the
+    channel topic then re-arms it, instead of the intro being lost forever."""
+    col = {"attorney": "attorney_intro_fired_for",
+           "paralegal": "paralegal_intro_fired_for"}[role]
+    with connect() as conn:
+        conn.execute(
+            f"UPDATE channel_lifecycle SET {col} = NULL WHERE channel_id = ?",
+            (channel_id,),
         )
 
 
