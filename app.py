@@ -60,6 +60,39 @@ def _channel_name_cached(client, channel_id: str) -> str:
     return name
 
 
+_NAME_RESOLUTION_WARNED = False
+
+
+def _resolve_and_cache_name(client, uid: str) -> bool:
+    """Look up one user's display name and store it. Returns True on success.
+    The FIRST failure per process is logged loudly (with the Slack error) so a
+    missing 'users:read' scope is obvious from the logs; later failures are
+    debug-level to avoid noise."""
+    global _NAME_RESOLUTION_WARNED
+    try:
+        u = (client.users_info(user=uid).get("user")) or {}
+        prof = u.get("profile") or {}
+        name = (prof.get("real_name") or u.get("real_name")
+                or prof.get("display_name") or u.get("name") or uid)
+        storage.upsert_user_name(uid, name)
+        return True
+    except Exception as e:
+        err = str(e)
+        if not _NAME_RESOLUTION_WARNED:
+            _NAME_RESOLUTION_WARNED = True
+            if "missing_scope" in err:
+                log.warning(
+                    "Cannot resolve Slack display names — the bot is missing the "
+                    "'users:read' scope. Add it under OAuth & Permissions and "
+                    "reinstall the app. Until then the Open Items page shows user "
+                    "IDs instead of names. (%s)", err)
+            else:
+                log.warning("first display-name lookup for %s failed: %s", uid, err)
+        else:
+            log.debug("could not resolve display name for %s: %s", uid, err)
+        return False
+
+
 def _cache_people_async(client, user_ids) -> None:
     """Resolve Slack display names for any unseen user IDs and store them, so
     the Open Items page can show and filter by person without live API calls.
@@ -75,14 +108,7 @@ def _cache_people_async(client, user_ids) -> None:
             log.debug("could not read cached user names", exc_info=True)
             return
         for uid in wanted - known:
-            try:
-                u = client.users_info(user=uid).get("user") or {}
-                prof = u.get("profile") or {}
-                name = (prof.get("real_name") or u.get("real_name")
-                        or prof.get("display_name") or u.get("name") or uid)
-                storage.upsert_user_name(uid, name)
-            except Exception:
-                log.debug("could not resolve display name for %s", uid, exc_info=True)
+            _resolve_and_cache_name(client, uid)
 
     threading.Thread(target=_work, daemon=True).start()
 
