@@ -581,6 +581,245 @@ def fire_due_deferred_actions(client) -> None:
         log.info("deferred %s delivered for channel=%s target=%s", kind, channel_id, target)
 
 
+# ── Weekly status report ──────────────────────────────────────────────
+_WEEKLY_REPORT_LAST_SENT_KEY = "weekly_report_last_sent_at"
+# If the bot was down at the scheduled minute it still posts when it comes
+# back — but only within this grace window. Past that the slot is consumed
+# silently, so a bot that was offline for weeks posts one fresh report on
+# the next real schedule instead of a stale one the moment it boots.
+_WEEKLY_REPORT_MAX_LATENESS_SECONDS = 48 * 3600
+
+# trigger_name → human label for the report
+_WORKFLOW_LABELS = {
+    "attorney_intro":     "Attorney Intro (client contact)",
+    "paralegal_intro":    "Paralegal Intro (client contact)",
+    "case_setup":         "Case Setup",
+    "client_intake":      "Client Intake",
+    "doc_verification":   "Document Verification",
+    "check_pickup":       "Client Check Pickup",
+    "calendar_sol":       "Calendar SOL",
+    "mediation_checklist": "Mediation Checklist",
+    "disbursement":       "30-Day Disbursement",
+    "answer_filed":       "Calendar — Answer Filed",
+    "discovery_received": "Calendar — Discovery Requests",
+    "scheduling_order":   "Calendar — Scheduling Order",
+}
+# Non-default reply keyword that closes a workflow (everything else: "done")
+_WORKFLOW_DONE_WORD = {
+    "doc_verification": "confirmed",
+    "check_pickup":     "scheduled",
+}
+
+_DAY_NAMES = {
+    "monday": 0, "mon": 0, "tuesday": 1, "tue": 1, "tues": 1,
+    "wednesday": 2, "wed": 2, "thursday": 3, "thu": 3, "thurs": 3,
+    "friday": 4, "fri": 4, "saturday": 5, "sat": 5, "sunday": 6, "sun": 6,
+}
+
+
+def _parse_report_day(raw: str, default: int = 4) -> int:
+    """'friday' / 'Fri' / '4' → 4 (Mon=0 … Sun=6). Default Friday."""
+    s = (raw or "").strip().lower()
+    if not s:
+        return default
+    if s in _DAY_NAMES:
+        return _DAY_NAMES[s]
+    try:
+        n = int(s)
+        if 0 <= n <= 6:
+            return n
+    except ValueError:
+        pass
+    log.warning("weekly report: could not parse day %r — defaulting to Friday", raw)
+    return default
+
+
+def _parse_report_time(raw: str, default: tuple[int, int] = (17, 30)) -> tuple[int, int]:
+    """'17:30' / '5:30 PM' / '1730' → (17, 30). Default 5:30 PM."""
+    s = (raw or "").strip().lower().replace(".", "")
+    if not s:
+        return default
+    m = re.match(r"^(\d{1,2})\s*:?\s*(\d{2})?\s*(am|pm)?$", s)
+    if not m:
+        log.warning("weekly report: could not parse time %r — defaulting to 17:30", raw)
+        return default
+    hour = int(m.group(1))
+    minute = int(m.group(2) or 0)
+    meridiem = m.group(3)
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        log.warning("weekly report: time %r out of range — defaulting to 17:30", raw)
+        return default
+    return hour, minute
+
+
+def _last_scheduled_occurrence(now_local, target_day: int, hour: int, minute: int):
+    """The most recent <target_day> at <hour>:<minute> that is <= now_local.
+
+    Walking backwards (rather than computing 'this week's' slot) means a bot
+    that was down at the scheduled minute still posts the report when it comes
+    back, and a bot that was down for weeks posts exactly once — not one
+    report per missed week.
+    """
+    from datetime import datetime as _dt, time as _t, timedelta as _td
+    for back in range(0, 8):
+        d = (now_local - _td(days=back)).date()
+        if d.weekday() != target_day:
+            continue
+        cand = _dt.combine(d, _t(hour, minute), tzinfo=now_local.tzinfo)
+        if cand <= now_local:
+            return cand
+    return None
+
+
+def _resolve_report_channel(client, raw: str) -> str | None:
+    """Accept a channel ID (C…) or a name ('#daily-pulse' / 'daily-pulse')
+    and return the channel ID, or None if it can't be found."""
+    s = (raw or "").strip().lstrip("#")
+    if not s:
+        return None
+    # Already an ID
+    if re.fullmatch(r"[CGD][A-Z0-9]{6,}", s):
+        return s
+    cursor = None
+    while True:
+        try:
+            resp = client.conversations_list(
+                types="public_channel,private_channel",
+                exclude_archived=True, limit=1000, cursor=cursor,
+            )
+        except Exception:
+            log.exception("weekly report: conversations.list failed resolving %r", raw)
+            return None
+        for ch in resp.get("channels", []):
+            if (ch.get("name") or "").lower() == s.lower():
+                return ch["id"]
+        cursor = (resp.get("response_metadata") or {}).get("next_cursor")
+        if not cursor:
+            log.warning("weekly report: no channel named %r found", raw)
+            return None
+
+
+def fire_weekly_status_report(client) -> None:
+    """Post a weekly digest of still-open workflow items to the configured
+    channel. Fires once per week at the configured local day/time (default
+    Friday 5:30 PM Central), catching up on the next tick if the bot was
+    down at the scheduled minute."""
+    channel_raw = storage.get_config("weekly_report_channel", default="").strip()
+    if not channel_raw:
+        return  # not configured — feature off
+
+    if _CLIENT_CONTACT_TZ is None:
+        return  # no tz support; don't guess at "Friday 5:30 local"
+
+    from datetime import datetime as _dt
+    now_local = _dt.now(_CLIENT_CONTACT_TZ)
+
+    target_day = _parse_report_day(storage.get_config("weekly_report_day", default=""))
+    hour, minute = _parse_report_time(storage.get_config("weekly_report_time", default=""))
+
+    occurrence = _last_scheduled_occurrence(now_local, target_day, hour, minute)
+    if occurrence is None:
+        return
+    try:
+        last_sent = float(storage.get_config(_WEEKLY_REPORT_LAST_SENT_KEY, default="0") or 0)
+    except ValueError:
+        last_sent = 0.0
+    if last_sent >= occurrence.timestamp():
+        return  # already reported for this occurrence
+
+    lateness = now_local.timestamp() - occurrence.timestamp()
+    if lateness > _WEEKLY_REPORT_MAX_LATENESS_SECONDS:
+        # Consume the slot without posting — see the constant's comment.
+        storage.set_config(_WEEKLY_REPORT_LAST_SENT_KEY, str(occurrence.timestamp()))
+        log.info("weekly report: slot %s missed by %.1fh (grace %.0fh) — skipping "
+                 "that week rather than posting late",
+                 occurrence.strftime("%a %Y-%m-%d %H:%M"), lateness / 3600,
+                 _WEEKLY_REPORT_MAX_LATENESS_SECONDS / 3600)
+        return
+
+    channel_id = _resolve_report_channel(client, channel_raw)
+    if not channel_id:
+        # Don't burn the slot — retry next tick so a fixed setting takes effect.
+        log.warning("weekly report: channel %r unresolved; will retry", channel_raw)
+        return
+
+    try:
+        lookback_days = float(storage.get_config("weekly_report_lookback_days", default="7") or 7)
+    except ValueError:
+        lookback_days = 7.0
+    cutoff = time.time() - lookback_days * 86400
+
+    rows = storage.open_workflows_since(cutoff)
+    completed = storage.completed_workflow_count_since(cutoff)
+    text = _format_weekly_report(rows, completed, lookback_days, now_local)
+
+    try:
+        client.chat_postMessage(channel=channel_id, text=text)
+    except Exception:
+        log.exception("weekly report: post failed to channel=%s; will retry", channel_id)
+        return
+
+    storage.set_config(_WEEKLY_REPORT_LAST_SENT_KEY, str(time.time()))
+    log.info("weekly report posted to %s — %d open, %d completed (lookback %.0fd)",
+             channel_id, len(rows), completed, lookback_days)
+
+
+def _format_weekly_report(rows: list[dict], completed: int,
+                          lookback_days: float, now_local) -> str:
+    """Render the digest: escalated items first, then still-waiting items."""
+    header = (
+        f":bar_chart: *Weekly Status Report* — {now_local.strftime('%a %b %-d')}\n"
+        f"_Open items from the last {lookback_days:.0f} days that haven't been "
+        f"marked done._\n"
+    )
+    if not rows:
+        return (
+            header + "\n:white_check_mark: *Nothing open* — every workflow "
+            f"started in this window has been completed. ({completed} closed.)"
+        )
+
+    now_ts = time.time()
+
+    def line(r: dict) -> str:
+        label = _WORKFLOW_LABELS.get(r["trigger_name"], r["trigger_name"])
+        age_days = max(0, int((now_ts - r["created_at"]) // 86400))
+        age = "today" if age_days == 0 else f"{age_days}d ago"
+        bits = [f"<#{r['channel_id']}>", f"*{label}*", f"opened {age}"]
+        if r.get("open_items"):
+            bits.append(f"{r['open_items']} item(s) unchecked")
+        else:
+            word = _WORKFLOW_DONE_WORD.get(r["trigger_name"], "done")
+            bits.append(f"reply `{word}`")
+        return "• " + " · ".join(bits)
+
+    escalated = [r for r in rows if r.get("escalations_sent")]
+    waiting = [r for r in rows if not r.get("escalations_sent")]
+    # Oldest first within each bucket — the most overdue reads at the top.
+    escalated.sort(key=lambda r: r["created_at"])
+    waiting.sort(key=lambda r: r["created_at"])
+
+    parts = [header]
+    if escalated:
+        parts.append(
+            f"\n:red_circle: *Escalated — no reply after the reminder ({len(escalated)})*\n"
+            + "\n".join(line(r) for r in escalated)
+        )
+    if waiting:
+        parts.append(
+            f"\n:large_yellow_circle: *Open — not yet escalated ({len(waiting)})*\n"
+            + "\n".join(line(r) for r in waiting)
+        )
+    parts.append(
+        f"\n_{len(rows)} open · {completed} completed in the last "
+        f"{lookback_days:.0f} days._"
+    )
+    return "\n".join(parts)
+
+
 # How often the Client Contact Status sweep runs. Sheet only needs to be
 # polled occasionally — 24 h is plenty for "30-day no-contact" alerts.
 _CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60

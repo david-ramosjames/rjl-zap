@@ -206,6 +206,49 @@ def open_workflows_due_for_reminder(cutoff_ts: float) -> List[dict]:
         return [dict(r) for r in rows]
 
 
+def open_workflows_since(cutoff_ts: float) -> List[dict]:
+    """Workflows created since `cutoff_ts` that are still open (no completion
+    reply / not all items checked). Each row is annotated with:
+
+      escalations_sent    — how many escalation messages have already fired
+                            (>0 means the team was already nudged)
+      escalations_pending — escalation messages still scheduled to fire
+      open_items          — unchecked items, for reaction-tracked checklists
+
+    Used by the weekly status report.
+    """
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT w.*, "
+            "  (SELECT COUNT(*) FROM scheduled_messages s "
+            "     WHERE s.channel_id = w.channel_id AND s.thread_ts = w.parent_ts "
+            "       AND s.check_replies_first = 1 AND s.sent_at IS NOT NULL) "
+            "    AS escalations_sent, "
+            "  (SELECT COUNT(*) FROM scheduled_messages s "
+            "     WHERE s.channel_id = w.channel_id AND s.thread_ts = w.parent_ts "
+            "       AND s.check_replies_first = 1 AND s.sent_at IS NULL) "
+            "    AS escalations_pending, "
+            "  (SELECT COUNT(*) FROM items i "
+            "     WHERE i.workflow_id = w.id AND i.completed_at IS NULL) "
+            "    AS open_items "
+            "FROM workflows w "
+            "WHERE w.completed_at IS NULL AND w.created_at >= ? "
+            "ORDER BY w.created_at",
+            (cutoff_ts,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def completed_workflow_count_since(cutoff_ts: float) -> int:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM workflows "
+            "WHERE completed_at IS NOT NULL AND created_at >= ?",
+            (cutoff_ts,),
+        ).fetchone()
+        return int(row["n"]) if row else 0
+
+
 def update_last_reminded(workflow_id: int) -> None:
     with connect() as conn:
         conn.execute(

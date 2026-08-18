@@ -147,6 +147,32 @@ SETTINGS = [
                 "(auto-created with headers if it doesn't exist).",
     },
     {
+        "key": "weekly_report_channel",
+        "label": "Weekly Status Report — Channel",
+        "help": "Where the weekly open-items digest is posted, e.g. "
+                "daily-pulse (the # is optional; a channel ID also works). "
+                "Leave empty to turn the weekly report off. The bot must be "
+                "a member of the channel.",
+    },
+    {
+        "key": "weekly_report_day",
+        "label": "Weekly Status Report — Day",
+        "help": "Day of week to post, e.g. friday / fri / 4 "
+                "(Monday=0 … Sunday=6). Default: friday.",
+    },
+    {
+        "key": "weekly_report_time",
+        "label": "Weekly Status Report — Time (Central)",
+        "help": "Local time to post, 24-hour or with AM/PM — e.g. 17:30 or "
+                "5:30 PM. Central Time. Default: 17:30. Posts on the first "
+                "check after this time (checks run every ~4 minutes).",
+    },
+    {
+        "key": "weekly_report_lookback_days",
+        "label": "Weekly Status Report — Lookback (days)",
+        "help": "How far back to look for still-open items. Default: 7.",
+    },
+    {
         "key": "client_contact_spreadsheet_id",
         "label": "Client Contact Status — Google Sheet ID",
         "help": "Spreadsheet ID for the Client Contact Status tracker (case no in "

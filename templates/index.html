@@ -952,6 +952,42 @@
       </div>
     </div>
 
+    <!-- Weekly Status Report -->
+    <div class="cmd-card">
+      <div class="cmd-header" style="background:#eef2ff;color:#3730a3">
+        <i class="bi bi-bar-chart"></i> Weekly Status Report
+        <span class="trigger-tag auto"><i class="bi bi-arrow-repeat"></i> Auto</span>
+      </div>
+      <div class="cmd-body">
+        <p><strong>Posts a digest of everything still open, once a week.</strong> Default: <strong>Friday at 5:30 PM Central</strong> to the channel set in admin settings (e.g. <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">daily-pulse</code>). Lists every workflow started in the last 7 days that nobody has marked done — grouped by whether it has already been escalated.</p>
+
+        <div class="what-happens mt-1 mb-3">
+          <strong>Each line shows:</strong>
+          <ul class="mt-1 mb-0">
+            <li>The case channel (clickable)</li>
+            <li>Which action is still open — Case Setup, Client Intake, Document Verification, intros, Check Pickup, calendar checklists…</li>
+            <li>How long it's been open</li>
+            <li>What reply closes it (<span class="done-word">done</span>, <span class="done-word">confirmed</span>, <span class="done-word">scheduled</span>) — or how many checklist items are still unchecked</li>
+          </ul>
+        </div>
+
+        <div class="timeline-strip">
+          <div class="tl-row"><span class="tl-badge badge-esc">🔴 Escalated</span> The reminder already fired and still no reply — these need attention first.</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">🟡 Open</span> Still within the normal window; no escalation sent yet.</div>
+        </div>
+
+        <div class="callout amber mt-3">
+          <i class="bi bi-sliders me-1"></i>
+          <strong>Configurable in admin settings:</strong> <em>Weekly Status Report — Channel</em> (leave empty to turn the report off), <em>Day</em> (e.g. <code>friday</code>), <em>Time</em> (e.g. <code>17:30</code> or <code>5:30 PM</code>, Central), and <em>Lookback</em> in days. The bot must be a member of the target channel.
+        </div>
+
+        <div class="callout blue mt-2">
+          <i class="bi bi-clock-history me-1"></i>
+          <strong>Misses are handled.</strong> If the bot is restarting at the scheduled minute it posts on the next check instead (checks run every ~4 minutes). If it was offline more than 48 hours past the slot, that week is skipped rather than posting a stale report — and it never posts a backlog of catch-up reports at once.
+        </div>
+      </div>
+    </div>
+
     <!-- Client Contact Status (30 / 45 day no-contact alerts) -->
     <div class="cmd-card">
       <div class="cmd-header" style="background:#fef2f2;color:#991b1b">
