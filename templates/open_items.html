@@ -122,7 +122,8 @@
 
   <!-- ── FILTERS ── -->
   <div class="card-plain">
-    <form class="filter-bar" method="get" action="/open-items">
+    <form class="filter-bar" method="get" action="/open-items"
+          onchange="this.submit()">
       <div class="row g-3 align-items-end">
         <div class="col-6 col-md-2">
           <label for="from">From</label>
@@ -174,11 +175,11 @@
         </div>
       </div>
       <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
-        <button type="submit" class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600">
-          <i class="bi bi-funnel me-1"></i>Apply filters
-        </button>
         <a href="/open-items" class="btn btn-sm btn-outline-secondary">Reset to last 30 days</a>
-        <span class="muted-sm ms-auto">Dates are inclusive.</span>
+        <span class="muted-sm ms-auto">Filters apply as you change them. Dates are inclusive.</span>
+        <noscript>
+          <button type="submit" class="btn btn-sm ms-2" style="background:var(--accent);color:#fff;font-weight:600">Apply</button>
+        </noscript>
       </div>
     </form>
   </div>
