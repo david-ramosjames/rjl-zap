@@ -262,7 +262,9 @@ def open_items():
     status = request.args.get("status", "open")
     if status not in ("open", "escalated", "completed", "all"):
         status = "open"
-    person = (request.args.get("person", "") or "").strip()
+    f_attorney = (request.args.get("attorney", "") or "").strip()
+    f_paralegal = (request.args.get("paralegal", "") or "").strip()
+    f_la = (request.args.get("la", "") or "").strip()
     wtype = (request.args.get("type", "") or "").strip()
     sort = request.args.get("sort", "type")
 
@@ -275,28 +277,30 @@ def open_items():
     roles = storage.get_channel_roles()
     workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
 
-    def _role_ids(channel_id: str) -> list:
-        r = roles.get(channel_id) or {}
-        return [r.get("attorney_id"), r.get("paralegal_id"), r.get("la_id")]
-
-    def _people_for(r: dict) -> set:
-        """Everyone associated with a row for person-filtering: the case-team
-        roles from the channel topic PLUS whoever was tagged on the workflow."""
-        ids = {u for u in _role_ids(r["channel_id"]) if u}
-        ids.update(u for u in (r.get("participants") or "").split(",") if u)
-        return ids
+    def _role_of(channel_id: str, key: str):
+        return (roles.get(channel_id) or {}).get(key)
 
     # Facet values from the unfiltered window so a filter can always be widened.
+    # One person list per role, so each dropdown offers only people who
+    # actually hold that role in the window.
+    def _people_by(key: str) -> list:
+        ids = {_role_of(r["channel_id"], key) for r in rows}
+        ids.discard(None)
+        return sorted(ids, key=lambda u: names.get(u, u).lower())
+
     all_types = sorted({r["trigger_name"] for r in rows})
-    all_people = sorted(
-        {u for r in rows for u in _people_for(r)},
-        key=lambda u: names.get(u, u).lower(),
-    )
+    attorneys = _people_by("attorney_id")
+    paralegals = _people_by("paralegal_id")
+    las = _people_by("la_id")
 
     if wtype:
         rows = [r for r in rows if r["trigger_name"] == wtype]
-    if person:
-        rows = [r for r in rows if person in _people_for(r)]
+    if f_attorney:
+        rows = [r for r in rows if _role_of(r["channel_id"], "attorney_id") == f_attorney]
+    if f_paralegal:
+        rows = [r for r in rows if _role_of(r["channel_id"], "paralegal_id") == f_paralegal]
+    if f_la:
+        rows = [r for r in rows if _role_of(r["channel_id"], "la_id") == f_la]
 
     def _named(uid):
         return {"id": uid, "name": names.get(uid, uid)} if uid else None
@@ -349,9 +353,12 @@ def open_items():
         total=len(view),
         escalated_count=sum(1 for v in view if v["escalated"]),
         d_from=d_from.isoformat(), d_to=d_to.isoformat(),
-        status=status, person=person, wtype=wtype, sort=sort,
+        status=status, wtype=wtype, sort=sort,
+        f_attorney=f_attorney, f_paralegal=f_paralegal, f_la=f_la,
         all_types=[(t, WORKFLOW_LABELS.get(t, t)) for t in all_types],
-        all_people=[(u, names.get(u, u)) for u in all_people],
+        attorneys=[(u, names.get(u, u)) for u in attorneys],
+        paralegals=[(u, names.get(u, u)) for u in paralegals],
+        las=[(u, names.get(u, u)) for u in las],
         has_workspace=bool(workspace),
     )
 

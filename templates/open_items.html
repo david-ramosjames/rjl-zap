@@ -152,11 +152,29 @@
           </select>
         </div>
         <div class="col-6 col-md-2">
-          <label for="person">Person (any role)</label>
-          <select class="form-select" id="person" name="person">
-            <option value="">Anyone</option>
-            {% for uid, name in all_people %}
-              <option value="{{ uid }}" {% if person==uid %}selected{% endif %}>{{ name }}</option>
+          <label for="attorney">Attorney</label>
+          <select class="form-select" id="attorney" name="attorney">
+            <option value="">Any attorney</option>
+            {% for uid, name in attorneys %}
+              <option value="{{ uid }}" {% if f_attorney==uid %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label for="paralegal">Paralegal</label>
+          <select class="form-select" id="paralegal" name="paralegal">
+            <option value="">Any paralegal</option>
+            {% for uid, name in paralegals %}
+              <option value="{{ uid }}" {% if f_paralegal==uid %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label for="la">LA</label>
+          <select class="form-select" id="la" name="la">
+            <option value="">Any LA</option>
+            {% for uid, name in las %}
+              <option value="{{ uid }}" {% if f_la==uid %}selected{% endif %}>{{ name }}</option>
             {% endfor %}
           </select>
         </div>
