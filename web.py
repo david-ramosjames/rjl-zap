@@ -272,27 +272,45 @@ def open_items():
 
     rows = storage.workflows_in_window(start_ts, end_ts, status=status)
     names = storage.get_user_names()
+    roles = storage.get_channel_roles()
     workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
 
-    # Facet values are computed from the unfiltered window so a filter can
-    # always be widened again from the dropdowns.
+    def _role_ids(channel_id: str) -> list:
+        r = roles.get(channel_id) or {}
+        return [r.get("attorney_id"), r.get("paralegal_id"), r.get("la_id")]
+
+    def _people_for(r: dict) -> set:
+        """Everyone associated with a row for person-filtering: the case-team
+        roles from the channel topic PLUS whoever was tagged on the workflow."""
+        ids = {u for u in _role_ids(r["channel_id"]) if u}
+        ids.update(u for u in (r.get("participants") or "").split(",") if u)
+        return ids
+
+    # Facet values from the unfiltered window so a filter can always be widened.
     all_types = sorted({r["trigger_name"] for r in rows})
     all_people = sorted(
-        {u for r in rows for u in (r.get("participants") or "").split(",") if u},
+        {u for r in rows for u in _people_for(r)},
         key=lambda u: names.get(u, u).lower(),
     )
 
     if wtype:
         rows = [r for r in rows if r["trigger_name"] == wtype]
     if person:
-        rows = [r for r in rows if person in (r.get("participants") or "").split(",")]
+        rows = [r for r in rows if person in _people_for(r)]
+
+    def _named(uid):
+        return {"id": uid, "name": names.get(uid, uid)} if uid else None
 
     now = __import__("time").time()
     view = []
     for r in rows:
+        cr = roles.get(r["channel_id"]) or {}
         pids = [u for u in (r.get("participants") or "").split(",") if u]
+        # Best channel name: the one saved on the workflow, else the roles
+        # table (backfilled from topics), else the raw ID.
+        cname = r.get("channel_name") or cr.get("channel_name") or r["channel_id"]
         view.append({
-            "channel_name": r.get("channel_name") or r["channel_id"],
+            "channel_name": cname,
             "channel_id": r["channel_id"],
             "type": r["trigger_name"],
             "type_label": WORKFLOW_LABELS.get(r["trigger_name"], r["trigger_name"]),
@@ -304,15 +322,24 @@ def open_items():
             "open_items": r.get("open_items") or 0,
             "done_word": WORKFLOW_DONE_WORD.get(r["trigger_name"], "done"),
             "people": [{"id": u, "name": names.get(u, u)} for u in pids],
+            "attorney": _named(cr.get("attorney_id")),
+            "paralegal": _named(cr.get("paralegal_id")),
+            "la": _named(cr.get("la_id")),
             "link": _slack_permalink(workspace, r["channel_id"], r["parent_ts"]),
         })
 
+    def _rolename(v, key):
+        return (v[key]["name"].lower() if v.get(key) else "~")  # "~" sorts blanks last
+
     sorters = {
-        "type":    lambda v: (v["type_label"].lower(), -v["opened_ts"]),
-        "channel": lambda v: (v["channel_name"].lower(), -v["opened_ts"]),
-        "oldest":  lambda v: v["opened_ts"],
-        "newest":  lambda v: -v["opened_ts"],
-        "status":  lambda v: (not v["escalated"], -v["opened_ts"]),
+        "type":      lambda v: (v["type_label"].lower(), -v["opened_ts"]),
+        "channel":   lambda v: (v["channel_name"].lower(), -v["opened_ts"]),
+        "oldest":    lambda v: v["opened_ts"],
+        "newest":    lambda v: -v["opened_ts"],
+        "status":    lambda v: (not v["escalated"], -v["opened_ts"]),
+        "attorney":  lambda v: (_rolename(v, "attorney"), -v["opened_ts"]),
+        "paralegal": lambda v: (_rolename(v, "paralegal"), -v["opened_ts"]),
+        "la":        lambda v: (_rolename(v, "la"), -v["opened_ts"]),
     }
     view.sort(key=sorters.get(sort, sorters["type"]))
 

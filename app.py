@@ -1397,6 +1397,9 @@ def handle_channel_created(event, client):
 # match both forms.
 _TOPIC_ATTORNEY_RE  = re.compile(r"attorney[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 _TOPIC_PARALEGAL_RE = re.compile(r"paralegal[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
+# LA (legal assistant) — "LA @Valeria". \bLA\b so it doesn't match inside
+# other words; the char class allows the space / "@" between label and mention.
+_TOPIC_LA_RE        = re.compile(r"\bLA\b[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>", re.IGNORECASE)
 # Case channels end in -<digits>, e.g. "lacayoarauzjose-1559". Auto-triggers
 # only fire for matching channels; everything else still gets the bot but
 # stays silent until someone runs a manual @-mention command.
@@ -1437,6 +1440,11 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
             name, channel_id,
         )
         return
+
+    # Capture Attorney / Paralegal / LA for the Open Items page. This runs for
+    # ANY case channel regardless of age — a settled channel's topic still
+    # tells us the case team — so it happens before the freshness gate below.
+    _capture_channel_roles(client, channel_id, topic_text, name)
 
     if created_at and (time.time() - created_at > _STALE_CHANNEL_SECONDS):
         age_h = (time.time() - created_at) / 3600
@@ -1500,6 +1508,105 @@ def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
 
 def _lookup_channel_name(client, channel_id: str) -> str:
     return _lookup_channel_meta(client, channel_id)[0]
+
+
+def _capture_channel_roles(client, channel_id: str, topic_text: str,
+                           channel_name: str) -> None:
+    """Parse Attorney / Paralegal / LA from a channel topic and store them,
+    plus cache their display names, so the Open Items page can show and sort
+    by role. Only writes roles it actually finds (COALESCE upsert), so a
+    partial topic never clears a previously-known role."""
+    if not channel_id or not topic_text:
+        return
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        bot_id = None
+    attorney = _first_match(_TOPIC_ATTORNEY_RE, topic_text, exclude=bot_id)
+    paralegal = _first_match(_TOPIC_PARALEGAL_RE, topic_text, exclude=bot_id)
+    la = _first_match(_TOPIC_LA_RE, topic_text, exclude=bot_id)
+    if not (attorney or paralegal or la):
+        return
+    try:
+        storage.upsert_channel_roles(channel_id, channel_name, attorney, paralegal, la)
+    except Exception:
+        log.exception("could not store channel roles for %s", channel_id)
+        return
+    _cache_people_async(client, [attorney, paralegal, la])
+
+
+def backfill_channel_roles(client) -> None:
+    """One pass over every public channel, reading each channel's name + topic
+    straight from conversations.list (no per-channel API call) and recording
+    the Attorney / Paralegal / LA it names. Runs at startup and daily so the
+    Open Items page has roles for existing/old channels, not just ones whose
+    topic changed while the bot was running."""
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        bot_id = None
+
+    cursor = None
+    scanned = matched = 0
+    people: set[str] = set()
+    while True:
+        try:
+            resp = client.conversations_list(
+                types="public_channel", exclude_archived=True,
+                limit=1000, cursor=cursor,
+            )
+        except Exception:
+            log.exception("backfill_channel_roles: conversations.list failed")
+            return
+        for ch in resp.get("channels", []):
+            scanned += 1
+            name = ch.get("name", "") or ""
+            if not _has_case_number(name):
+                continue
+            topic = (ch.get("topic") or {}).get("value", "") or ""
+            if not topic:
+                continue
+            attorney = _first_match(_TOPIC_ATTORNEY_RE, topic, exclude=bot_id)
+            paralegal = _first_match(_TOPIC_PARALEGAL_RE, topic, exclude=bot_id)
+            la = _first_match(_TOPIC_LA_RE, topic, exclude=bot_id)
+            if not (attorney or paralegal or la):
+                continue
+            try:
+                storage.upsert_channel_roles(ch["id"], name, attorney, paralegal, la)
+                matched += 1
+                for u in (attorney, paralegal, la):
+                    if u:
+                        people.add(u)
+            except Exception:
+                log.exception("backfill: upsert failed for %s", ch.get("id"))
+        cursor = (resp.get("response_metadata") or {}).get("next_cursor")
+        if not cursor:
+            break
+
+    _cache_people_async(client, people)
+    log.info("channel-roles backfill: scanned %d channels, stored roles for %d",
+             scanned, matched)
+
+
+def backfill_channel_roles_async(client) -> None:
+    threading.Thread(target=backfill_channel_roles, args=(client,), daemon=True).start()
+
+
+_ROLES_BACKFILL_INTERVAL_SECONDS = 24 * 60 * 60
+_ROLES_BACKFILL_LAST_KEY = "channel_roles_backfill_at"
+
+
+def fire_channel_roles_backfill(client) -> None:
+    """Daily refresh of channel roles, gated like the other daily sweeps so a
+    fast reminder tick doesn't re-scan every few minutes."""
+    try:
+        last = float(storage.get_config(_ROLES_BACKFILL_LAST_KEY, default="0") or 0)
+    except ValueError:
+        last = 0.0
+    if time.time() - last < _ROLES_BACKFILL_INTERVAL_SECONDS:
+        return
+    storage.set_config(_ROLES_BACKFILL_LAST_KEY, str(time.time()))
+    backfill_channel_roles(client)
 
 
 def _attorney_from_channel_topic(client, channel_id: str) -> str | None:
@@ -1809,6 +1916,9 @@ def main() -> None:
     threading.Thread(target=web.start, daemon=True).start()
     if os.getenv("AUTO_JOIN_CHANNELS", "1") not in ("0", "false", "False", ""):
         auto_join.join_all_public_channels_async(app.client)
+    # Populate Attorney/Paralegal/LA for existing channels so the Open Items
+    # page has roles immediately, not only after a topic changes.
+    backfill_channel_roles_async(app.client)
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
 

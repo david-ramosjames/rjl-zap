@@ -89,6 +89,7 @@ def _tick(client) -> None:
         ("deferred-actions", app.fire_due_deferred_actions),
         ("client-contact", app.fire_client_contact_alerts),
         ("weekly-report", app.fire_weekly_status_report),
+        ("channel-roles-backfill", app.fire_channel_roles_backfill),
     ):
         try:
             sweep(client)

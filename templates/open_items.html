@@ -151,7 +151,7 @@
           </select>
         </div>
         <div class="col-6 col-md-2">
-          <label for="person">Person tagged</label>
+          <label for="person">Person (any role)</label>
           <select class="form-select" id="person" name="person">
             <option value="">Anyone</option>
             {% for uid, name in all_people %}
@@ -162,11 +162,14 @@
         <div class="col-6 col-md-2">
           <label for="sort">Sort by</label>
           <select class="form-select" id="sort" name="sort">
-            <option value="type"    {% if sort=='type' %}selected{% endif %}>Type</option>
-            <option value="status"  {% if sort=='status' %}selected{% endif %}>Status (escalated first)</option>
-            <option value="oldest"  {% if sort=='oldest' %}selected{% endif %}>Oldest first</option>
-            <option value="newest"  {% if sort=='newest' %}selected{% endif %}>Newest first</option>
-            <option value="channel" {% if sort=='channel' %}selected{% endif %}>Channel</option>
+            <option value="type"      {% if sort=='type' %}selected{% endif %}>Type</option>
+            <option value="status"    {% if sort=='status' %}selected{% endif %}>Status (escalated first)</option>
+            <option value="oldest"    {% if sort=='oldest' %}selected{% endif %}>Oldest first</option>
+            <option value="newest"    {% if sort=='newest' %}selected{% endif %}>Newest first</option>
+            <option value="channel"   {% if sort=='channel' %}selected{% endif %}>Channel</option>
+            <option value="attorney"  {% if sort=='attorney' %}selected{% endif %}>Attorney</option>
+            <option value="paralegal" {% if sort=='paralegal' %}selected{% endif %}>Paralegal</option>
+            <option value="la"        {% if sort=='la' %}selected{% endif %}>LA</option>
           </select>
         </div>
       </div>
@@ -197,7 +200,9 @@
             <th>Channel</th>
             <th>Type</th>
             <th>Status</th>
-            <th>Person tagged</th>
+            <th>Attorney</th>
+            <th>Paralegal</th>
+            <th>LA</th>
             <th class="hide-sm">Opened</th>
             <th class="hide-sm">Age</th>
             <th>Waiting on</th>
@@ -224,13 +229,9 @@
                 <span class="pill pill-open">Open</span>
               {% endif %}
             </td>
-            <td class="who">
-              {% if r.people %}
-                {{ r.people | map(attribute='name') | join(', ') }}
-              {% else %}
-                <span class="none">—</span>
-              {% endif %}
-            </td>
+            <td class="who">{% if r.attorney %}{{ r.attorney.name }}{% else %}<span class="none">—</span>{% endif %}</td>
+            <td class="who">{% if r.paralegal %}{{ r.paralegal.name }}{% else %}<span class="none">—</span>{% endif %}</td>
+            <td class="who">{% if r.la %}{{ r.la.name }}{% else %}<span class="none">—</span>{% endif %}</td>
             <td class="hide-sm muted-sm">{{ r.opened }}</td>
             <td class="hide-sm muted-sm">
               {% if r.age_days == 0 %}today{% else %}{{ r.age_days }}d{% endif %}
@@ -271,7 +272,7 @@
     <strong>Open</strong> means it's still within the normal window.
     Items disappear from this list as soon as someone replies <code>done</code>
     (or <code>confirmed</code> / <code>scheduled</code>) in the Slack thread.
-    <span class="muted-sm">Person tagged is recorded when the workflow starts, so items created before this page was added may show “—”.</span>
+    <span class="muted-sm">Attorney / Paralegal / LA come from each channel's topic (<em>Attorney @X | Paralegal @Y | LA @Z</em>), refreshed daily — so a role shows “—” only when the topic doesn't name that role. Filtering by a person matches any of their roles.</span>
   </div>
 
 </div>

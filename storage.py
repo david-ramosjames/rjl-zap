@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS user_names (
     updated_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS channel_roles (
+    channel_id TEXT PRIMARY KEY,
+    channel_name TEXT,
+    attorney_id TEXT,
+    paralegal_id TEXT,
+    la_id TEXT,
+    updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
@@ -319,6 +328,34 @@ def known_user_ids() -> set:
     with connect() as conn:
         rows = conn.execute("SELECT user_id FROM user_names").fetchall()
         return {r["user_id"] for r in rows}
+
+
+def upsert_channel_roles(channel_id: str, channel_name: str,
+                         attorney_id: Optional[str], paralegal_id: Optional[str],
+                         la_id: Optional[str]) -> None:
+    """Store the Attorney / Paralegal / LA parsed from a channel topic. Only
+    overwrites a role with a non-null value, so a topic that names just the
+    attorney doesn't wipe a previously-known paralegal."""
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO channel_roles "
+            "(channel_id, channel_name, attorney_id, paralegal_id, la_id, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(channel_id) DO UPDATE SET "
+            "  channel_name = COALESCE(excluded.channel_name, channel_roles.channel_name), "
+            "  attorney_id  = COALESCE(excluded.attorney_id,  channel_roles.attorney_id), "
+            "  paralegal_id = COALESCE(excluded.paralegal_id, channel_roles.paralegal_id), "
+            "  la_id        = COALESCE(excluded.la_id,        channel_roles.la_id), "
+            "  updated_at   = excluded.updated_at",
+            (channel_id, channel_name or None, attorney_id, paralegal_id, la_id, time.time()),
+        )
+
+
+def get_channel_roles() -> dict:
+    """channel_id → {channel_name, attorney_id, paralegal_id, la_id}."""
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM channel_roles").fetchall()
+        return {r["channel_id"]: dict(r) for r in rows}
 
 
 def completed_workflow_count_since(cutoff_ts: float) -> int:
