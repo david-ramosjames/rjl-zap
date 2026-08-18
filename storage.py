@@ -15,7 +15,15 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at REAL NOT NULL,
     last_reminded_at REAL NOT NULL,
     completed_at REAL,
+    participants TEXT,
+    channel_name TEXT,
     UNIQUE(channel_id, parent_ts)
+);
+
+CREATE TABLE IF NOT EXISTS user_names (
+    user_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    updated_at REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -94,6 +102,8 @@ def init_db() -> None:
             ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
             ("scheduled_messages", "skip_if_complete_parent_ts", "TEXT"),
             ("deferred_actions",   "attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("workflows",          "participants", "TEXT"),
+            ("workflows",          "channel_name", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -117,13 +127,19 @@ def create_workflow(
     parent_ts: str,
     trigger_name: str,
     items: Iterable[Tuple[str, str]],
+    participants: Optional[Iterable[str]] = None,
+    channel_name: str = "",
 ) -> int:
+    """`participants` are the Slack user IDs tagged on the workflow; they are
+    stored comma-separated so the Open Items page can filter by person."""
     now = time.time()
+    parts = ",".join(u for u in (participants or []) if u) or None
     with connect() as conn:
         cur = conn.execute(
-            "INSERT INTO workflows (channel_id, parent_ts, trigger_name, created_at, last_reminded_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (channel_id, parent_ts, trigger_name, now, now),
+            "INSERT INTO workflows (channel_id, parent_ts, trigger_name, created_at, "
+            " last_reminded_at, participants, channel_name) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (channel_id, parent_ts, trigger_name, now, now, parts, channel_name or None),
         )
         workflow_id = cur.lastrowid
         for text, ts in items:
@@ -237,6 +253,72 @@ def open_workflows_since(cutoff_ts: float) -> List[dict]:
             (cutoff_ts,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+_WORKFLOW_ANNOTATIONS = (
+    "  (SELECT COUNT(*) FROM scheduled_messages s "
+    "     WHERE s.channel_id = w.channel_id AND s.thread_ts = w.parent_ts "
+    "       AND s.check_replies_first = 1 AND s.sent_at IS NOT NULL) "
+    "    AS escalations_sent, "
+    "  (SELECT COUNT(*) FROM scheduled_messages s "
+    "     WHERE s.channel_id = w.channel_id AND s.thread_ts = w.parent_ts "
+    "       AND s.check_replies_first = 1 AND s.sent_at IS NULL) "
+    "    AS escalations_pending, "
+    "  (SELECT COUNT(*) FROM items i "
+    "     WHERE i.workflow_id = w.id AND i.completed_at IS NULL) "
+    "    AS open_items "
+)
+
+
+def workflows_in_window(start_ts: float, end_ts: float,
+                        status: str = "open") -> List[dict]:
+    """Workflows created within [start_ts, end_ts], annotated the same way as
+    open_workflows_since. `status` is 'open', 'escalated', 'completed', or
+    'all'. Ordering is left to the caller (the Open Items page sorts)."""
+    where = ["w.created_at >= ?", "w.created_at < ?"]
+    params: list = [start_ts, end_ts]
+    if status == "open":
+        where.append("w.completed_at IS NULL")
+    elif status == "completed":
+        where.append("w.completed_at IS NOT NULL")
+    elif status == "escalated":
+        where.append("w.completed_at IS NULL")
+        where.append(
+            "(SELECT COUNT(*) FROM scheduled_messages s "
+            "  WHERE s.channel_id = w.channel_id AND s.thread_ts = w.parent_ts "
+            "    AND s.check_replies_first = 1 AND s.sent_at IS NOT NULL) > 0"
+        )
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT w.*, " + _WORKFLOW_ANNOTATIONS +
+            "FROM workflows w WHERE " + " AND ".join(where) +
+            " ORDER BY w.created_at DESC",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def upsert_user_name(user_id: str, display_name: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO user_names (user_id, display_name, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET "
+            "  display_name = excluded.display_name, updated_at = excluded.updated_at",
+            (user_id, display_name, time.time()),
+        )
+
+
+def get_user_names() -> dict:
+    with connect() as conn:
+        rows = conn.execute("SELECT user_id, display_name FROM user_names").fetchall()
+        return {r["user_id"]: r["display_name"] for r in rows}
+
+
+def known_user_ids() -> set:
+    with connect() as conn:
+        rows = conn.execute("SELECT user_id FROM user_names").fetchall()
+        return {r["user_id"] for r in rows}
 
 
 def completed_workflow_count_since(cutoff_ts: float) -> int:

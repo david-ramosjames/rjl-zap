@@ -213,6 +213,122 @@ def index():
     return render_template("index.html", settings=SETTINGS, cfg=cfg, saved=saved)
 
 
+# trigger_name → label shown on the Open Items page. Kept here (rather than
+# imported from app) so the web thread never imports the Slack app module.
+WORKFLOW_LABELS = {
+    "attorney_intro":      "Attorney Intro",
+    "paralegal_intro":     "Paralegal Intro",
+    "case_setup":          "Case Setup",
+    "client_intake":       "Client Intake",
+    "doc_verification":    "Document Verification",
+    "check_pickup":        "Check Pickup",
+    "calendar_sol":        "Calendar SOL",
+    "mediation_checklist": "Mediation Checklist",
+    "disbursement":        "30-Day Disbursement",
+    "answer_filed":        "Calendar — Answer Filed",
+    "discovery_received":  "Calendar — Discovery Requests",
+    "scheduling_order":    "Calendar — Scheduling Order",
+}
+WORKFLOW_DONE_WORD = {"doc_verification": "confirmed", "check_pickup": "scheduled"}
+
+
+def _slack_permalink(workspace_url: str, channel_id: str, parent_ts: str) -> str:
+    """https://acme.slack.com/archives/C123/p1780000000000100 — Slack's
+    permalink form is the ts with the dot removed, prefixed with 'p'."""
+    if not (workspace_url and channel_id and parent_ts):
+        return ""
+    return f"{workspace_url}/archives/{channel_id}/p{parent_ts.replace('.', '')}"
+
+
+def _parse_date(raw: str):
+    from datetime import datetime
+    try:
+        return datetime.strptime((raw or "").strip(), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+@flask_app.route("/open-items", methods=["GET"])
+@_requires_auth
+def open_items():
+    from datetime import date, datetime, time as dtime, timedelta
+
+    today = date.today()
+    d_from = _parse_date(request.args.get("from", "")) or (today - timedelta(days=30))
+    d_to = _parse_date(request.args.get("to", "")) or today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+
+    status = request.args.get("status", "open")
+    if status not in ("open", "escalated", "completed", "all"):
+        status = "open"
+    person = (request.args.get("person", "") or "").strip()
+    wtype = (request.args.get("type", "") or "").strip()
+    sort = request.args.get("sort", "type")
+
+    start_ts = datetime.combine(d_from, dtime.min).timestamp()
+    # exclusive upper bound at midnight after d_to, so d_to is inclusive
+    end_ts = datetime.combine(d_to + timedelta(days=1), dtime.min).timestamp()
+
+    rows = storage.workflows_in_window(start_ts, end_ts, status=status)
+    names = storage.get_user_names()
+    workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
+
+    # Facet values are computed from the unfiltered window so a filter can
+    # always be widened again from the dropdowns.
+    all_types = sorted({r["trigger_name"] for r in rows})
+    all_people = sorted(
+        {u for r in rows for u in (r.get("participants") or "").split(",") if u},
+        key=lambda u: names.get(u, u).lower(),
+    )
+
+    if wtype:
+        rows = [r for r in rows if r["trigger_name"] == wtype]
+    if person:
+        rows = [r for r in rows if person in (r.get("participants") or "").split(",")]
+
+    now = __import__("time").time()
+    view = []
+    for r in rows:
+        pids = [u for u in (r.get("participants") or "").split(",") if u]
+        view.append({
+            "channel_name": r.get("channel_name") or r["channel_id"],
+            "channel_id": r["channel_id"],
+            "type": r["trigger_name"],
+            "type_label": WORKFLOW_LABELS.get(r["trigger_name"], r["trigger_name"]),
+            "opened_ts": r["created_at"],
+            "opened": datetime.fromtimestamp(r["created_at"]).strftime("%b %-d, %Y"),
+            "age_days": max(0, int((now - r["created_at"]) // 86400)),
+            "escalated": bool(r.get("escalations_sent")),
+            "completed": bool(r.get("completed_at")),
+            "open_items": r.get("open_items") or 0,
+            "done_word": WORKFLOW_DONE_WORD.get(r["trigger_name"], "done"),
+            "people": [{"id": u, "name": names.get(u, u)} for u in pids],
+            "link": _slack_permalink(workspace, r["channel_id"], r["parent_ts"]),
+        })
+
+    sorters = {
+        "type":    lambda v: (v["type_label"].lower(), -v["opened_ts"]),
+        "channel": lambda v: (v["channel_name"].lower(), -v["opened_ts"]),
+        "oldest":  lambda v: v["opened_ts"],
+        "newest":  lambda v: -v["opened_ts"],
+        "status":  lambda v: (not v["escalated"], -v["opened_ts"]),
+    }
+    view.sort(key=sorters.get(sort, sorters["type"]))
+
+    return render_template(
+        "open_items.html",
+        rows=view,
+        total=len(view),
+        escalated_count=sum(1 for v in view if v["escalated"]),
+        d_from=d_from.isoformat(), d_to=d_to.isoformat(),
+        status=status, person=person, wtype=wtype, sort=sort,
+        all_types=[(t, WORKFLOW_LABELS.get(t, t)) for t in all_types],
+        all_people=[(u, names.get(u, u)) for u in all_people],
+        has_workspace=bool(workspace),
+    )
+
+
 @flask_app.route("/settings", methods=["POST"])
 @_requires_auth
 def save_settings():

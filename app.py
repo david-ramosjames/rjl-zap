@@ -39,6 +39,54 @@ HELP_PHRASES = ("help", "faq", "commands", "how do i use", "what can you do", "w
 FAQ_URL = os.getenv("FAQ_URL", "https://rjl-zap.up.railway.app/")
 
 
+# channel_id → name, resolved once per process (names rarely change and a
+# wrong cached name only affects display on the Open Items page).
+_CHANNEL_NAME_CACHE: dict[str, str] = {}
+
+
+def _channel_name_cached(client, channel_id: str) -> str:
+    if not channel_id:
+        return ""
+    hit = _CHANNEL_NAME_CACHE.get(channel_id)
+    if hit is not None:
+        return hit
+    try:
+        name = (client.conversations_info(channel=channel_id).get("channel") or {}).get("name", "") or ""
+    except Exception:
+        log.debug("could not resolve channel name for %s", channel_id, exc_info=True)
+        return ""
+    if name:
+        _CHANNEL_NAME_CACHE[channel_id] = name
+    return name
+
+
+def _cache_people_async(client, user_ids) -> None:
+    """Resolve Slack display names for any unseen user IDs and store them, so
+    the Open Items page can show and filter by person without live API calls.
+    Fire-and-forget — never blocks posting a workflow."""
+    wanted = {u for u in (user_ids or []) if u}
+    if not wanted:
+        return
+
+    def _work():
+        try:
+            known = storage.known_user_ids()
+        except Exception:
+            log.debug("could not read cached user names", exc_info=True)
+            return
+        for uid in wanted - known:
+            try:
+                u = client.users_info(user=uid).get("user") or {}
+                prof = u.get("profile") or {}
+                name = (prof.get("real_name") or u.get("real_name")
+                        or prof.get("display_name") or u.get("name") or uid)
+                storage.upsert_user_name(uid, name)
+            except Exception:
+                log.debug("could not resolve display name for %s", uid, exc_info=True)
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
 def _ids_from_config(key: str) -> list[str]:
     raw = storage.get_config(key)
     return [uid.strip() for uid in raw.split(",") if uid.strip()]
@@ -288,7 +336,10 @@ def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> Non
             text=template.format(mentions=mention_str),
         )
 
-    storage.create_workflow(channel, parent_ts, "mediation_checklist", [])
+    storage.create_workflow(channel, parent_ts, "mediation_checklist", [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, participants)
     log.info("started mediation workflow channel=%s parent_ts=%s participants=%s",
              channel, parent_ts, participants)
 
@@ -371,7 +422,10 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
 
     # Register the workflow FIRST so the deadline messages' skip-if-complete
     # lookup (keyed on parent_ts) resolves to a real workflow row.
-    storage.create_workflow(channel, parent_ts, "disbursement", [])
+    storage.create_workflow(channel, parent_ts, "disbursement", [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, participants)
 
     # Each step in the sequence posts as its OWN top-level channel message
     # (thread_ts="") so replies stay scoped to that specific task instead of
@@ -451,7 +505,10 @@ def _start_followup_workflow(
         done_keyword=cfg.done_keyword,
     )
 
-    storage.create_workflow(channel, parent_ts, trigger_name, [])
+    storage.create_workflow(channel, parent_ts, trigger_name, [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, participants)
     log.info("started %s workflow channel=%s parent_ts=%s participants=%s",
              trigger_name, channel, parent_ts, participants)
 
@@ -517,7 +574,10 @@ def _auto_start_followup(
         check_replies_first=True,
         done_keyword=cfg.done_keyword,
     )
-    storage.create_workflow(channel, parent_ts, trigger_name, [])
+    storage.create_workflow(channel, parent_ts, trigger_name, [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, participants)
     log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
 
 
@@ -1186,7 +1246,11 @@ def _auto_start_trigger_workflow(client, channel: str, trigger: TriggerConfig) -
             f"or reply *done* / *complete* in this thread to close the checklist."
         ),
     )
-    storage.create_workflow(channel, parent_ts, trigger.name, item_records)
+    _trigger_people = _ids_from_config(trigger.mentions_setting_key) if trigger.mentions_setting_key else []
+    storage.create_workflow(channel, parent_ts, trigger.name, item_records,
+                            participants=_trigger_people,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, _trigger_people)
     log.info("auto-started %s workflow channel=%s parent_ts=%s items=%d",
              trigger.name, channel, parent_ts, len(item_records))
 
@@ -1217,7 +1281,11 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
         ),
     )
 
-    storage.create_workflow(channel, parent_ts, trigger.name, item_records)
+    _trigger_people = _ids_from_config(trigger.mentions_setting_key) if trigger.mentions_setting_key else []
+    storage.create_workflow(channel, parent_ts, trigger.name, item_records,
+                            participants=_trigger_people,
+                            channel_name=_channel_name_cached(client, channel))
+    _cache_people_async(client, _trigger_people)
     log.info("started workflow channel=%s parent_ts=%s trigger=%s items=%d",
              channel, parent_ts, trigger.name, len(item_records))
 
@@ -1735,6 +1803,7 @@ def _maybe_finalize(client, workflow_id: int) -> None:
 def main() -> None:
     storage.init_db()
     _migrate_client_contact_gate()
+    _capture_workspace_url()
     _log_startup_config()
     reminders.start_reminder_loop(app.client)
     threading.Thread(target=web.start, daemon=True).start()
@@ -1756,6 +1825,19 @@ def _migrate_client_contact_gate() -> None:
     storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, "0")
     storage.set_config(marker, str(time.time()))
     log.info("client contact gate timestamp reset (one-shot v2 migration)")
+
+
+def _capture_workspace_url() -> None:
+    """Store the workspace URL so the Open Items page can build Slack deep
+    links (https://<workspace>.slack.com/archives/<channel>/p<ts>)."""
+    try:
+        url = (app.client.auth_test().get("url") or "").rstrip("/")
+    except Exception:
+        log.debug("auth_test failed while capturing workspace URL", exc_info=True)
+        return
+    if url:
+        storage.set_config("slack_workspace_url", url)
+        log.info("workspace URL for deep links: %s", url)
 
 
 def _log_startup_config() -> None:
