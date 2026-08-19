@@ -13,7 +13,9 @@ import recent_contact
 import reminders
 import storage
 import web
+import email_reports
 from config import (
+    WORKFLOW_BUCKETS,
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
@@ -904,6 +906,116 @@ def _format_weekly_report(rows: list[dict], completed: int,
         f"{lookback_days:.0f} days._"
     )
     return "\n".join(parts)
+
+
+# ── Per-bucket status emails ──────────────────────────────────────────
+_EMAIL_MAX_LATENESS_SECONDS = 48 * 3600
+_EMAIL_ADDR_RE = re.compile(r"[^\s,;]+@[^\s,;]+")
+
+
+def _emails_from_config(key: str) -> list[str]:
+    raw = storage.get_config(key, default="") or ""
+    return _EMAIL_ADDR_RE.findall(raw)
+
+
+def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list, dict]:
+    """Open items in the bucket over the email lookback window, plus a summary
+    dict (created / open / escalated). Escalated rows first, then oldest."""
+    from datetime import datetime
+    try:
+        lookback = float(storage.get_config("email_lookback_days", default="60") or 60)
+    except ValueError:
+        lookback = 60.0
+    now = time.time()
+    start = now - lookback * 86400
+    allrows = storage.workflows_in_window(start, now + 1, status="all")
+    names = storage.get_user_names()
+    roles = storage.get_channel_roles()
+    workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
+    trigset = set(trigger_names)
+
+    summary = {"created": 0, "open": 0, "escalated": 0}
+    view = []
+    for r in allrows:
+        if r["trigger_name"] not in trigset:
+            continue
+        summary["created"] += 1
+        if r.get("completed_at"):
+            continue
+        summary["open"] += 1
+        escalated = bool(r.get("escalations_sent"))
+        if escalated:
+            summary["escalated"] += 1
+        cr = roles.get(r["channel_id"]) or {}
+        def nm(uid):
+            return names.get(uid, uid) if uid else ""
+        cname = r.get("channel_name") or cr.get("channel_name") or r["channel_id"]
+        view.append({
+            "channel_name": cname,
+            "type_label": web.WORKFLOW_LABELS.get(r["trigger_name"], r["trigger_name"]),
+            "attorney": nm(cr.get("attorney_id")),
+            "paralegal": nm(cr.get("paralegal_id")),
+            "la": nm(cr.get("la_id")),
+            "opened": datetime.fromtimestamp(r["created_at"]).strftime("%b %d, %Y"),
+            "opened_ts": r["created_at"],
+            "age": ("today" if (now - r["created_at"]) < 86400
+                    else f"{int((now - r['created_at'])//86400)}d"),
+            "waiting": (f"{r['open_items']} item(s) unchecked" if r.get("open_items")
+                        else "reply " + web.WORKFLOW_DONE_WORD.get(r["trigger_name"], "done")),
+            "escalated": escalated,
+            "link": email_reports.permalink(workspace, r["channel_id"], r["parent_ts"]),
+        })
+    view.sort(key=lambda v: (not v["escalated"], v["opened_ts"]))
+    return view, summary
+
+
+def fire_bucket_emails(client) -> None:
+    """Send each bucket's status email on its configured weekly schedule. Each
+    bucket is independent (own recipients / day / time / last-sent marker)."""
+    if not email_reports.smtp_configured():
+        return
+    if _CLIENT_CONTACT_TZ is None:
+        return
+    from datetime import datetime as _dt
+    now_local = _dt.now(_CLIENT_CONTACT_TZ)
+
+    for key, label, trigs in WORKFLOW_BUCKETS:
+        recipients = _emails_from_config(f"email_{key}_recipients")
+        if not recipients:
+            continue
+        day = _parse_report_day(storage.get_config(f"email_{key}_day", default=""), default=0)
+        hour, minute = _parse_report_time(
+            storage.get_config(f"email_{key}_time", default=""), default=(8, 0))
+        occ = _last_scheduled_occurrence(now_local, day, hour, minute)
+        if occ is None:
+            continue
+        last_key = f"email_{key}_last_sent_at"
+        try:
+            last = float(storage.get_config(last_key, default="0") or 0)
+        except ValueError:
+            last = 0.0
+        if last >= occ.timestamp():
+            continue
+        if now_local.timestamp() - occ.timestamp() > _EMAIL_MAX_LATENESS_SECONDS:
+            storage.set_config(last_key, str(occ.timestamp()))
+            log.info("bucket email '%s': slot missed by >48h — skipping", key)
+            continue
+
+        rows, summary = _bucket_email_rows(key, trigs)
+        try:
+            lookback = int(float(storage.get_config("email_lookback_days", default="60") or 60))
+        except ValueError:
+            lookback = 60
+        window_desc = (f"Open {label} items — last {lookback} days · "
+                       f"{now_local.strftime('%A %b %d, %Y')}")
+        subject = f"[RJL-zap] {label} — {summary['open']} open, {summary['escalated']} escalated"
+        html = email_reports.build_bucket_email_html(label, window_desc, summary, rows)
+        if email_reports.send_email(recipients, subject, html):
+            storage.set_config(last_key, str(time.time()))
+            log.info("bucket email '%s' sent to %d — %d open / %d escalated",
+                     key, len(recipients), summary["open"], summary["escalated"])
+        else:
+            log.warning("bucket email '%s' send failed — will retry next tick", key)
 
 
 # How often the Client Contact Status sweep runs. Sheet only needs to be

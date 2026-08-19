@@ -210,7 +210,39 @@ SETTINGS = [
         "help": "Worksheet tab name within the spreadsheet. Default: Client Contact "
                 "Status.",
     },
+    {
+        "key": "email_lookback_days",
+        "label": "Bucket Emails — Lookback (days)",
+        "help": "How far back the bucket status emails look for still-open items. "
+                "Applies to all four emails. Default: 60. (Requires SMTP env vars — "
+                "SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM.)",
+    },
 ]
+
+# Three settings per reporting bucket: who receives the email, and when it
+# goes out. Generated so the four buckets stay in lock-step.
+for _bkey, _blabel, _btrigs in WORKFLOW_BUCKETS:
+    SETTINGS.extend([
+        {
+            "key": f"email_{_bkey}_recipients",
+            "label": f"{_blabel} Email — Recipients",
+            "help": f"Comma-separated email addresses that receive the weekly "
+                    f"{_blabel} status email ({', '.join(_btrigs)}). "
+                    f"Leave empty to turn this email off.",
+        },
+        {
+            "key": f"email_{_bkey}_day",
+            "label": f"{_blabel} Email — Day",
+            "help": "Day of week to send, e.g. monday / mon / 0 "
+                    "(Monday=0 … Sunday=6). Default: monday.",
+        },
+        {
+            "key": f"email_{_bkey}_time",
+            "label": f"{_blabel} Email — Time (Central)",
+            "help": "Local send time, 24-hour or AM/PM — e.g. 08:00 or 8:00 AM. "
+                    "Central Time. Default: 08:00.",
+        },
+    ])
 
 
 def _requires_auth(f):
