@@ -240,11 +240,20 @@ SETTINGS = [
                 "Status.",
     },
     {
+        "key": "email_sender_address",
+        "label": "Bucket Emails — Send As (Google Workspace user)",
+        "help": "The Workspace email address the reports are sent FROM, using the "
+                "Google service account (GOOGLE_SERVICE_ACCOUNT_JSON). The service "
+                "account must have domain-wide delegation authorized for the "
+                "https://www.googleapis.com/auth/gmail.send scope, and this must be "
+                "a real user in your domain (e.g. alerts@ramosjames.com). Leave "
+                "empty to fall back to SMTP env vars instead.",
+    },
+    {
         "key": "email_lookback_days",
         "label": "Bucket Emails — Lookback (days)",
         "help": "How far back the bucket status emails look for still-open items. "
-                "Applies to all four emails. Default: 60. (Requires SMTP env vars — "
-                "SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM.)",
+                "Applies to all four emails. Default: 60.",
     },
 ]
 

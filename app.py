@@ -972,7 +972,8 @@ def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list,
 def fire_bucket_emails(client) -> None:
     """Send each bucket's status email on its configured weekly schedule. Each
     bucket is independent (own recipients / day / time / last-sent marker)."""
-    if not email_reports.smtp_configured():
+    sender = storage.get_config("email_sender_address", env_fallback="GMAIL_SENDER").strip()
+    if not email_reports.configured(sender):
         return
     if _CLIENT_CONTACT_TZ is None:
         return
@@ -1010,7 +1011,7 @@ def fire_bucket_emails(client) -> None:
                        f"{now_local.strftime('%A %b %d, %Y')}")
         subject = f"[RJL-zap] {label} — {summary['open']} open, {summary['escalated']} escalated"
         html = email_reports.build_bucket_email_html(label, window_desc, summary, rows)
-        if email_reports.send_email(recipients, subject, html):
+        if email_reports.send_email(recipients, subject, html, sender=sender):
             storage.set_config(last_key, str(time.time()))
             log.info("bucket email '%s' sent to %d — %d open / %d escalated",
                      key, len(recipients), summary["open"], summary["escalated"])

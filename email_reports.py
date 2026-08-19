@@ -1,7 +1,10 @@
-"""SMTP email sending + HTML rendering for the per-bucket status emails.
-Pure/standalone: no Slack, no Flask. Credentials come from env vars; the
-recipients and schedule come from admin settings (read by the caller)."""
+"""Email sending (Gmail API via the Google service account, or SMTP fallback)
+plus HTML rendering for the per-bucket status emails. Pure/standalone: no
+Slack, no Flask. Recipients and schedule come from admin settings (read by
+the caller)."""
 
+import base64
+import json
 import logging
 import os
 import smtplib
@@ -11,33 +14,85 @@ from email.mime.text import MIMEText
 
 log = logging.getLogger(__name__)
 
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+
+
+def gmail_configured(sender: str) -> bool:
+    """Gmail-API send is available when we have the service-account JSON AND a
+    sender to impersonate (a real Workspace user the SA is delegated for)."""
+    return bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip() and (sender or "").strip())
+
 
 def smtp_configured() -> bool:
-    return bool(os.getenv("SMTP_HOST") and _from_addr())
+    return bool(os.getenv("SMTP_HOST") and _smtp_from_addr())
 
 
-def _from_addr() -> str:
+def configured(sender: str = "") -> bool:
+    return gmail_configured(sender) or smtp_configured()
+
+
+def _smtp_from_addr() -> str:
     return (os.getenv("SMTP_FROM") or os.getenv("SMTP_USER") or "").strip()
 
 
-def send_email(to_addrs: list, subject: str, html: str) -> bool:
-    """Send one HTML email. Returns True on success. Never raises."""
-    host = os.getenv("SMTP_HOST", "").strip()
-    if not host or not to_addrs:
-        return False
-    port = int(os.getenv("SMTP_PORT", "587") or "587")
-    user = os.getenv("SMTP_USER", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "").strip()
-    sender = _from_addr()
-
+def _build_mime(to_addrs: list, subject: str, html: str, sender: str) -> MIMEMultipart:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = ", ".join(to_addrs)
-    # Plain-text fallback so the message isn't flagged as HTML-only.
     msg.attach(MIMEText("This report is best viewed in an HTML email client.", "plain"))
     msg.attach(MIMEText(html, "html"))
+    return msg
 
+
+def send_email(to_addrs: list, subject: str, html: str, sender: str = "") -> bool:
+    """Send one HTML email. Prefers the Gmail API (service account) when a
+    sender is configured, else SMTP. Returns True on success, never raises."""
+    if not to_addrs:
+        return False
+    if gmail_configured(sender):
+        return _gmail_send(to_addrs, subject, html, sender.strip())
+    return _smtp_send(to_addrs, subject, html)
+
+
+def _gmail_send(to_addrs: list, subject: str, html: str, sender: str) -> bool:
+    """Send via the Gmail API, impersonating `sender` through the service
+    account's domain-wide delegation."""
+    try:
+        info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip())
+        from google.oauth2.service_account import Credentials
+        from google.auth.transport.requests import AuthorizedSession
+    except Exception:
+        log.exception("Gmail send: service account JSON / google-auth unavailable")
+        return False
+    try:
+        creds = Credentials.from_service_account_info(
+            info, scopes=[GMAIL_SEND_SCOPE], subject=sender)
+        session = AuthorizedSession(creds)
+        raw = base64.urlsafe_b64encode(
+            _build_mime(to_addrs, subject, html, sender).as_bytes()).decode()
+        resp = session.post(
+            f"https://gmail.googleapis.com/gmail/v1/users/{sender}/messages/send",
+            json={"raw": raw}, timeout=30)
+        if resp.status_code == 200:
+            log.info("email sent (Gmail API): %r to %d recipient(s)", subject, len(to_addrs))
+            return True
+        log.error("Gmail API send failed (%s): %s", resp.status_code, resp.text[:500])
+        return False
+    except Exception:
+        log.exception("Gmail API send failed (subject=%r, sender=%s)", subject, sender)
+        return False
+
+
+def _smtp_send(to_addrs: list, subject: str, html: str) -> bool:
+    host = os.getenv("SMTP_HOST", "").strip()
+    if not host:
+        return False
+    port = int(os.getenv("SMTP_PORT", "587") or "587")
+    user = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "").strip()
+    sender = _smtp_from_addr()
+    msg = _build_mime(to_addrs, subject, html, sender)
     try:
         if port == 465:
             with smtplib.SMTP_SSL(host, port, context=ssl.create_default_context(), timeout=30) as s:
@@ -55,7 +110,7 @@ def send_email(to_addrs: list, subject: str, html: str) -> bool:
                 if user:
                     s.login(user, password)
                 s.sendmail(sender, to_addrs, msg.as_string())
-        log.info("email sent: %r to %d recipient(s)", subject, len(to_addrs))
+        log.info("email sent (SMTP): %r to %d recipient(s)", subject, len(to_addrs))
         return True
     except Exception:
         log.exception("email send failed (subject=%r, host=%s:%s)", subject, host, port)
