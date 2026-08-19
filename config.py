@@ -414,3 +414,20 @@ DOC_VERIFICATION_DELAY_SECONDS = 48 * 60 * 60
 # author is in the `check_pickup_trigger_user_ids` admin setting.
 CHECK_PICKUP_AUTO_PHRASE = "law firm can be paid"
 REVIEW_REQUEST_AUTO_PHRASE = "RJL has been paid"
+
+
+# ── Scoreboard / email buckets ──
+# Groups workflow trigger_names into the reporting buckets shown on the Open
+# Items scoreboard and used for the per-bucket scheduled emails.
+# (key, label, [trigger_names])
+WORKFLOW_BUCKETS = [
+    ("attorney",     "Attorney",      ["attorney_intro", "check_pickup"]),
+    ("paralegal",    "Paralegal",     ["paralegal_intro"]),
+    ("intake",       "Intake",        ["case_setup", "client_intake", "doc_verification"]),
+    ("disbursement", "Disbursement",  ["disbursement"]),
+]
+
+# trigger_name → bucket key
+WORKFLOW_BUCKET_OF = {
+    trig: key for key, _label, trigs in WORKFLOW_BUCKETS for trig in trigs
+}

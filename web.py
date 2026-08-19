@@ -5,6 +5,30 @@ from functools import wraps
 from flask import Flask, redirect, render_template, request, Response, url_for
 
 import storage
+from config import WORKFLOW_BUCKETS, WORKFLOW_BUCKET_OF
+
+
+def build_scoreboard(start_ts: float, end_ts: float) -> list:
+    """Per-bucket created / open / escalated counts for the window. Loads the
+    full window (all statuses) so the scoreboard is independent of the table's
+    status filter."""
+    rows = storage.workflows_in_window(start_ts, end_ts, status="all")
+    tally = {key: {"created": 0, "open": 0, "escalated": 0}
+             for key, _l, _t in WORKFLOW_BUCKETS}
+    for r in rows:
+        bucket = WORKFLOW_BUCKET_OF.get(r["trigger_name"])
+        if not bucket:
+            continue
+        t = tally[bucket]
+        t["created"] += 1
+        if not r.get("completed_at"):
+            t["open"] += 1
+            if r.get("escalations_sent"):
+                t["escalated"] += 1
+    return [
+        {"key": key, "label": label, **tally[key]}
+        for key, label, _t in WORKFLOW_BUCKETS
+    ]
 
 flask_app = Flask(__name__)
 
@@ -272,6 +296,7 @@ def open_items():
     # exclusive upper bound at midnight after d_to, so d_to is inclusive
     end_ts = datetime.combine(d_to + timedelta(days=1), dtime.min).timestamp()
 
+    scoreboard = build_scoreboard(start_ts, end_ts)
     rows = storage.workflows_in_window(start_ts, end_ts, status=status)
     names = storage.get_user_names()
     roles = storage.get_channel_roles()
@@ -351,6 +376,7 @@ def open_items():
         "open_items.html",
         rows=view,
         total=len(view),
+        scoreboard=scoreboard,
         escalated_count=sum(1 for v in view if v["escalated"]),
         d_from=d_from.isoformat(), d_to=d_to.isoformat(),
         status=status, wtype=wtype, sort=sort,
