@@ -9,26 +9,55 @@ from config import WORKFLOW_BUCKETS, WORKFLOW_BUCKET_OF
 
 
 def build_scoreboard(start_ts: float, end_ts: float) -> list:
-    """Per-bucket created / open / escalated counts for the window. Loads the
-    full window (all statuses) so the scoreboard is independent of the table's
-    status filter."""
+    """Per-bucket counts for the window (created / open / escalated /
+    completed, where created == open + completed and escalated ⊆ open).
+    Loads the full window (all statuses) so it's independent of the table's
+    status filter. Attorney & Paralegal buckets also get a per-person
+    breakdown (by the channel-topic role) under `people`."""
     rows = storage.workflows_in_window(start_ts, end_ts, status="all")
-    tally = {key: {"created": 0, "open": 0, "escalated": 0}
-             for key, _l, _t in WORKFLOW_BUCKETS}
+    roles = storage.get_channel_roles()
+    names = storage.get_user_names()
+
+    tally = {key: {"created": 0, "open": 0, "escalated": 0, "completed": 0}
+             for key, _l, _t, _r in WORKFLOW_BUCKETS}
+    role_of = {key: role for key, _l, _t, role in WORKFLOW_BUCKETS}
+    # per-bucket: uid -> {open, escalated}
+    people = {key: {} for key, _l, _t, role in WORKFLOW_BUCKETS if role}
+
     for r in rows:
-        bucket = WORKFLOW_BUCKET_OF.get(r["trigger_name"])
-        if not bucket:
+        bkey = WORKFLOW_BUCKET_OF.get(r["trigger_name"])
+        if not bkey:
             continue
-        t = tally[bucket]
+        t = tally[bkey]
         t["created"] += 1
-        if not r.get("completed_at"):
+        is_open = not r.get("completed_at")
+        if is_open:
             t["open"] += 1
             if r.get("escalations_sent"):
                 t["escalated"] += 1
-    return [
-        {"key": key, "label": label, **tally[key]}
-        for key, label, _t in WORKFLOW_BUCKETS
-    ]
+        else:
+            t["completed"] += 1
+
+        role_key = role_of.get(bkey)
+        if role_key and is_open:
+            uid = (roles.get(r["channel_id"]) or {}).get(role_key)
+            if uid:
+                p = people[bkey].setdefault(uid, {"open": 0, "escalated": 0})
+                p["open"] += 1
+                if r.get("escalations_sent"):
+                    p["escalated"] += 1
+
+    out = []
+    for key, label, _t, role in WORKFLOW_BUCKETS:
+        card = {"key": key, "label": label, **tally[key], "people": []}
+        if role and people.get(key):
+            card["people"] = sorted(
+                ({"uid": uid, "name": names.get(uid, uid), **counts}
+                 for uid, counts in people[key].items()),
+                key=lambda p: (-p["open"], p["name"].lower()),
+            )
+        out.append(card)
+    return out
 
 flask_app = Flask(__name__)
 
@@ -221,7 +250,7 @@ SETTINGS = [
 
 # Three settings per reporting bucket: who receives the email, and when it
 # goes out. Generated so the four buckets stay in lock-step.
-for _bkey, _blabel, _btrigs in WORKFLOW_BUCKETS:
+for _bkey, _blabel, _btrigs, _brole in WORKFLOW_BUCKETS:
     SETTINGS.extend([
         {
             "key": f"email_{_bkey}_recipients",
@@ -322,6 +351,7 @@ def open_items():
     f_paralegal = (request.args.get("paralegal", "") or "").strip()
     f_la = (request.args.get("la", "") or "").strip()
     wtype = (request.args.get("type", "") or "").strip()
+    bucket = (request.args.get("bucket", "") or "").strip()
     sort = request.args.get("sort", "type")
 
     start_ts = datetime.combine(d_from, dtime.min).timestamp()
@@ -350,6 +380,12 @@ def open_items():
     paralegals = _people_by("paralegal_id")
     las = _people_by("la_id")
 
+    # Scoreboard cards link here with ?bucket=<key> to show just that bucket's
+    # workflow types.
+    bucket_trigs = {t for k, _l, trigs, _r in WORKFLOW_BUCKETS if k == bucket for t in trigs}
+    if bucket_trigs:
+        rows = [r for r in rows if r["trigger_name"] in bucket_trigs]
+    bucket_label = next((l for k, l, _t, _r in WORKFLOW_BUCKETS if k == bucket), "")
     if wtype:
         rows = [r for r in rows if r["trigger_name"] == wtype]
     if f_attorney:
@@ -412,6 +448,7 @@ def open_items():
         escalated_count=sum(1 for v in view if v["escalated"]),
         d_from=d_from.isoformat(), d_to=d_to.isoformat(),
         status=status, wtype=wtype, sort=sort,
+        bucket=bucket, bucket_label=bucket_label,
         f_attorney=f_attorney, f_paralegal=f_paralegal, f_la=f_la,
         all_types=[(t, WORKFLOW_LABELS.get(t, t)) for t in all_types],
         attorneys=[(u, names.get(u, u)) for u in attorneys],

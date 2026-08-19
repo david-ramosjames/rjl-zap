@@ -51,14 +51,33 @@
     .sb-card { background:#fff; border:1px solid var(--border); border-radius:12px;
                padding:1rem 1.15rem; }
     .sb-title { font-size:.8rem; font-weight:700; letter-spacing:.04em;
-                text-transform:uppercase; color:var(--accent); margin-bottom:.65rem; }
-    .sb-nums { display:flex; gap:1rem; }
-    .sb-metric { display:flex; flex-direction:column; }
-    .sb-n { font-size:1.6rem; font-weight:700; line-height:1; color:var(--text-dark); }
+                text-transform:uppercase; color:var(--accent); margin-bottom:.65rem;
+                display:inline-block; text-decoration:none; }
+    .sb-title:hover { text-decoration:underline; }
+    .sb-nums { display:flex; gap:.9rem; }
+    .sb-metric { display:flex; flex-direction:column; text-decoration:none;
+                 border-radius:8px; padding:.15rem .3rem; margin:-.15rem -.3rem;
+                 transition:background .12s; }
+    .sb-metric:hover { background:#f9fafb; }
+    .sb-n { font-size:1.5rem; font-weight:700; line-height:1; color:var(--text-dark); }
     .sb-n.open { color:#a16207; }
     .sb-n.esc  { color:#b91c1c; }
-    .sb-l { font-size:.68rem; color:var(--text-muted); text-transform:uppercase;
-            letter-spacing:.06em; font-weight:600; margin-top:.25rem; }
+    .sb-n.done { color:#166534; }
+    .sb-l { font-size:.64rem; color:var(--text-muted); text-transform:uppercase;
+            letter-spacing:.05em; font-weight:600; margin-top:.25rem; }
+    .sb-people { margin-top:.8rem; padding-top:.7rem; border-top:1px solid #f3f4f6;
+                 display:flex; flex-direction:column; gap:.25rem; }
+    .sb-person { display:flex; justify-content:space-between; align-items:baseline;
+                 gap:.5rem; font-size:.8rem; text-decoration:none; color:#374151;
+                 padding:.12rem .3rem; margin:0 -.3rem; border-radius:6px; }
+    .sb-person:hover { background:#f9fafb; color:var(--accent); }
+    .sb-person-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-person-nums { color:var(--text-muted); white-space:nowrap; }
+    .sb-person-nums .esc { color:#b91c1c; font-weight:600; }
+    .bucket-banner { background:var(--accent-light); border:1px solid var(--accent-mid,#f9d0d8);
+                     border-radius:10px; padding:.6rem .9rem; margin-bottom:1rem;
+                     font-size:.875rem; display:flex; align-items:center; gap:.5rem; }
+    .bucket-banner a { color:var(--accent); font-weight:600; text-decoration:none; margin-left:auto; }
 
     table.items { width:100%; border-collapse:separate; border-spacing:0; }
     table.items thead th { font-size:.7rem; text-transform:uppercase; letter-spacing:.07em;
@@ -112,30 +131,42 @@
 
   <div class="section-label">Open &amp; Escalated Items</div>
 
+  {% set daterange = '&from=' ~ d_from ~ '&to=' ~ d_to %}
   <div class="scoreboard">
     {% for b in scoreboard %}
     <div class="sb-card">
-      <div class="sb-title">{{ b.label }}</div>
+      <a class="sb-title" href="/open-items?bucket={{ b.key }}&status=all{{ daterange }}">{{ b.label }}</a>
       <div class="sb-nums">
-        <div class="sb-metric">
-          <span class="sb-n">{{ b.created }}</span>
-          <span class="sb-l">Created</span>
-        </div>
-        <div class="sb-metric">
-          <span class="sb-n open">{{ b.open }}</span>
-          <span class="sb-l">Open</span>
-        </div>
-        <div class="sb-metric">
-          <span class="sb-n esc">{{ b.escalated }}</span>
-          <span class="sb-l">Escalated</span>
-        </div>
+        <a class="sb-metric" href="/open-items?bucket={{ b.key }}&status=all{{ daterange }}">
+          <span class="sb-n">{{ b.created }}</span><span class="sb-l">Created</span>
+        </a>
+        <a class="sb-metric" href="/open-items?bucket={{ b.key }}&status=open{{ daterange }}">
+          <span class="sb-n open">{{ b.open }}</span><span class="sb-l">Open</span>
+        </a>
+        <a class="sb-metric" href="/open-items?bucket={{ b.key }}&status=escalated{{ daterange }}">
+          <span class="sb-n esc">{{ b.escalated }}</span><span class="sb-l">Escalated</span>
+        </a>
+        <a class="sb-metric" href="/open-items?bucket={{ b.key }}&status=completed{{ daterange }}">
+          <span class="sb-n done">{{ b.completed }}</span><span class="sb-l">Completed</span>
+        </a>
       </div>
+      {% if b.people %}
+      <div class="sb-people">
+        {% for p in b.people %}
+        <a class="sb-person"
+           href="/open-items?bucket={{ b.key }}&status=open&{{ 'attorney' if b.key=='attorney' else 'paralegal' }}={{ p.uid }}{{ daterange }}">
+          <span class="sb-person-name">{{ p.name }}</span>
+          <span class="sb-person-nums">{{ p.open }} open{% if p.escalated %} · <span class="esc">{{ p.escalated }} esc</span>{% endif %}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
   <div class="muted-sm" style="margin:-.5rem 0 1.25rem">
-    Counts cover items <strong>created in the selected date range</strong>. “Open” and “Escalated” reflect their status now.
-    Each bucket can also email its open-item details on a weekly schedule — set recipients &amp; send time per bucket in
+    Created = Open + Completed for items <strong>started in the selected date range</strong> (Escalated is the subset of Open that's been reminded). Click any number to see those items. Attorney/Paralegal cards break down by person.
+    Each bucket can also email its open-item details weekly — set recipients &amp; time in
     <a href="/#settings" style="color:var(--accent)">admin settings</a>.
   </div>
 
@@ -143,6 +174,7 @@
   <div class="card-plain">
     <form class="filter-bar" method="get" action="/open-items"
           onchange="this.submit()">
+      {% if bucket %}<input type="hidden" name="bucket" value="{{ bucket }}">{% endif %}
       <div class="row g-3 align-items-end">
         <div class="col-6 col-md-2">
           <label for="from">From</label>
@@ -225,6 +257,14 @@
   <div class="callout amber">
     <i class="bi bi-link-45deg me-1"></i>
     <strong>Slack links unavailable yet.</strong> The workspace URL is captured when the bot starts up — restart or redeploy the bot once and the “Open in Slack” links will appear here.
+  </div>
+  {% endif %}
+
+  {% if bucket_label %}
+  <div class="bucket-banner">
+    <i class="bi bi-funnel-fill" style="color:var(--accent)"></i>
+    Showing the <strong>{{ bucket_label }}</strong> bucket only.
+    <a href="/open-items?status={{ status }}&from={{ d_from }}&to={{ d_to }}">Clear bucket ✕</a>
   </div>
   {% endif %}
 

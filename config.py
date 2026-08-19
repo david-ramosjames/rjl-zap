@@ -419,15 +419,17 @@ REVIEW_REQUEST_AUTO_PHRASE = "RJL has been paid"
 # ── Scoreboard / email buckets ──
 # Groups workflow trigger_names into the reporting buckets shown on the Open
 # Items scoreboard and used for the per-bucket scheduled emails.
-# (key, label, [trigger_names])
+# (key, label, [trigger_names], group_by_role)
+#   group_by_role — which channel-topic role to break the bucket down by on
+#   the scoreboard (per-person sub-scores). None = no breakdown.
 WORKFLOW_BUCKETS = [
-    ("attorney",     "Attorney",      ["attorney_intro", "check_pickup"]),
-    ("paralegal",    "Paralegal",     ["paralegal_intro"]),
-    ("intake",       "Intake",        ["case_setup", "client_intake", "doc_verification"]),
-    ("disbursement", "Disbursement",  ["disbursement"]),
+    ("attorney",     "Attorney",      ["attorney_intro", "check_pickup"],               "attorney_id"),
+    ("paralegal",    "Paralegal",     ["paralegal_intro"],                               "paralegal_id"),
+    ("intake",       "Intake",        ["case_setup", "client_intake", "doc_verification"], None),
+    ("disbursement", "Disbursement",  ["disbursement"],                                  None),
 ]
 
 # trigger_name → bucket key
 WORKFLOW_BUCKET_OF = {
-    trig: key for key, _label, trigs in WORKFLOW_BUCKETS for trig in trigs
+    trig: key for key, _label, trigs, _role in WORKFLOW_BUCKETS for trig in trigs
 }

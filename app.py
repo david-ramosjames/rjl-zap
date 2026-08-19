@@ -979,7 +979,7 @@ def fire_bucket_emails(client) -> None:
     from datetime import datetime as _dt
     now_local = _dt.now(_CLIENT_CONTACT_TZ)
 
-    for key, label, trigs in WORKFLOW_BUCKETS:
+    for key, label, trigs, _role in WORKFLOW_BUCKETS:
         recipients = _emails_from_config(f"email_{key}_recipients")
         if not recipients:
             continue
