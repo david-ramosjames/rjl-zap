@@ -17,10 +17,61 @@ log = logging.getLogger(__name__)
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
 
+def _email_sa_info() -> dict | None:
+    """Service-account credential info dedicated to sending email. Resolution
+    order (first that's usable wins):
+      1. GMAIL_SERVICE_ACCOUNT_JSON — full service-account JSON.
+      2. Individual fields — GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY plus the
+         service-account email (GOOGLE_SERVICE_ACCOUNT_EMAIL /
+         GOOGLE_CLIENT_EMAIL) and optional GOOGLE_CLIENT_ID.
+      3. GOOGLE_SERVICE_ACCOUNT_JSON — the Sheets service account (fallback;
+         only works if it too has Gmail domain-wide delegation).
+    The dedicated one (1 or 2) is what you use when the Sheets SA isn't
+    authorized for gmail.send."""
+    j = os.getenv("GMAIL_SERVICE_ACCOUNT_JSON", "").strip()
+    if j:
+        try:
+            return json.loads(j)
+        except Exception:
+            log.error("GMAIL_SERVICE_ACCOUNT_JSON is set but not valid JSON")
+
+    pk = os.getenv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", "").strip()
+    email = (os.getenv("GOOGLE_SERVICE_ACCOUNT_EMAIL")
+             or os.getenv("GOOGLE_CLIENT_EMAIL") or "").strip()
+    if pk:
+        if not email:
+            log.error("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY is set but the service "
+                      "account email is missing — set GOOGLE_SERVICE_ACCOUNT_EMAIL "
+                      "(the ...@...iam.gserviceaccount.com address).")
+        else:
+            return {
+                "type": "service_account",
+                "private_key": pk.replace("\\n", "\n"),
+                "client_email": email,
+                "client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip() or None,
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+
+    j2 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if j2:
+        try:
+            return json.loads(j2)
+        except Exception:
+            log.error("GOOGLE_SERVICE_ACCOUNT_JSON is set but not valid JSON")
+    return None
+
+
+def _email_subject_user(sender: str) -> str:
+    """The Workspace user to impersonate / send as. Env var wins so email can
+    be configured entirely without the admin setting."""
+    return (os.getenv("GOOGLE_WORKSPACE_IMPERSONATED_USER", "").strip()
+            or (sender or "").strip())
+
+
 def gmail_configured(sender: str) -> bool:
-    """Gmail-API send is available when we have the service-account JSON AND a
-    sender to impersonate (a real Workspace user the SA is delegated for)."""
-    return bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip() and (sender or "").strip())
+    """Gmail-API send is available when we have an email service account AND a
+    Workspace user to send as."""
+    return bool(_email_sa_info() and _email_subject_user(sender))
 
 
 def smtp_configured() -> bool:
@@ -56,31 +107,39 @@ def send_email(to_addrs: list, subject: str, html: str, sender: str = "") -> boo
 
 
 def _gmail_send(to_addrs: list, subject: str, html: str, sender: str) -> bool:
-    """Send via the Gmail API, impersonating `sender` through the service
-    account's domain-wide delegation."""
+    """Send via the Gmail API, impersonating the Workspace user through the
+    email service account's domain-wide delegation."""
+    info = _email_sa_info()
+    subj_user = _email_subject_user(sender)
+    if not info or not subj_user:
+        return False
     try:
-        info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip())
         from google.oauth2.service_account import Credentials
         from google.auth.transport.requests import AuthorizedSession
     except Exception:
-        log.exception("Gmail send: service account JSON / google-auth unavailable")
+        log.exception("Gmail send: google-auth not installed")
         return False
     try:
         creds = Credentials.from_service_account_info(
-            info, scopes=[GMAIL_SEND_SCOPE], subject=sender)
+            info, scopes=[GMAIL_SEND_SCOPE], subject=subj_user)
         session = AuthorizedSession(creds)
         raw = base64.urlsafe_b64encode(
-            _build_mime(to_addrs, subject, html, sender).as_bytes()).decode()
+            _build_mime(to_addrs, subject, html, subj_user).as_bytes()).decode()
         resp = session.post(
-            f"https://gmail.googleapis.com/gmail/v1/users/{sender}/messages/send",
+            f"https://gmail.googleapis.com/gmail/v1/users/{subj_user}/messages/send",
             json={"raw": raw}, timeout=30)
         if resp.status_code == 200:
-            log.info("email sent (Gmail API): %r to %d recipient(s)", subject, len(to_addrs))
+            log.info("email sent (Gmail API): %r to %d recipient(s) as %s",
+                     subject, len(to_addrs), subj_user)
             return True
-        log.error("Gmail API send failed (%s): %s", resp.status_code, resp.text[:500])
+        log.error("Gmail API send failed (%s) as %s: %s",
+                  resp.status_code, subj_user, resp.text[:500])
         return False
     except Exception:
-        log.exception("Gmail API send failed (subject=%r, sender=%s)", subject, sender)
+        log.exception("Gmail API send failed (subject=%r, as=%s) — if this is "
+                      "'unauthorized_client', the service account's client ID "
+                      "isn't authorized for the gmail.send scope in Workspace "
+                      "domain-wide delegation", subject, subj_user)
         return False
 
 
