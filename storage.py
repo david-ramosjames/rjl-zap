@@ -396,6 +396,18 @@ def schedule_message(
         )
 
 
+def cancel_pending_scheduled_for_thread(channel_id: str, thread_ts: str) -> int:
+    """Mark all still-unsent scheduled messages for a thread as sent, so a
+    workflow closed early doesn't later fire its escalation. Returns count."""
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE scheduled_messages SET sent_at = ? "
+            "WHERE channel_id = ? AND thread_ts = ? AND sent_at IS NULL",
+            (time.time(), channel_id, thread_ts),
+        )
+        return cur.rowcount
+
+
 def due_scheduled_messages(now: float) -> List[dict]:
     with connect() as conn:
         rows = conn.execute(

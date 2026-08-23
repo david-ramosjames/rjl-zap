@@ -1887,37 +1887,39 @@ def handle_message(event, client):
     text = event.get("text") or ""
     lowered = text.lower()
 
-    # Thread reply starting with done / complete / completed → close the
-    # workflow for this thread (same effect as @-mention COMPLETE, but no
-    # @-mention required). Works for Calendar SOL, Calendar Checklists,
-    # Mediation, and any followup workflow record. Leading @-mentions are
-    # stripped so "@RJL-zap done" also closes.
+    # Thread reply that completes the workflow for this thread. Accepts the
+    # generic close words (done / complete / completed) OR the workflow's own
+    # keyword (e.g. `scheduled` for Check Pickup, `confirmed` for Document
+    # Verification). Leading @-mentions are stripped so "@RJL-zap done" works.
+    # On a match: mark complete, cancel any pending escalation, and reply to
+    # confirm — naming the action and the word that closed it.
     thread_ts = event.get("thread_ts")
     if thread_ts:
-        cleaned = _LEADING_MENTION_RE.sub("", text)
-        if _CLOSE_REPLY_RE.match(cleaned):
-            log.info(
-                "close keyword reply detected channel=%s thread_ts=%s author=%s text=%r",
-                channel_id, thread_ts, event.get("user", ""), text[:120],
-            )
-            wf = storage.workflow_by_thread(channel_id, thread_ts)
-            if wf and not wf.get("completed_at"):
+        wf = storage.workflow_by_thread(channel_id, thread_ts)
+        if wf and not wf.get("completed_at"):
+            cleaned = _LEADING_MENTION_RE.sub("", text)
+            done_word = _WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
+            specific_re = re.compile(rf"^\s*{re.escape(done_word)}\b", re.IGNORECASE)
+            if _CLOSE_REPLY_RE.match(cleaned) or specific_re.match(cleaned):
                 storage.force_complete_workflow(wf["id"])
-                log.info("workflow %s (id=%s) closed via close-keyword reply in channel=%s",
-                         wf["trigger_name"], wf["id"], channel_id)
+                cancelled = storage.cancel_pending_scheduled_for_thread(channel_id, thread_ts)
+                label = _WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
+                author = event.get("user", "")
+                who = f"<@{author}> — " if author else ""
+                log.info("workflow %s (id=%s) closed via reply in channel=%s "
+                         "(cancelled %d pending)",
+                         wf["trigger_name"], wf["id"], channel_id, cancelled)
                 try:
                     client.chat_postMessage(
                         channel=channel_id, thread_ts=thread_ts,
-                        text=":tada: Marked complete. Closing checklist.",
+                        text=(f":white_check_mark: {who}*{label}* is marked "
+                              f"complete — thanks! No more reminders for this "
+                              f"one. _(This task closes when someone replies "
+                              f"`{done_word}`.)_"),
                     )
                 except Exception:
-                    log.exception("could not post done-close confirmation")
+                    log.exception("could not post completion confirmation")
                 return
-            elif not wf:
-                log.info(
-                    "close keyword reply but no workflow found for channel=%s thread_ts=%s",
-                    channel_id, thread_ts,
-                )
 
     # Diagnostic: log whenever any auto-trigger phrase appears in a user
     # message, so a future "trigger didn't fire" report can be debugged
