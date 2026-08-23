@@ -1436,9 +1436,38 @@ def handle_reaction_added(event, client):
     item = event.get("item") or {}
     if item.get("type") != "message":
         return
-    workflow_id = storage.mark_item_complete(item.get("ts"))
+    ts = item.get("ts")
+    channel = item.get("channel")
+
+    # 1) ✅ on a checklist ITEM (reaction-tracked TriggerConfig workflows).
+    workflow_id = storage.mark_item_complete(ts)
     if workflow_id is not None:
         _maybe_finalize(client, workflow_id)
+        return
+
+    # 2) ✅ on a workflow's PARENT message → complete the whole workflow.
+    # Covers the FollowUp workflows (intros, case setup, client intake,
+    # doc verification, check pickup) that have no per-item reactions, so
+    # a ✅ closes them the same as replying done / complete / <keyword>.
+    if not (channel and ts):
+        return
+    wf = storage.workflow_by_thread(channel, ts)
+    if wf and not wf.get("completed_at"):
+        storage.force_complete_workflow(wf["id"])
+        cancelled = storage.cancel_pending_scheduled_for_thread(channel, ts)
+        label = _WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
+        author = event.get("user", "")
+        who = f"<@{author}> " if author else ""
+        log.info("workflow %s (id=%s) closed via ✅ reaction in channel=%s (cancelled %d)",
+                 wf["trigger_name"], wf["id"], channel, cancelled)
+        try:
+            client.chat_postMessage(
+                channel=channel, thread_ts=ts,
+                text=f":white_check_mark: {who}— *{label}* is marked complete. "
+                     f"No more reminders for this one.",
+            )
+        except Exception:
+            log.exception("could not post reaction-completion confirmation")
 
 
 @app.event("member_joined_channel")
