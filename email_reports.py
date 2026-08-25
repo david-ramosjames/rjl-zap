@@ -245,7 +245,18 @@ def build_bucket_email_html(bucket_label: str, window_desc: str,
         '<table style="border-collapse:collapse;width:100%">'
         f'<thead>{header}</thead><tbody>{"".join(body)}</tbody></table>'
     )
-    return head + table + '</div>'
+    howto = (
+        '<div style="margin:0 0 14px;padding:12px 14px;background:#eff6ff;'
+        'border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;'
+        'font-size:13px;color:#1e40af">'
+        '<b>To close a task:</b> open its Slack thread (click the channel) and '
+        'either reply <code>done</code> / <code>complete</code> — or the word '
+        'shown under <b>Waiting on</b> (e.g. <code>scheduled</code>, '
+        '<code>confirmed</code>) — or react ✅ on the bot’s message. '
+        'It drops off this list right away.'
+        '</div>'
+    )
+    return head + howto + table + '</div>'
 
 
 def _chip(label: str, value, color: str) -> str:
