@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     sent_at REAL,
     check_replies_first INTEGER NOT NULL DEFAULT 0,
     done_keyword TEXT,
-    skip_if_complete_parent_ts TEXT
+    skip_if_complete_parent_ts TEXT,
+    create_workflow_as TEXT
 );
 
 CREATE TABLE IF NOT EXISTS deferred_actions (
@@ -110,6 +111,7 @@ def init_db() -> None:
             ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
             ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
             ("scheduled_messages", "skip_if_complete_parent_ts", "TEXT"),
+            ("scheduled_messages", "create_workflow_as", "TEXT"),
             ("deferred_actions",   "attempts", "INTEGER NOT NULL DEFAULT 0"),
             ("workflows",          "participants", "TEXT"),
             ("workflows",          "channel_name", "TEXT"),
@@ -384,15 +386,16 @@ def schedule_message(
     check_replies_first: bool = False,
     done_keyword: str | None = None,
     skip_if_complete_parent_ts: str | None = None,
+    create_workflow_as: str | None = None,
 ) -> None:
     with connect() as conn:
         conn.execute(
             "INSERT INTO scheduled_messages "
             "(channel_id, thread_ts, send_after, text, check_replies_first, "
-            " done_keyword, skip_if_complete_parent_ts) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " done_keyword, skip_if_complete_parent_ts, create_workflow_as) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (channel_id, thread_ts, send_after, text, int(check_replies_first),
-             done_keyword, skip_if_complete_parent_ts),
+             done_keyword, skip_if_complete_parent_ts, create_workflow_as),
         )
 
 

@@ -44,9 +44,10 @@
       text-transform:uppercase; color:var(--text-muted); margin-bottom:.25rem; display:block; }
     .filter-bar .form-control, .filter-bar .form-select { font-size:.875rem; }
 
-    .scoreboard { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem;
+    .scoreboard { display:grid; grid-template-columns:repeat(5,1fr); gap:.7rem;
                   margin-bottom:1.25rem; }
-    @media (max-width:820px){ .scoreboard{ grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:1100px){ .scoreboard{ grid-template-columns:repeat(3,1fr); } }
+    @media (max-width:760px){ .scoreboard{ grid-template-columns:repeat(2,1fr); } }
     @media (max-width:480px){ .scoreboard{ grid-template-columns:1fr; } }
     .sb-card { background:#fff; border:1px solid var(--border); border-radius:12px;
                padding:1rem 1.15rem; }

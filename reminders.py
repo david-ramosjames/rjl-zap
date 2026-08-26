@@ -131,8 +131,23 @@ def _tick(client) -> None:
             post_kwargs: dict = {"channel": msg["channel_id"], "text": msg["text"]}
             if msg["thread_ts"]:
                 post_kwargs["thread_ts"] = msg["thread_ts"]
-            client.chat_postMessage(**post_kwargs)
+            resp = client.chat_postMessage(**post_kwargs)
             storage.mark_scheduled_sent(msg["id"])
+
+            # If tagged, this step becomes its own closeable workflow at the
+            # posted message's ts (disbursement steps). Roles/scoreboard come
+            # from channel_roles, so no participants needed here.
+            trig = msg.get("create_workflow_as")
+            if trig and resp and resp.get("ts"):
+                try:
+                    cname = app._channel_name_cached(client, msg["channel_id"])
+                    storage.create_workflow(
+                        msg["channel_id"], resp["ts"], trig, [], channel_name=cname)
+                    log.info("scheduled step opened workflow %s in channel=%s",
+                             trig, msg["channel_id"])
+                except Exception:
+                    log.exception("could not open workflow %s for scheduled msg id=%s",
+                                  trig, msg["id"])
         except Exception:
             log.exception("failed to send scheduled message id=%s", msg["id"])
 

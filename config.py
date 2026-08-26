@@ -119,19 +119,22 @@ The following tasks need to be completed for the disbursement.
 @dataclass
 class DisbursementConfig:
     phrase: str
-    # (delay_seconds, message_text) — posted top-level, unconditionally.
-    sequence: List[Tuple[float, str]] = field(default_factory=list)
-    # (delay_seconds, message_text) — posted IN the master thread, but only
-    # if the disbursement workflow is NOT yet marked complete. If someone has
-    # closed the workflow (reply "complete" / "@RJL-zap COMPLETE" in the
-    # master thread) before the fire time, these are silently skipped.
-    deadline_sequence: List[Tuple[float, str]] = field(default_factory=list)
+    # (delay_seconds, message_text, trigger_name) — posted top-level. When
+    # trigger_name is set, the step becomes its own closeable workflow (shows
+    # in the scoreboard / emails, closed by reply done/<word> or ✅). None =
+    # informational post only (the overview).
+    sequence: List[Tuple[float, str, object]] = field(default_factory=list)
+    # (delay_seconds, message_text, trigger_name) — posted top-level but only
+    # if the master disbursement workflow isn't already complete (closing the
+    # master overview post cancels any that haven't fired yet).
+    deadline_sequence: List[Tuple[float, str, object]] = field(default_factory=list)
 
 
 DISBURSEMENT = DisbursementConfig(
     phrase="start disbursement",
     sequence=[
-        # Times are cumulative from trigger
+        # Times are cumulative from trigger. trigger_name = the workflow each
+        # step opens (None = info-only overview).
         (30 * 60, (
             ":hourglass_flowing_sand: *Disbursement Overview* — {mentions}\n\n"
             "The 30-day disbursement clock is running. Here's a quick summary of what needs to happen:\n"
@@ -141,69 +144,66 @@ DISBURSEMENT = DisbursementConfig(
             "• Phase 4 (~Day 14): Fund and issue checks\n"
             "• Phase 5 (~Day 21–30): Final disbursement to client\n\n"
             "Tag me with `COMPLETE` in this thread when everything is done."
-        )),
+        ), None),
         (3 * _H, (
             ":clipboard: *CANCEL ORDERS AND GATHER INVOICES*\n\n"
             "{paralegal} please confirm all pending orders (Medical records, Skribe, mediation, experts, etc) have been cancelled to avoid cancellation fees.\n"
             "{paralegal} please confirm that any outstanding invoices have been obtained and saved in the case folder.\n"
             "Please note in a thread any orders or invoices that remain pending."
-        )),
+        ), "disb_cancel_orders"),
         (22 * _H, (
             ":hospital: *MEDICAL BILLS*\n\n"
             "{paralegal} please confirm if subro has been opened and requested final balance (please note in thread if there is no subro on this case).\n"
             "Please note any outstanding medical bills that have been requested."
-        )),
+        ), "disb_medical_bills"),
         (24 * _H, (
             ":clipboard: *CASE SETTLEMENT*\n\n"
-            "{legalassistants} please confirm that all future Litigation Events and SOL deadlines for this case have been removed from the calendar."
-        )),
+            "{la} please confirm that all future Litigation Events and SOL deadlines for this case have been removed from the calendar."
+        ), "disb_case_settlement"),
         # 2 hours after MEDICAL BILLS (22h) → 24h
         (24 * _H, (
             ":memo: *DRAFTING & RELEASE* — {ana}\n\n"
             "Please confirm drafting instructions and W-9 have been sent."
-        )),
+        ), "disb_drafting_release"),
         (3 * _D, (
             ":scissors: *Reductions Update — {attorney} {ana}*\n\n"
             "• Status on medical bill reductions?\n"
             "• Have all lien holders responded?\n"
             "• Are final lien amounts confirmed?"
-        )),
+        ), "disb_reductions"),
         # Release, split into two triggers:
         #   1) obtained / reviewed / approved  (at the Day-7 release slot)
         #   2) signed & returned               (+45h after #1)
         (7 * _D, (
-            ":memo: *DRAFTING & RELEASE*\n\n"
+            ":memo: *RELEASES — OBTAINED*\n\n"
             "{attorney} please confirm all releases have been obtained, reviewed and approved.\n\n"
             "{paralegal}, {ana} for visibility"
-        )),
+        ), "disb_releases_obtained"),
         (7 * _D + 45 * _H, (
-            ":memo: *DRAFTING & RELEASE*\n\n"
+            ":memo: *RELEASES — SIGNED & RETURNED*\n\n"
             "{ana} & {paralegal} please confirm all releases have been signed and returned.\n\n"
             "{attorney} for visibility"
-        )),
+        ), "disb_releases_signed"),
         (14 * _D, (
             ":moneybag: *Funding & Check Issuance — {attorney} {ana}*\n\n"
             "• Have settlement funds been received?\n"
             "• Have checks been issued for liens and expenses?\n"
             "• Have all deposits cleared?"
-        )),
+        ), "disb_funding"),
         (17 * _D, (
             ":bank: *Deposit Confirmation — {attorney} {ana}*\n\n"
             "• Confirm all checks have been deposited and cleared\n"
             "• Any outstanding items before final disbursement?"
-        )),
+        ), "disb_deposit"),
         (21 * _D, (
             ":receipt: *Expense Reconciliation — {attorney} {ana}*\n\n"
             "• Reconcile all case expenses\n"
             "• Prepare the final disbursement statement\n"
             "• Review with supervising attorney before disbursing to client"
-        )),
+        ), "disb_expense_recon"),
     ],
     deadline_sequence=[
-        # These fire in the master thread ONLY if the disbursement isn't
-        # already complete. Reply "complete" / "@RJL-zap COMPLETE" in the
-        # master thread to close the workflow and cancel any that haven't
-        # fired yet.
+        # Fire only if the master disbursement workflow isn't already complete.
         (23 * _D, (
             ":warning: *DISBURSEMENT DEADLINE 7 DAYS AWAY* :warning:\n\n"
             "{attorney} we are 7 days away from 30 days since the settlement. "
@@ -214,7 +214,7 @@ DISBURSEMENT = DisbursementConfig(
             "{attorney}, {ana} please :triangular_flag_on_post: any blockers to "
             "the disbursement being completed.\n\n"
             "{jon} {laura}"
-        )),
+        ), "disb_deadline_7day"),
         (30 * _D, (
             ":dollar: *DISBURSEMENT DEADLINE* :dollar:\n\n"
             "{attorney} we are 30 days since the settlement. Please confirm in "
@@ -222,7 +222,7 @@ DISBURSEMENT = DisbursementConfig(
             "{attorney}, {ana} please :triangular_flag_on_post: any blockers to "
             "the disbursement being completed.\n\n"
             "{jon} {laura}"
-        )),
+        ), "disb_deadline_final"),
     ],
 )
 
@@ -423,13 +423,54 @@ REVIEW_REQUEST_AUTO_PHRASE = "RJL has been paid"
 #   group_by_role — which channel-topic role to break the bucket down by on
 #   the scoreboard (per-person sub-scores). None = no breakdown.
 WORKFLOW_BUCKETS = [
-    ("attorney",     "Attorney",      ["attorney_intro", "check_pickup"],               "attorney_id"),
-    ("paralegal",    "Paralegal",     ["paralegal_intro"],                               "paralegal_id"),
-    ("intake",       "Intake",        ["case_setup", "client_intake", "doc_verification"], None),
-    ("disbursement", "Disbursement",  ["disbursement"],                                  None),
+    ("attorney",     "Attorney",
+     ["attorney_intro", "check_pickup", "review_request"], "attorney_id"),
+    ("paralegal",    "Paralegal",
+     ["paralegal_intro", "disb_cancel_orders", "disb_medical_bills"], "paralegal_id"),
+    ("intake",       "Intake",
+     ["case_setup", "client_intake", "doc_verification"], None),
+    ("legal_assistant", "Legal Assistant",
+     ["disb_case_settlement"], "la_id"),
+    ("disbursement", "Disbursement",
+     ["disb_drafting_release", "disb_reductions", "disb_releases_obtained",
+      "disb_releases_signed", "disb_funding", "disb_deposit", "disb_expense_recon",
+      "disb_deadline_7day", "disb_deadline_final"], "attorney_id"),
 ]
 
 # trigger_name → bucket key
 WORKFLOW_BUCKET_OF = {
     trig: key for key, _label, trigs, _role in WORKFLOW_BUCKETS for trig in trigs
 }
+
+# trigger_name → human label (shared by the Open Items page, emails, and the
+# weekly report / reaction confirmations).
+WORKFLOW_LABELS = {
+    "attorney_intro":      "Attorney Intro",
+    "paralegal_intro":     "Paralegal Intro",
+    "case_setup":          "Case Setup",
+    "client_intake":       "Client Intake",
+    "doc_verification":    "Document Verification",
+    "check_pickup":        "Client Check Pickup",
+    "review_request":      "5-Star Review Decision",
+    "calendar_sol":        "Calendar SOL",
+    "mediation_checklist": "Mediation Checklist",
+    "disbursement":        "30-Day Disbursement (overall)",
+    "disb_cancel_orders":     "Disbursement — Cancel Orders & Invoices",
+    "disb_medical_bills":     "Disbursement — Medical Bills",
+    "disb_case_settlement":   "Disbursement — Case Settlement (calendar)",
+    "disb_drafting_release":  "Disbursement — Drafting & Release (W-9)",
+    "disb_reductions":        "Disbursement — Reductions",
+    "disb_releases_obtained": "Disbursement — Releases Obtained",
+    "disb_releases_signed":   "Disbursement — Releases Signed & Returned",
+    "disb_funding":           "Disbursement — Funding & Checks",
+    "disb_deposit":           "Disbursement — Deposit Confirmation",
+    "disb_expense_recon":     "Disbursement — Expense Reconciliation",
+    "disb_deadline_7day":     "Disbursement — 7-Day Deadline Warning",
+    "disb_deadline_final":    "Disbursement — Final Deadline",
+    "answer_filed":        "Calendar — Answer Filed",
+    "discovery_received":  "Calendar — Discovery Requests",
+    "scheduling_order":    "Calendar — Scheduling Order",
+}
+
+# trigger_name → the reply word that closes it (default "done" otherwise).
+WORKFLOW_DONE_WORD = {"doc_verification": "confirmed", "check_pickup": "scheduled"}

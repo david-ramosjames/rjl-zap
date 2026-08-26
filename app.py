@@ -15,7 +15,7 @@ import storage
 import web
 import email_reports
 from config import (
-    WORKFLOW_BUCKETS,
+    WORKFLOW_BUCKETS, WORKFLOW_LABELS, WORKFLOW_DONE_WORD,
     ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
@@ -287,7 +287,11 @@ def handle_app_mention(event, client):
 
         for simple in (NEW_CASE, REVIEW_REQUEST):
             if simple.phrase in lowered:
-                _do_simple_post(client, event["channel"], event["ts"], text, simple)
+                # Review requests become a closeable "5-Star Review Decision"
+                # task (Attorney bucket); a new-case notice is one-shot.
+                wf_as = "review_request" if simple is REVIEW_REQUEST else None
+                _do_simple_post(client, event["channel"], event["ts"], text, simple,
+                                create_workflow_as=wf_as)
                 return
 
         trigger = _find_trigger(text)
@@ -410,8 +414,11 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     # / "@attorney" labels if the topic doesn't name one.
     paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic, exclude=bot_id)
     attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic, exclude=bot_id)
+    la_id        = _first_match(_TOPIC_LA_RE,        topic, exclude=bot_id)
     paralegal_mention = f"<@{paralegal_id}>" if paralegal_id else "@paralegal"
     attorney_mention  = f"<@{attorney_id}>"  if attorney_id  else "@attorney"
+    # {la} — the case's Legal Assistant from the topic ("LA @Name"). Falls
+    # back to the @legalassistants subteam if the topic doesn't name one.
     # {ana}, {jon}, {laura} — fixed firm contacts configured in admin settings.
     # Stored as single user IDs (not lists). Fall back to literal labels
     # so the overview still reads sensibly if an admin hasn't filled them in.
@@ -428,12 +435,14 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     legalassistants_mention = (
         f"<!subteam^{group_id}|{group_name}>" if group_id else "@legalassistants"
     )
+    la_mention = f"<@{la_id}>" if la_id else legalassistants_mention
 
     def _render(template: str) -> str:
         return template.format(
             mentions=mention_str,
             paralegal=paralegal_mention,
             attorney=attorney_mention,
+            la=la_mention,
             ana=ana_mention,
             jon=jon_mention,
             laura=laura_mention,
@@ -455,28 +464,29 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
                             channel_name=_channel_name_cached(client, channel))
     _cache_people_async(client, participants)
 
-    # Each step in the sequence posts as its OWN top-level channel message
-    # (thread_ts="") so replies stay scoped to that specific task instead of
-    # piling up under the master checklist.
+    # Each step posts as its OWN top-level message and (when tagged with a
+    # trigger name) opens its own closeable workflow so it shows in the
+    # scoreboard / emails in its bucket and can be closed with done/✅.
     now = time.time()
-    for delay, template in DISBURSEMENT.sequence:
+    for delay, template, trig in DISBURSEMENT.sequence:
         storage.schedule_message(
             channel_id=channel,
             thread_ts="",
             send_after=now + delay,
             text=_render(template),
+            create_workflow_as=trig,
         )
 
-    # Deadline messages post IN the master thread and self-cancel if the
-    # workflow has been closed (reply "complete" / "@RJL-zap COMPLETE" in the
-    # master thread) before their fire time.
-    for delay, template in DISBURSEMENT.deadline_sequence:
+    # Deadline steps also post top-level + open a workflow, but self-cancel if
+    # the master overview workflow has been completed before they fire.
+    for delay, template, trig in DISBURSEMENT.deadline_sequence:
         storage.schedule_message(
             channel_id=channel,
-            thread_ts=parent_ts,
+            thread_ts="",
             send_after=now + delay,
             text=_render(template),
             skip_if_complete_parent_ts=parent_ts,
+            create_workflow_as=trig,
         )
 
     log.info("started disbursement workflow channel=%s parent_ts=%s triggered_by=%s "
@@ -541,7 +551,8 @@ def _start_followup_workflow(
              trigger_name, channel, parent_ts, participants)
 
 
-def _do_simple_post(client, channel: str, parent_ts: str, raw_text: str, cfg: SimplePostConfig) -> None:
+def _do_simple_post(client, channel: str, parent_ts: str, raw_text: str,
+                    cfg: SimplePostConfig, create_workflow_as: str | None = None) -> None:
     bot_id = client.auth_test()["user_id"]
     mentioned = re.findall(r"<@([A-Z0-9]+)>", raw_text)
     participants = [uid for uid in mentioned if uid != bot_id]
@@ -549,9 +560,18 @@ def _do_simple_post(client, channel: str, parent_ts: str, raw_text: str, cfg: Si
     extras = " ".join(f"<@{uid}>" for uid in _ids_from_config(cfg.extras_setting_key))
 
     text = cfg.message.replace("{mentions}", mention_str).replace("{extras}", extras).strip()
-    client.chat_postMessage(channel=channel, thread_ts=parent_ts, text=text)
-    log.info("posted simple workflow phrase=%s channel=%s parent_ts=%s",
-             cfg.phrase, channel, parent_ts)
+    resp = client.chat_postMessage(channel=channel, text=text)
+    # When tracked (review request), open a closeable workflow at the posted
+    # message so it appears in the scoreboard/emails and can be closed.
+    if create_workflow_as and resp and resp.get("ts"):
+        try:
+            storage.create_workflow(channel, resp["ts"], create_workflow_as, [],
+                                    channel_name=_channel_name_cached(client, channel))
+        except Exception:
+            log.exception("could not open %s workflow in channel=%s",
+                          create_workflow_as, channel)
+    log.info("posted simple workflow phrase=%s channel=%s workflow=%s",
+             cfg.phrase, channel, create_workflow_as)
 
 
 def _do_simple_post_top_level(client, channel: str, cfg: SimplePostConfig) -> None:
@@ -677,26 +697,10 @@ _WEEKLY_REPORT_LAST_SENT_KEY = "weekly_report_last_sent_at"
 # the next real schedule instead of a stale one the moment it boots.
 _WEEKLY_REPORT_MAX_LATENESS_SECONDS = 48 * 3600
 
-# trigger_name → human label for the report
-_WORKFLOW_LABELS = {
-    "attorney_intro":     "Attorney Intro (client contact)",
-    "paralegal_intro":    "Paralegal Intro (client contact)",
-    "case_setup":         "Case Setup",
-    "client_intake":      "Client Intake",
-    "doc_verification":   "Document Verification",
-    "check_pickup":       "Client Check Pickup",
-    "calendar_sol":       "Calendar SOL",
-    "mediation_checklist": "Mediation Checklist",
-    "disbursement":       "30-Day Disbursement",
-    "answer_filed":       "Calendar — Answer Filed",
-    "discovery_received": "Calendar — Discovery Requests",
-    "scheduling_order":   "Calendar — Scheduling Order",
-}
+# Shared trigger label / close-word maps (single source of truth in config).
+_WORKFLOW_LABELS = WORKFLOW_LABELS
 # Non-default reply keyword that closes a workflow (everything else: "done")
-_WORKFLOW_DONE_WORD = {
-    "doc_verification": "confirmed",
-    "check_pickup":     "scheduled",
-}
+_WORKFLOW_DONE_WORD = WORKFLOW_DONE_WORD
 
 _DAY_NAMES = {
     "monday": 0, "mon": 0, "tuesday": 1, "tue": 1, "tues": 1,
@@ -2033,6 +2037,7 @@ def handle_message(event, client):
                     thread_ts="",
                     send_after=time.time() + 3 * 60,
                     text=msg_text,
+                    create_workflow_as="review_request",
                 )
             except Exception:
                 log.exception("auto review_request scheduling failed for channel=%s", channel_id)

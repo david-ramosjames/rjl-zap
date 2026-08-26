@@ -1066,13 +1066,13 @@
             <li><strong>Paralegal</strong> &amp; <strong>Attorney</strong> — parsed from the channel topic (<em>Attorney @Jesus | Paralegal @Lyliana</em>). The paralegal is tagged on the early cancel-orders and medical-bills steps.</li>
             <li><strong>Ana</strong>, <strong>Jon</strong> &amp; <strong>Laura</strong> — fixed firm contacts. Set their Slack user IDs in admin settings under <em>Disbursement — Ana's / Jon's / Laura's Slack ID</em>. Without them the messages read "@ana" / "@jon" / "@laura" as plain text.</li>
             <li>The <strong>Reductions, Funding, Deposit, and Expense</strong> follow-ups tag the <strong>attorney + Ana</strong> (not the paralegal). <strong>Drafting &amp; Release</strong> tags Ana. The <strong>Day 23 &amp; Day 30 deadline warnings</strong> tag the attorney, Ana, Jon, and Laura.</li>
-            <li><strong>@legalassistants</strong> (the subteam configured in admin settings) is tagged on the calendar-clearance step.</li>
+            <li><strong>LA</strong> — the Legal Assistant named in the channel topic (<em>LA @Name</em>) is tagged on the case-settlement / calendar-clearance step. Falls back to the @legalassistants subteam if the topic doesn't name one.</li>
           </ul>
         </div>
 
         <div class="callout blue">
           <i class="bi bi-chat-square-text me-1"></i>
-          <strong>Each step is its own top-level channel post</strong>, not a thread reply, so the team can discuss "any orders still pending" or "no subro on this case" right under the relevant step instead of buried in one long thread.
+          <strong>Each step is its own top-level post AND its own closeable task.</strong> Reply <span class="done-word">done</span> / <span class="done-word">complete</span> or react ✅ on a step to close it. Every step shows on the <a href="/open-items" style="color:var(--accent)">Open &amp; Escalated Items</a> board and in the scheduled emails, grouped into buckets: cancel-orders &amp; medical-bills under <strong>Paralegal</strong>, case-settlement under <strong>Legal Assistant</strong>, and the rest under <strong>Disbursement</strong> (filterable by the case's attorney).
         </div>
 
         <div class="what-happens mb-3">
@@ -1083,7 +1083,7 @@
           <div class="tl-row"><span class="tl-badge badge-now">30 min</span> Disbursement overview &amp; phase summary</div>
           <div class="tl-row"><span class="tl-badge badge-now">3 hrs</span> CANCEL ORDERS AND GATHER INVOICES — tags the paralegal</div>
           <div class="tl-row"><span class="tl-badge badge-soon">22 hrs</span> MEDICAL BILLS — tags the paralegal</div>
-          <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> CASE SETTLEMENT — tags @legalassistants</div>
+          <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> CASE SETTLEMENT — tags the LA from the topic <em>(Legal Assistant bucket)</em></div>
           <div class="tl-row"><span class="tl-badge badge-soon">24 hrs</span> DRAFTING &amp; RELEASE — tags Ana (drafting instructions + W-9)</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 3</span> Reductions update — tags the attorney + Ana</div>
           <div class="tl-row"><span class="tl-badge badge-warn">Day 7</span> Releases obtained, reviewed &amp; approved — attorney confirms (paralegal + Ana cc'd)</div>

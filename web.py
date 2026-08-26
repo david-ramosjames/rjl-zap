@@ -309,21 +309,8 @@ def index():
 
 # trigger_name → label shown on the Open Items page. Kept here (rather than
 # imported from app) so the web thread never imports the Slack app module.
-WORKFLOW_LABELS = {
-    "attorney_intro":      "Attorney Intro",
-    "paralegal_intro":     "Paralegal Intro",
-    "case_setup":          "Case Setup",
-    "client_intake":       "Client Intake",
-    "doc_verification":    "Document Verification",
-    "check_pickup":        "Check Pickup",
-    "calendar_sol":        "Calendar SOL",
-    "mediation_checklist": "Mediation Checklist",
-    "disbursement":        "30-Day Disbursement",
-    "answer_filed":        "Calendar — Answer Filed",
-    "discovery_received":  "Calendar — Discovery Requests",
-    "scheduling_order":    "Calendar — Scheduling Order",
-}
-WORKFLOW_DONE_WORD = {"doc_verification": "confirmed", "check_pickup": "scheduled"}
+# Label / close-word maps live in config (shared with app.py + emails).
+from config import WORKFLOW_LABELS, WORKFLOW_DONE_WORD  # noqa: E402
 
 
 def _slack_permalink(workspace_url: str, channel_id: str, parent_ts: str) -> str:
