@@ -16,7 +16,7 @@ import web
 import email_reports
 from config import (
     WORKFLOW_BUCKETS, WORKFLOW_LABELS, WORKFLOW_DONE_WORD,
-    ATTORNEY_INTRO, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
+    ATTORNEY_INTRO, CALL_BACK, CASE_SETUP, CHECK_PICKUP, PARALEGAL_INTRO,
     CALENDAR_SOL_DELAY_SECONDS,
     CASE_SETUP_DELAY_SECONDS, DOC_VERIFICATION_DELAY_SECONDS,
     NEW_CASE_DELAY_SECONDS,
@@ -264,6 +264,12 @@ def handle_app_mention(event, client):
         if MEDIATION.phrase in lowered:
             _start_mediation(client, event["channel"], event["ts"], text)
             return
+        # "@RJL-zap request a call back" → open a Call Back Required task for
+        # the attorney + paralegal from this channel's topic. Checked before
+        # the followup list so "call back" isn't shadowed by other matches.
+        if CALL_BACK.phrase in lowered:
+            _start_call_back(client, event["channel"])
+            return
         # Note: Disbursement no longer responds to @-mentions — it is
         # triggered by an authorized user posting "start disbursement"
         # as a plain channel message. See handle_message.
@@ -307,6 +313,7 @@ def handle_app_mention(event, client):
                 f"`{CASE_SETUP.phrase}`",
                 f"`{CLIENT_INTAKE.phrase}`",
                 f"`{CHECK_PICKUP.phrase}`",
+                f"`{CALL_BACK.phrase}`",
                 f"`{NEW_CASE.phrase}`",
                 f"`{REVIEW_REQUEST.phrase}`",
             ]
@@ -627,6 +634,36 @@ def _auto_start_followup(
                             channel_name=_channel_name_cached(client, channel))
     _cache_people_async(client, participants)
     log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
+
+
+def _start_call_back(client, channel: str) -> None:
+    """Open a Call Back Required task tagging the attorney + paralegal from
+    this channel's topic (Attorney bucket, closeable via done/✅)."""
+    try:
+        info = client.conversations_info(channel=channel)
+        topic = ((info.get("channel") or {}).get("topic") or {}).get("value", "") or ""
+    except Exception:
+        topic = ""
+        log.debug("call back: could not fetch topic for %s", channel, exc_info=True)
+    try:
+        bot_id = client.auth_test()["user_id"]
+    except Exception:
+        bot_id = None
+    attorney_id  = _first_match(_TOPIC_ATTORNEY_RE,  topic, exclude=bot_id)
+    paralegal_id = _first_match(_TOPIC_PARALEGAL_RE, topic, exclude=bot_id)
+    participants = [u for u in (attorney_id, paralegal_id) if u]
+    log.info("starting call_back in #%s (attorney=%s paralegal=%s)",
+             channel, attorney_id, paralegal_id)
+    try:
+        # Pass the (possibly empty) list, NOT None — None would fall back to
+        # the case-setup participants setting, which is wrong here.
+        _auto_start_followup(
+            client, channel, CALL_BACK,
+            "call_back_escalation_user_ids", "call_back",
+            participants=participants,
+        )
+    except Exception:
+        log.exception("call_back failed for channel=%s", channel)
 
 
 # A deferred action that keeps failing (Slack outage, rate limit, revoked

@@ -312,6 +312,26 @@ CHECK_PICKUP = FollowUpConfig(
 )
 
 
+CALL_BACK = FollowUpConfig(
+    phrase="request a call back",
+    done_keyword="done",
+    initial_delay_seconds=0,
+    check_delay_seconds=24 * 60 * 60,   # 24 hours
+    initial_message=(
+        ":telephone_receiver: *Call Back Required — {{mentions}}*\n\n"
+        "A call back has been requested for this client. Please call the client "
+        "back, then reply *done* in this thread (or react :white_check_mark:) "
+        "once the call has been made."
+    ),
+    escalation_message=(
+        ":warning: *REMINDER: Call Back Still Needed* :warning:\n\n"
+        "{{mentions}} — it has been 24 hours and the call back hasn't been "
+        "confirmed. Please call the client and reply *done* when complete.\n\n"
+        "{{escalation}}"
+    ),
+)
+
+
 @dataclass
 class SimplePostConfig:
     """One-shot post: immediately drops a message tagging participants + extra contacts from settings."""
@@ -424,7 +444,7 @@ REVIEW_REQUEST_AUTO_PHRASE = "RJL has been paid"
 #   the scoreboard (per-person sub-scores). None = no breakdown.
 WORKFLOW_BUCKETS = [
     ("attorney",     "Attorney",
-     ["attorney_intro", "check_pickup", "review_request"], "attorney_id"),
+     ["attorney_intro", "check_pickup", "review_request", "call_back"], "attorney_id"),
     ("paralegal",    "Paralegal",
      ["paralegal_intro", "disb_cancel_orders", "disb_medical_bills"], "paralegal_id"),
     ("intake",       "Intake",
@@ -452,6 +472,7 @@ WORKFLOW_LABELS = {
     "doc_verification":    "Document Verification",
     "check_pickup":        "Client Check Pickup",
     "review_request":      "5-Star Review Decision",
+    "call_back":           "Call Back Required",
     "calendar_sol":        "Calendar SOL",
     "mediation_checklist": "Mediation Checklist",
     "disbursement":        "30-Day Disbursement (overall)",

@@ -132,6 +132,13 @@ SETTINGS = [
         "help": "Tagged in the 5-day reminder if no 'scheduled' reply. Comma-separated.",
     },
     {
+        "key": "call_back_escalation_user_ids",
+        "label": "Call Back — Escalation Contacts",
+        "help": "Tagged in the 24-hour reminder if a requested call back hasn't "
+                "been confirmed done. Comma-separated. The attorney + paralegal "
+                "from the channel topic are always tagged on the initial request.",
+    },
+    {
         "key": "check_pickup_trigger_user_ids",
         "label": "Check Pickup — Auto-Trigger Users",
         "help": "Slack user IDs whose messages auto-trigger Check Pickup "
