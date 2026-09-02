@@ -226,6 +226,16 @@ DISBURSEMENT = DisbursementConfig(
     ],
 )
 
+# Every per-step disbursement workflow (not the master overview). These have
+# no checklist items and must stay open until someone replies done or reacts ✅.
+DISB_STEP_TRIGGERS = frozenset(
+    t for _d, _m, t in (DISBURSEMENT.sequence + DISBURSEMENT.deadline_sequence) if t
+)
+DISB_STEP_CLOSE_HINT = (
+    "\n\nReply *done* in this thread (or react :white_check_mark:) "
+    "once this step is complete."
+)
+
 @dataclass
 class FollowUpConfig:
     """Generic config for workflows that post a task, then escalate if no 'done' reply."""
@@ -411,6 +421,12 @@ CLIENT_INTAKE = FollowUpConfig(
 
 
 COMPLETION_EMOJI = "white_check_mark"
+# Slack clients sometimes apply a different check emoji than ✅.
+COMPLETION_EMOJIS = frozenset({
+    "white_check_mark",
+    "heavy_check_mark",
+    "ballot_box_with_check",
+})
 COMPLETION_REPLY = "COMPLETE"
 REMINDER_CHECK_INTERVAL_SECONDS = 250
 

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RJL-zap — How to Use</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.svg') }}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -337,6 +339,16 @@
     .form-label { font-weight: 600; font-size: .88rem; color: var(--text-dark); }
     .form-help { font-size: .78rem; color: var(--text-muted); margin-top: .2rem; }
     code.slack-id { background: #f3f4f6; border-radius: 4px; padding: .1rem .35rem; font-size: .85em; color: var(--accent); }
+    .people-toggle { display:flex; flex-wrap:wrap; gap:.4rem .9rem; margin:.35rem 0 1rem; }
+    .people-toggle label {
+      display:flex; align-items:center; gap:.4rem; font-size:.85rem; font-weight:500;
+      color:var(--text-dark); background:#f9fafb; border:1px solid var(--border);
+      border-radius:8px; padding:.35rem .7rem; cursor:pointer; user-select:none;
+    }
+    .people-toggle label:hover { border-color:var(--accent); }
+    .people-toggle input { accent-color: var(--accent); width:1rem; height:1rem; }
+    .people-group-label { font-size:.7rem; font-weight:700; letter-spacing:.08em;
+      text-transform:uppercase; color:var(--text-muted); margin:.75rem 0 .3rem; }
     .save-btn {
       background: var(--accent);
       color: #fff;
@@ -1072,7 +1084,7 @@
 
         <div class="callout blue">
           <i class="bi bi-chat-square-text me-1"></i>
-          <strong>Each step is its own top-level post AND its own closeable task.</strong> Reply <span class="done-word">done</span> / <span class="done-word">complete</span> or react ✅ on a step to close it. Every step shows on the <a href="/open-items" style="color:var(--accent)">Open &amp; Escalated Items</a> board and in the scheduled emails, grouped into buckets: cancel-orders &amp; medical-bills under <strong>Paralegal</strong>, case-settlement under <strong>Legal Assistant</strong>, and the rest under <strong>Disbursement</strong> (filterable by the case's attorney).
+          <strong>Each step is its own top-level post AND its own closeable task.</strong> It stays open on the <a href="/open-items" style="color:var(--accent)">Open &amp; Escalated Items</a> board until someone replies <span class="done-word">done</span> / <span class="done-word">complete</span> or reacts ✅ on that step — answering the questions in the thread is not enough. If there's no confirmation after 24 hours, the bot reminds the thread. Steps are grouped into buckets: cancel-orders &amp; medical-bills under <strong>Paralegal</strong>, case-settlement under <strong>Legal Assistant</strong>, and the rest under <strong>Disbursement</strong> (filterable by the case's attorney).
         </div>
 
         <div class="what-happens mb-3">
@@ -1332,6 +1344,44 @@
         </p>
 
         <form method="POST" action="/settings">
+          <div class="mb-4">
+            <label class="form-label">Scoreboard — people to show</label>
+            <div class="form-help" style="margin-bottom:.5rem">
+              Uncheck anyone who should not appear in the per-person breakdown
+              on Open &amp; Escalated Items (for example a supervising attorney
+              who is named on channel topics but doesn't carry a caseload).
+              Bucket totals still include their channels. New people show up
+              here automatically and default to visible.
+            </div>
+            {% set groups = [
+              ("attorney", "Attorneys"),
+              ("paralegal", "Paralegals"),
+              ("la", "Legal Assistants"),
+            ] %}
+            {% for key, heading in groups %}
+              {% if scoreboard_people.get(key) %}
+              <div class="people-group-label">{{ heading }}</div>
+              <div class="people-toggle">
+                {% for p in scoreboard_people[key] %}
+                <input type="hidden" name="scoreboard_person" value="{{ p.uid }}">
+                <label>
+                  <input type="checkbox" name="scoreboard_show" value="{{ p.uid }}"
+                         {% if not p.hidden %}checked{% endif %}>
+                  {{ p.name }}
+                </label>
+                {% endfor %}
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% if not scoreboard_people.get("attorney")
+                  and not scoreboard_people.get("paralegal")
+                  and not scoreboard_people.get("la") %}
+            <div class="form-help">No attorneys, paralegals, or legal assistants
+              have been parsed from channel topics yet. They'll appear here after
+              the bot reads channel topics.</div>
+            {% endif %}
+          </div>
+
           {% for s in settings %}
           <div class="mb-4">
             <label class="form-label" for="{{ s.key }}">{{ s.label }}</label>

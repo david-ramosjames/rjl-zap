@@ -2,10 +2,64 @@ import os
 import threading
 from functools import wraps
 
-from flask import Flask, redirect, render_template, request, Response, url_for
+from flask import Flask, redirect, render_template, request, Response, send_from_directory, url_for
 
 import storage
 from config import WORKFLOW_BUCKETS, WORKFLOW_BUCKET_OF
+
+
+def _hidden_scoreboard_ids() -> set[str]:
+    raw = storage.get_config("scoreboard_hidden_user_ids", default="") or ""
+    return {uid.strip() for uid in raw.split(",") if uid.strip()}
+
+
+def _scoreboard_people_by_role() -> dict[str, list[dict]]:
+    """Unique Attorney / Paralegal / LA people from channel topics, for the
+    admin show/hide toggles."""
+    roles = storage.get_channel_roles()
+    names = storage.get_user_names()
+    hidden = _hidden_scoreboard_ids()
+    buckets = {
+        "attorney": {},
+        "paralegal": {},
+        "la": {},
+    }
+    key_of = {"attorney_id": "attorney", "paralegal_id": "paralegal", "la_id": "la"}
+    for cr in roles.values():
+        for col, bucket in key_of.items():
+            uid = cr.get(col)
+            if uid:
+                buckets[bucket][uid] = names.get(uid, uid)
+    out = {}
+    for bucket, people in buckets.items():
+        out[bucket] = sorted(
+            ({"uid": uid, "name": name, "hidden": uid in hidden}
+             for uid, name in people.items()),
+            key=lambda p: p["name"].lower(),
+        )
+    return out
+
+
+def _seed_hidden_scoreboard_people() -> None:
+    """First run: hide Laura Ramos James (managing attorney) from the
+    per-person breakdown so the scoreboard lists practicing attorneys.
+    Admins can toggle anyone back on from settings."""
+    if storage.get_config("scoreboard_hidden_seeded"):
+        return
+    names = storage.get_user_names()
+    found: list[str] = []
+    for uid, name in (names or {}).items():
+        if (name or "").strip().lower() == "laura ramos james":
+            found.append(uid)
+    laura_id = (storage.get_config("disbursement_laura_user_id", default="") or "").strip()
+    if laura_id and laura_id not in found:
+        found.append(laura_id)
+    if not found:
+        return
+    existing = _hidden_scoreboard_ids()
+    existing.update(found)
+    storage.set_config("scoreboard_hidden_user_ids", ",".join(sorted(existing)))
+    storage.set_config("scoreboard_hidden_seeded", "1")
 
 
 def build_scoreboard(start_ts: float, end_ts: float) -> list:
@@ -14,9 +68,11 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
     Loads the full window (all statuses) so it's independent of the table's
     status filter. Attorney & Paralegal buckets also get a per-person
     breakdown (by the channel-topic role) under `people`."""
+    _seed_hidden_scoreboard_people()
     rows = storage.workflows_in_window(start_ts, end_ts, status="all")
     roles = storage.get_channel_roles()
     names = storage.get_user_names()
+    hidden = _hidden_scoreboard_ids()
 
     tally = {key: {"created": 0, "open": 0, "escalated": 0, "completed": 0}
              for key, _l, _t, _r in WORKFLOW_BUCKETS}
@@ -41,7 +97,7 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
         role_key = role_of.get(bkey)
         if role_key and is_open:
             uid = (roles.get(r["channel_id"]) or {}).get(role_key)
-            if uid:
+            if uid and uid not in hidden:
                 p = people[bkey].setdefault(uid, {"open": 0, "escalated": 0})
                 p["open"] += 1
                 if r.get("escalations_sent"):
@@ -60,6 +116,13 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
     return out
 
 flask_app = Flask(__name__)
+
+
+@flask_app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        flask_app.static_folder, "favicon.svg", mimetype="image/svg+xml",
+    )
 
 SETTINGS = [
     {
@@ -311,7 +374,14 @@ def _requires_auth(f):
 def index():
     cfg = storage.get_all_config()
     saved = request.args.get("saved") == "1"
-    return render_template("index.html", settings=SETTINGS, cfg=cfg, saved=saved)
+    _seed_hidden_scoreboard_people()
+    return render_template(
+        "index.html",
+        settings=SETTINGS,
+        cfg=cfg,
+        saved=saved,
+        scoreboard_people=_scoreboard_people_by_role(),
+    )
 
 
 # trigger_name → label shown on the Open Items page. Kept here (rather than
@@ -467,6 +537,12 @@ def save_settings():
     for s in SETTINGS:
         value = request.form.get(s["key"], "").strip()
         storage.set_config(s["key"], value)
+    listed = request.form.getlist("scoreboard_person")
+    if listed:
+        shown = set(request.form.getlist("scoreboard_show"))
+        hidden = [uid for uid in listed if uid and uid not in shown]
+        storage.set_config("scoreboard_hidden_user_ids", ",".join(hidden))
+        storage.set_config("scoreboard_hidden_seeded", "1")
     return redirect(url_for("index", saved=1))
 
 

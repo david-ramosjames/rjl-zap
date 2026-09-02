@@ -185,6 +185,17 @@ def workflow_open_items(workflow_id: int) -> List[dict]:
         return [dict(r) for r in rows]
 
 
+def workflow_has_items(workflow_id: int) -> bool:
+    """True if this workflow has checklist items. Item-less FollowUp tasks
+    (call back, intros, etc.) must not be treated as 'all items done'."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM items WHERE workflow_id = ? LIMIT 1",
+            (workflow_id,),
+        ).fetchone()
+        return row is not None
+
+
 def mark_item_complete(item_ts: str) -> Optional[int]:
     with connect() as conn:
         row = conn.execute("SELECT workflow_id FROM items WHERE item_ts = ?", (item_ts,)).fetchone()
@@ -222,6 +233,29 @@ def mark_workflow_complete(workflow_id: int) -> None:
             "UPDATE workflows SET completed_at = ? WHERE id = ? AND completed_at IS NULL",
             (time.time(), workflow_id),
         )
+
+
+def reopen_itemless_completed(trigger_names: Iterable[str]) -> int:
+    """Clear completed_at on item-less workflows of the given types.
+
+    Used to undo a bug that auto-closed disbursement steps (and similar
+    FollowUp tasks) just because they had no checklist items.
+    """
+    names = [n for n in trigger_names if n]
+    if not names:
+        return 0
+    placeholders = ",".join("?" * len(names))
+    with connect() as conn:
+        cur = conn.execute(
+            f"UPDATE workflows SET completed_at = NULL "
+            f"WHERE completed_at IS NOT NULL "
+            f"  AND trigger_name IN ({placeholders}) "
+            f"  AND NOT EXISTS ("
+            f"    SELECT 1 FROM items WHERE items.workflow_id = workflows.id"
+            f"  )",
+            names,
+        )
+        return cur.rowcount
 
 
 def open_workflows_due_for_reminder(cutoff_ts: float) -> List[dict]:

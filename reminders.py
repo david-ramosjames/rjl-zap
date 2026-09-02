@@ -1,11 +1,19 @@
 import logging
+import re
 import threading
 import time
 
 import storage
-from config import REMINDER_CHECK_INTERVAL_SECONDS
+from config import COMPLETION_EMOJIS, DISB_STEP_TRIGGERS, REMINDER_CHECK_INTERVAL_SECONDS
 
 log = logging.getLogger(__name__)
+
+# Same close-words as app.py — a reply starting with these counts as done
+# even when the workflow's specific keyword is something else (e.g. "scheduled").
+_CLOSE_REPLY_RE = re.compile(
+    r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)*(?:done|complete|completed)\b",
+    re.IGNORECASE,
+)
 
 
 def start_reminder_loop(client) -> None:
@@ -21,9 +29,17 @@ def _loop(client) -> None:
         time.sleep(REMINDER_CHECK_INTERVAL_SECONDS)
 
 
+def _parent_has_completion_reaction(parent: dict) -> bool:
+    for rx in parent.get("reactions") or []:
+        if rx.get("name") in COMPLETION_EMOJIS and int(rx.get("count") or 0) > 0:
+            return True
+    return False
+
+
 def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
-    """Returns True if the thread has a non-bot reply containing `keyword`,
-    False if it definitely does not, or None if we couldn't tell (API error).
+    """Returns True if the thread is already confirmed — a non-bot reply
+    containing `keyword` (or done/complete), or a ✅ on the parent message.
+    False if it definitely is not. None if we couldn't tell (API error).
     Callers should treat None as 'don't escalate yet — try again next tick'
     so a transient Slack outage doesn't fire a false escalation."""
     try:
@@ -38,15 +54,23 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
         bot_user_id = None
 
     messages = resp.get("messages", []) or []
-    kw = keyword.lower()
+    parent = messages[0] if messages else {}
+    if _parent_has_completion_reaction(parent):
+        log.info(
+            "thread reply check channel=%s ts=%s — parent has ✅ reaction, treating as done",
+            channel_id, thread_ts,
+        )
+        return True
+
+    kw = (keyword or "").lower()
     matches: list[str] = []
     skipped_bot = 0
     for m in messages[1:]:  # messages[0] is the parent
         if m.get("bot_id") or (bot_user_id and m.get("user") == bot_user_id):
             skipped_bot += 1
             continue
-        text = (m.get("text") or "").lower()
-        if kw in text:
+        text = m.get("text") or ""
+        if (kw and kw in text.lower()) or _CLOSE_REPLY_RE.match(text):
             matches.append(m.get("ts", "?"))
 
     log.info(
@@ -102,12 +126,24 @@ def _tick(client) -> None:
         try:
             # Deadline messages self-cancel if the parent workflow is already
             # complete (e.g. disbursement +23d / +30d warnings). Keyed on the
-            # workflow's master parent_ts.
+            # workflow's master parent_ts — which may differ from this
+            # message's own thread_ts.
             skip_parent = msg.get("skip_if_complete_parent_ts")
             if skip_parent:
                 wf = storage.workflow_by_thread(msg["channel_id"], skip_parent)
                 if wf and wf.get("completed_at"):
                     log.info("workflow complete — skipping deadline msg id=%s", msg["id"])
+                    storage.mark_scheduled_sent(msg["id"])
+                    continue
+
+            # Follow-up escalations (call back, intros, case setup, …) are
+            # keyed on the thread itself. Skip if that workflow is closed —
+            # even when skip_if_complete_parent_ts wasn't stored (older rows).
+            if msg.get("thread_ts") and msg["thread_ts"] != skip_parent:
+                wf = storage.workflow_by_thread(msg["channel_id"], msg["thread_ts"])
+                if wf and wf.get("completed_at"):
+                    log.info("thread workflow complete — skipping scheduled msg id=%s",
+                             msg["id"])
                     storage.mark_scheduled_sent(msg["id"])
                     continue
 
@@ -124,9 +160,20 @@ def _tick(client) -> None:
                     )
                     continue
                 if result:
-                    log.info("thread already has '%s' reply — skipping scheduled msg id=%s",
+                    log.info("thread already confirmed ('%s' reply or ✅) — skipping scheduled msg id=%s",
                              msg["done_keyword"], msg["id"])
                     storage.mark_scheduled_sent(msg["id"])
+                    # If the close event was missed, still mark the workflow
+                    # complete so it drops off the scoreboard / emails.
+                    wf = storage.workflow_by_thread(
+                        msg["channel_id"], msg["thread_ts"],
+                    )
+                    if wf and not wf.get("completed_at"):
+                        storage.force_complete_workflow(wf["id"])
+                        log.info(
+                            "marked %s (id=%s) complete from reminder-time check",
+                            wf["trigger_name"], wf["id"],
+                        )
                     continue
             post_kwargs: dict = {"channel": msg["channel_id"], "text": msg["text"]}
             if msg["thread_ts"]:
@@ -148,6 +195,27 @@ def _tick(client) -> None:
                 except Exception:
                     log.exception("could not open workflow %s for scheduled msg id=%s",
                                   trig, msg["id"])
+                if trig in DISB_STEP_TRIGGERS:
+                    try:
+                        storage.schedule_message(
+                            channel_id=msg["channel_id"],
+                            thread_ts=resp["ts"],
+                            send_after=time.time() + 24 * 3600,
+                            text=(
+                                ":warning: *Reminder* — this disbursement step "
+                                "hasn't been confirmed.\n"
+                                "Reply *done* in this thread (or react "
+                                ":white_check_mark:) when complete."
+                            ),
+                            check_replies_first=True,
+                            done_keyword="done",
+                            skip_if_complete_parent_ts=resp["ts"],
+                        )
+                    except Exception:
+                        log.exception(
+                            "could not schedule done-check for %s in channel=%s",
+                            trig, msg["channel_id"],
+                        )
         except Exception:
             log.exception("failed to send scheduled message id=%s", msg["id"])
 
@@ -162,13 +230,19 @@ def _tick(client) -> None:
         "mediation_checklist", "disbursement",
         "attorney_intro", "case_setup", "paralegal_intro", "check_pickup",
         "doc_verification", "client_intake",
+        "call_back", "review_request",
+        *DISB_STEP_TRIGGERS,
     }
     for wf in storage.open_workflows_due_for_reminder(cutoff):
         if wf["trigger_name"] in skip_triggers:
             continue
         open_items = storage.workflow_open_items(wf["id"])
         if not open_items:
-            storage.mark_workflow_complete(wf["id"])
+            # Checklist with every item checked → complete. Item-less
+            # FollowUp tasks (call back, intros, etc.) must NOT be
+            # auto-closed here; they close via done/✅.
+            if storage.workflow_has_items(wf["id"]):
+                storage.mark_workflow_complete(wf["id"])
             continue
         bullets = "\n".join(f"• {i['item_text']}" for i in open_items)
         # Calendar SOL reminder tags the same users as the initial announcement;

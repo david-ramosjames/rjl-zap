@@ -22,8 +22,9 @@ from config import (
     NEW_CASE_DELAY_SECONDS,
     CHECK_PICKUP_AUTO_PHRASE, REVIEW_REQUEST_AUTO_PHRASE,
     CLIENT_INTAKE, CLIENT_INTAKE_DELAY_SECONDS,
-    COMPLETION_EMOJI, COMPLETION_REPLY,
-    DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST,
+    COMPLETION_EMOJI, COMPLETION_EMOJIS, COMPLETION_REPLY,
+    DISBURSEMENT, DISBURSEMENT_MASTER_CHECKLIST, DISB_STEP_CLOSE_HINT,
+    DISB_STEP_TRIGGERS,
     DOC_VERIFICATION,
     FollowUpConfig,
     MEDIATION, NEW_CASE, NEW_CASE_ON_FIRST_MESSAGE, REVIEW_REQUEST,
@@ -118,6 +119,52 @@ def _cache_people_async(client, user_ids) -> None:
 def _ids_from_config(key: str) -> list[str]:
     raw = storage.get_config(key)
     return [uid.strip() for uid in raw.split(",") if uid.strip()]
+
+
+def _complete_workflow(
+    client,
+    wf: dict,
+    channel: str,
+    thread_ts: str,
+    author: str = "",
+    via: str = "reply",
+    ack_if_already: bool = False,
+) -> bool:
+    """Mark a workflow complete, cancel pending reminders, and confirm in-thread.
+
+    Returns True if this call newly closed it. When `ack_if_already` is True
+    (used for explicit "done" replies), still posts a confirmation so the
+    user isn't left wondering whether the bot heard them.
+    """
+    already = bool(wf.get("completed_at"))
+    cancelled = storage.cancel_pending_scheduled_for_thread(channel, thread_ts)
+    if already:
+        log.info("workflow %s (id=%s) already complete; %s in channel=%s "
+                 "(cancelled %d pending)",
+                 wf["trigger_name"], wf["id"], via, channel, cancelled)
+        if not ack_if_already:
+            return False
+    else:
+        storage.force_complete_workflow(wf["id"])
+        log.info("workflow %s (id=%s) closed via %s in channel=%s "
+                 "(cancelled %d pending)",
+                 wf["trigger_name"], wf["id"], via, channel, cancelled)
+
+    label = WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
+    done_word = WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
+    who = f"<@{author}> — " if author else ""
+    if already:
+        text = (f":white_check_mark: {who}*{label}* was already marked complete. "
+                f"No more reminders for this one.")
+    else:
+        text = (f":white_check_mark: {who}*{label}* is marked complete — thanks! "
+                f"No more reminders for this one. _(Reply `{done_word}` or react "
+                f":white_check_mark: to close.)_")
+    try:
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
+    except Exception:
+        log.exception("could not post completion confirmation")
+    return not already
 
 
 _CONTACT_ICONS = {
@@ -330,21 +377,20 @@ def handle_app_mention(event, client):
         )
         return
 
-    # Accept @-mentions with `complete`, `completed`, or `done` as
-    # workflow-close keywords (matches the no-@-mention close handler
-    # in handle_message — keep the keyword set the same for consistency).
-    lowered_text = text.lower()
-    if any(kw in lowered_text for kw in ("complete", "done")):
+    # Thread @-mention that closes the workflow. Same start-of-message
+    # rules as handle_message so "@RJL-zap done" / "done" behave identically.
+    if parent_ts:
         wf = storage.workflow_by_thread(event["channel"], parent_ts)
-        if wf and not wf.get("completed_at"):
-            storage.force_complete_workflow(wf["id"])
-            log.info("workflow %s (id=%s) closed via @-mention close keyword in channel=%s",
-                     wf["trigger_name"], wf["id"], event["channel"])
-            client.chat_postMessage(
-                channel=event["channel"],
-                thread_ts=parent_ts,
-                text=":tada: All items marked complete. Closing checklist.",
-            )
+        if wf:
+            cleaned = _LEADING_MENTION_RE.sub("", text)
+            done_word = WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
+            specific_re = re.compile(rf"^\s*{re.escape(done_word)}\b", re.IGNORECASE)
+            if _CLOSE_REPLY_RE.match(cleaned) or specific_re.match(cleaned):
+                _complete_workflow(
+                    client, wf, event["channel"], parent_ts,
+                    author=event.get("user", ""), via="app_mention",
+                    ack_if_already=True,
+                )
 
 
 def _start_mediation(client, channel: str, parent_ts: str, raw_text: str) -> None:
@@ -476,22 +522,28 @@ def _start_disbursement(client, channel: str, user_id: str) -> None:
     # scoreboard / emails in its bucket and can be closed with done/✅.
     now = time.time()
     for delay, template, trig in DISBURSEMENT.sequence:
+        text = _render(template)
+        if trig:
+            text += DISB_STEP_CLOSE_HINT
         storage.schedule_message(
             channel_id=channel,
             thread_ts="",
             send_after=now + delay,
-            text=_render(template),
+            text=text,
             create_workflow_as=trig,
         )
 
     # Deadline steps also post top-level + open a workflow, but self-cancel if
     # the master overview workflow has been completed before they fire.
     for delay, template, trig in DISBURSEMENT.deadline_sequence:
+        text = _render(template)
+        if trig:
+            text += DISB_STEP_CLOSE_HINT
         storage.schedule_message(
             channel_id=channel,
             thread_ts="",
             send_after=now + delay,
-            text=_render(template),
+            text=text,
             skip_if_complete_parent_ts=parent_ts,
             create_workflow_as=trig,
         )
@@ -541,6 +593,9 @@ def _start_followup_workflow(
             channel=channel, thread_ts=parent_ts, text=render(cfg.initial_message)
         )
 
+    storage.create_workflow(channel, parent_ts, trigger_name, [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
     storage.schedule_message(
         channel_id=channel,
         thread_ts=parent_ts,
@@ -548,11 +603,8 @@ def _start_followup_workflow(
         text=render(cfg.escalation_message),
         check_replies_first=True,
         done_keyword=cfg.done_keyword,
+        skip_if_complete_parent_ts=parent_ts,
     )
-
-    storage.create_workflow(channel, parent_ts, trigger_name, [],
-                            participants=participants,
-                            channel_name=_channel_name_cached(client, channel))
     _cache_people_async(client, participants)
     log.info("started %s workflow channel=%s parent_ts=%s participants=%s",
              trigger_name, channel, parent_ts, participants)
@@ -621,6 +673,9 @@ def _auto_start_followup(
     if storage.workflow_by_thread(channel, parent_ts):
         return
 
+    storage.create_workflow(channel, parent_ts, trigger_name, [],
+                            participants=participants,
+                            channel_name=_channel_name_cached(client, channel))
     storage.schedule_message(
         channel_id=channel,
         thread_ts=parent_ts,
@@ -628,10 +683,8 @@ def _auto_start_followup(
         text=render(cfg.escalation_message),
         check_replies_first=True,
         done_keyword=cfg.done_keyword,
+        skip_if_complete_parent_ts=parent_ts,
     )
-    storage.create_workflow(channel, parent_ts, trigger_name, [],
-                            participants=participants,
-                            channel_name=_channel_name_cached(client, channel))
     _cache_people_async(client, participants)
     log.info("auto-started %s workflow channel=%s parent_ts=%s", trigger_name, channel, parent_ts)
 
@@ -1470,9 +1523,35 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
              channel, parent_ts, trigger.name, len(item_records))
 
 
+def _workflow_for_message(client, channel: str, ts: str):
+    """Find the workflow for a message ts, or for the thread it belongs to.
+
+    Reactions on a thread *reply* (e.g. the 24h reminder) should still close
+    the parent task — Slack's reaction payload only has the reacted-to ts.
+    Returns (workflow, parent_ts) or (None, ts).
+    """
+    wf = storage.workflow_by_thread(channel, ts)
+    if wf:
+        return wf, ts
+    try:
+        resp = client.conversations_history(
+            channel=channel, latest=ts, oldest=ts, inclusive=True, limit=1,
+        )
+        msg = (resp.get("messages") or [None])[0] or {}
+        parent = msg.get("thread_ts")
+        if parent and parent != ts:
+            wf = storage.workflow_by_thread(channel, parent)
+            if wf:
+                return wf, parent
+    except Exception:
+        log.debug("could not resolve parent thread for ts=%s channel=%s",
+                  ts, channel, exc_info=True)
+    return None, ts
+
+
 @app.event("reaction_added")
 def handle_reaction_added(event, client):
-    if event.get("reaction") != COMPLETION_EMOJI:
+    if event.get("reaction") not in COMPLETION_EMOJIS:
         return
     item = event.get("item") or {}
     if item.get("type") != "message":
@@ -1486,29 +1565,22 @@ def handle_reaction_added(event, client):
         _maybe_finalize(client, workflow_id)
         return
 
-    # 2) ✅ on a workflow's PARENT message → complete the whole workflow.
-    # Covers the FollowUp workflows (intros, case setup, client intake,
-    # doc verification, check pickup) that have no per-item reactions, so
-    # a ✅ closes them the same as replying done / complete / <keyword>.
+    # 2) ✅ on a workflow's PARENT message (or any reply in that thread)
+    # → complete the whole workflow. Covers FollowUp tasks (intros, case
+    # setup, client intake, doc verification, check pickup, call back)
+    # that have no per-item reactions, so a ✅ closes them the same as
+    # replying done / complete / <keyword>.
     if not (channel and ts):
         return
-    wf = storage.workflow_by_thread(channel, ts)
-    if wf and not wf.get("completed_at"):
-        storage.force_complete_workflow(wf["id"])
-        cancelled = storage.cancel_pending_scheduled_for_thread(channel, ts)
-        label = _WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
-        author = event.get("user", "")
-        who = f"<@{author}> " if author else ""
-        log.info("workflow %s (id=%s) closed via ✅ reaction in channel=%s (cancelled %d)",
-                 wf["trigger_name"], wf["id"], channel, cancelled)
-        try:
-            client.chat_postMessage(
-                channel=channel, thread_ts=ts,
-                text=f":white_check_mark: {who}— *{label}* is marked complete. "
-                     f"No more reminders for this one.",
-            )
-        except Exception:
-            log.exception("could not post reaction-completion confirmation")
+    wf, parent_ts = _workflow_for_message(client, channel, ts)
+    if not wf:
+        log.info("✅ reaction on ts=%s channel=%s matched no workflow", ts, channel)
+        return
+    _complete_workflow(
+        client, wf, channel, parent_ts,
+        author=event.get("user", ""), via="reaction",
+        ack_if_already=False,
+    )
 
 
 @app.event("member_joined_channel")
@@ -1962,33 +2034,21 @@ def handle_message(event, client):
     # keyword (e.g. `scheduled` for Check Pickup, `confirmed` for Document
     # Verification). Leading @-mentions are stripped so "@RJL-zap done" works.
     # On a match: mark complete, cancel any pending escalation, and reply to
-    # confirm — naming the action and the word that closed it.
+    # confirm. If the task was already closed (or silently auto-completed),
+    # still ack so the user isn't left wondering whether the bot heard them.
     thread_ts = event.get("thread_ts")
-    if thread_ts:
+    if thread_ts and not _bot_is_mentioned(client, text):
         wf = storage.workflow_by_thread(channel_id, thread_ts)
-        if wf and not wf.get("completed_at"):
+        if wf:
             cleaned = _LEADING_MENTION_RE.sub("", text)
             done_word = _WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
             specific_re = re.compile(rf"^\s*{re.escape(done_word)}\b", re.IGNORECASE)
             if _CLOSE_REPLY_RE.match(cleaned) or specific_re.match(cleaned):
-                storage.force_complete_workflow(wf["id"])
-                cancelled = storage.cancel_pending_scheduled_for_thread(channel_id, thread_ts)
-                label = _WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
-                author = event.get("user", "")
-                who = f"<@{author}> — " if author else ""
-                log.info("workflow %s (id=%s) closed via reply in channel=%s "
-                         "(cancelled %d pending)",
-                         wf["trigger_name"], wf["id"], channel_id, cancelled)
-                try:
-                    client.chat_postMessage(
-                        channel=channel_id, thread_ts=thread_ts,
-                        text=(f":white_check_mark: {who}*{label}* is marked "
-                              f"complete — thanks! No more reminders for this "
-                              f"one. _(This task closes when someone replies "
-                              f"`{done_word}`.)_"),
-                    )
-                except Exception:
-                    log.exception("could not post completion confirmation")
+                _complete_workflow(
+                    client, wf, channel_id, thread_ts,
+                    author=event.get("user", ""), via="reply",
+                    ack_if_already=True,
+                )
                 return
 
     # Diagnostic: log whenever any auto-trigger phrase appears in a user
@@ -2097,7 +2157,7 @@ def _bot_is_mentioned(client, text: str) -> bool:
 
 @app.event("reaction_removed")
 def handle_reaction_removed(event, client):
-    if event.get("reaction") != COMPLETION_EMOJI:
+    if event.get("reaction") not in COMPLETION_EMOJIS:
         return
     item = event.get("item") or {}
     if item.get("type") != "message":
@@ -2122,6 +2182,7 @@ def _maybe_finalize(client, workflow_id: int) -> None:
 def main() -> None:
     storage.init_db()
     _migrate_client_contact_gate()
+    _reopen_false_completed_disb_steps()
     _capture_workspace_url()
     _log_startup_config()
     reminders.start_reminder_loop(app.client)
@@ -2133,6 +2194,19 @@ def main() -> None:
     backfill_channel_roles_async(app.client)
     log.info("Starting bot in Socket Mode")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+
+
+def _reopen_false_completed_disb_steps() -> None:
+    """One-shot: disbursement steps have no checklist items, so an older
+    reminder path auto-marked them complete ~24h after posting. Reopen any
+    that were closed that way so they stay on the scoreboard until someone
+    replies done or reacts ✅."""
+    marker = "disb_steps_reopen_v1"
+    if storage.get_config(marker):
+        return
+    n = storage.reopen_itemless_completed(DISB_STEP_TRIGGERS)
+    storage.set_config(marker, str(time.time()))
+    log.info("reopened %d auto-closed disbursement step(s) (one-shot %s)", n, marker)
 
 
 def _migrate_client_contact_gate() -> None:
