@@ -1014,8 +1014,11 @@ def _emails_from_config(key: str) -> list[str]:
 
 def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list, dict]:
     """Open items in the bucket over the email lookback window, plus a summary
-    dict (created / open / escalated). Escalated rows first, then oldest."""
+    dict (created / open / escalated). Sorted by attorney → escalated-first
+    → oldest. Hidden scoreboard people (e.g. Laura) are excluded from the
+    attorney email but kept in paralegal / LA / other emails."""
     from datetime import datetime
+    from config import EMAIL_EXCLUDED_TRIGGERS
     try:
         lookback = float(storage.get_config("email_lookback_days", default="60") or 60)
     except ValueError:
@@ -1026,7 +1029,14 @@ def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list,
     names = storage.get_user_names()
     roles = storage.get_channel_roles()
     workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
-    trigset = set(trigger_names)
+    trigset = set(trigger_names) - EMAIL_EXCLUDED_TRIGGERS
+
+    # People hidden from the scoreboard (e.g. Laura) — exclude their rows
+    # only from the attorney bucket, not paralegal/LA.
+    hidden = set()
+    if bucket_key == "attorney":
+        raw = storage.get_config("scoreboard_hidden_user_ids", default="") or ""
+        hidden = {uid.strip() for uid in raw.split(",") if uid.strip()}
 
     summary = {"created": 0, "open": 0, "escalated": 0}
     view = []
@@ -1041,6 +1051,15 @@ def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list,
         if escalated:
             summary["escalated"] += 1
         cr = roles.get(r["channel_id"]) or {}
+
+        # Attorney bucket: skip rows whose attorney is hidden.
+        if hidden and cr.get("attorney_id") in hidden:
+            summary["open"] -= 1
+            summary["created"] -= 1
+            if escalated:
+                summary["escalated"] -= 1
+            continue
+
         def nm(uid):
             return names.get(uid, uid) if uid else ""
         cname = r.get("channel_name") or cr.get("channel_name") or r["channel_id"]
@@ -1059,7 +1078,12 @@ def _bucket_email_rows(bucket_key: str, trigger_names: list[str]) -> tuple[list,
             "escalated": escalated,
             "link": email_reports.permalink(workspace, r["channel_id"], r["parent_ts"]),
         })
-    view.sort(key=lambda v: (not v["escalated"], v["opened_ts"]))
+    # Sort: attorney name → escalated first → oldest
+    view.sort(key=lambda v: (
+        (v.get("attorney") or "~").lower(),
+        not v["escalated"],
+        v["opened_ts"],
+    ))
     return view, summary
 
 

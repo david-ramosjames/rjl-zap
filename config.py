@@ -473,6 +473,11 @@ WORKFLOW_BUCKETS = [
       "disb_deadline_7day", "disb_deadline_final"], "attorney_id"),
 ]
 
+# Trigger names excluded from the scheduled bucket emails (still shown on
+# the scoreboard and Open Items page). Call Backs are short-lived and clutter
+# the weekly attorney email.
+EMAIL_EXCLUDED_TRIGGERS = frozenset({"call_back"})
+
 # trigger_name → bucket key
 WORKFLOW_BUCKET_OF = {
     trig: key for key, _label, trigs, _role in WORKFLOW_BUCKETS for trig in trigs
