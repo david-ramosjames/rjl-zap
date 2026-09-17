@@ -8,12 +8,45 @@ from config import COMPLETION_EMOJIS, DISB_STEP_TRIGGERS, REMINDER_CHECK_INTERVA
 
 log = logging.getLogger(__name__)
 
-# Same close-words as app.py — a reply starting with these counts as done
-# even when the workflow's specific keyword is something else (e.g. "scheduled").
-_CLOSE_REPLY_RE = re.compile(
-    r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)*(?:done|complete|completed)\b",
-    re.IGNORECASE,
-)
+# Close-reply matching — keep in sync with app._is_close_reply.
+# Short affirmations containing done/complete/completed (or the workflow's
+# keyword) count; negated phrases ("not done", "almost complete") do not.
+_LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
+_CLOSE_NEGATORS = frozenset({
+    "not", "no", "never", "almost", "nearly", "halfway", "half",
+    "partially", "partly", "mostly", "barely", "hardly",
+    "aint", "ain't",
+})
+_CLOSE_FUTURE = frozenset({
+    "will", "gonna", "going", "wanna", "want", "wants",
+    "need", "needs", "should", "must", "shall", "be",
+})
+_GENERIC_CLOSE_WORDS = frozenset({"done", "complete", "completed"})
+
+
+def _is_close_reply(text: str, done_word: str = "done") -> bool:
+    cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
+    if not cleaned:
+        return False
+    words = re.findall(r"[a-z0-9']+", cleaned.lower())
+    if not words or len(words) > 8:
+        return False
+    close_words = set(_GENERIC_CLOSE_WORDS)
+    if done_word:
+        close_words.add(done_word.lower())
+    for i, w in enumerate(words):
+        if w not in close_words:
+            continue
+        prev = words[i - 1] if i else ""
+        prev2 = words[i - 2] if i >= 2 else ""
+        if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
+            continue
+        if prev.endswith("n't") or prev2.endswith("n't"):
+            continue
+        if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
+            continue
+        return True
+    return False
 
 
 def start_reminder_loop(client) -> None:
@@ -38,10 +71,11 @@ def _parent_has_completion_reaction(parent: dict) -> bool:
 
 def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
     """Returns True if the thread is already confirmed — a non-bot reply
-    containing `keyword` (or done/complete), or a ✅ on the parent message.
-    False if it definitely is not. None if we couldn't tell (API error).
-    Callers should treat None as 'don't escalate yet — try again next tick'
-    so a transient Slack outage doesn't fire a false escalation."""
+    that looks like a close affirmation (or contains `keyword`), or a ✅ on
+    the parent message. False if it definitely is not. None if we couldn't
+    tell (API error). Callers should treat None as 'don't escalate yet —
+    try again next tick' so a transient Slack outage doesn't fire a false
+    escalation."""
     try:
         resp = client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
     except Exception:
@@ -70,7 +104,7 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
             skipped_bot += 1
             continue
         text = m.get("text") or ""
-        if (kw and kw in text.lower()) or _CLOSE_REPLY_RE.match(text):
+        if _is_close_reply(text, kw or "done") or (kw and kw in text.lower()):
             matches.append(m.get("ts", "?"))
 
     log.info(

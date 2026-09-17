@@ -377,15 +377,13 @@ def handle_app_mention(event, client):
         )
         return
 
-    # Thread @-mention that closes the workflow. Same start-of-message
-    # rules as handle_message so "@RJL-zap done" / "done" behave identically.
+    # Thread @-mention that closes the workflow. Same rules as handle_message
+    # so "@RJL-zap done" / "@RJL-zap already done" behave identically.
     if parent_ts:
         wf = storage.workflow_by_thread(event["channel"], parent_ts)
         if wf:
-            cleaned = _LEADING_MENTION_RE.sub("", text)
             done_word = WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
-            specific_re = re.compile(rf"^\s*{re.escape(done_word)}\b", re.IGNORECASE)
-            if _CLOSE_REPLY_RE.match(cleaned) or specific_re.match(cleaned):
+            if _is_close_reply(text, done_word):
                 _complete_workflow(
                     client, wf, event["channel"], parent_ts,
                     author=event.get("user", ""), via="app_mention",
@@ -1709,13 +1707,62 @@ _TOPIC_LA_RE        = re.compile(r"\bLA\b[^A-Za-z<]*<@([A-Z0-9]+)(?:\|[^>]*)?>",
 # only fire for matching channels; everything else still gets the bot but
 # stays silent until someone runs a manual @-mention command.
 _CASE_NUMBER_RE     = re.compile(r"-\d+$")
-# Match a thread reply that *starts* with done / complete / completed (so
-# "done" / "Done." / "complete!" / "COMPLETED" / "complete all 3" all close
-# the workflow, but "I'm done" / "halfway done" / "almost complete" do not).
-# @-mentions at the start of the message are stripped before matching, so
-# "@RJL-zap done" works too.
-_CLOSE_REPLY_RE     = re.compile(r"^\s*(?:done|complete|completed)\b", re.IGNORECASE)
+# Close-reply matching. Leading @-mentions are stripped first so
+# "@RJL-zap done" / "@RJL-zap already done" work.
 _LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
+# Words that mean "not actually finished" when they appear before a close word.
+_CLOSE_NEGATORS = frozenset({
+    "not", "no", "never", "almost", "nearly", "halfway", "half",
+    "partially", "partly", "mostly", "barely", "hardly",
+    "aint", "ain't",
+})
+# Future / obligation phrasing — "will be done", "need to complete", etc.
+_CLOSE_FUTURE = frozenset({
+    "will", "gonna", "going", "wanna", "want", "wants",
+    "need", "needs", "should", "must", "shall", "be",
+})
+# Generic close words accepted for every workflow, plus the workflow's own
+# keyword (e.g. scheduled / confirmed) when provided.
+_GENERIC_CLOSE_WORDS = frozenset({"done", "complete", "completed"})
+
+
+def _is_close_reply(text: str, done_word: str = "done") -> bool:
+    """True for short affirmations that the task is finished.
+
+    Accepts: "done", "Done.", "already done", "all done", "it's completed",
+    "this is done", "done already", "scheduled already", etc.
+    Rejects: "not done", "almost complete", "halfway done", "will be done
+    tomorrow", and longer status chatter.
+    """
+    cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
+    if not cleaned:
+        return False
+    words = re.findall(r"[a-z0-9']+", cleaned.lower())
+    if not words:
+        return False
+    # Keep this to short confirmations — longer messages are status chatter.
+    if len(words) > 8:
+        return False
+
+    close_words = set(_GENERIC_CLOSE_WORDS)
+    if done_word:
+        close_words.add(done_word.lower())
+
+    for i, w in enumerate(words):
+        if w not in close_words:
+            continue
+        prev = words[i - 1] if i else ""
+        prev2 = words[i - 2] if i >= 2 else ""
+        # "not done", "almost done", "not yet done", "haven't done"
+        if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
+            continue
+        if prev.endswith("n't") or prev2.endswith("n't"):
+            continue
+        # "will be done", "need to complete", "should be done"
+        if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
+            continue
+        return True
+    return False
 
 
 def _maybe_fire_intros_from_topic(client, channel_id: str, topic_text: str,
@@ -2053,21 +2100,20 @@ def handle_message(event, client):
     text = event.get("text") or ""
     lowered = text.lower()
 
-    # Thread reply that completes the workflow for this thread. Accepts the
-    # generic close words (done / complete / completed) OR the workflow's own
-    # keyword (e.g. `scheduled` for Check Pickup, `confirmed` for Document
-    # Verification). Leading @-mentions are stripped so "@RJL-zap done" works.
-    # On a match: mark complete, cancel any pending escalation, and reply to
-    # confirm. If the task was already closed (or silently auto-completed),
+    # Thread reply that completes the workflow for this thread. Accepts short
+    # affirmations with the generic close words (done / complete / completed)
+    # OR the workflow's own keyword (e.g. `scheduled` for Check Pickup,
+    # `confirmed` for Document Verification) — including "already done",
+    # "all done", "done already", etc. Leading @-mentions are stripped so
+    # "@RJL-zap done" works. On a match: mark complete, cancel any pending
+    # escalation, and reply to confirm. If the task was already closed,
     # still ack so the user isn't left wondering whether the bot heard them.
     thread_ts = event.get("thread_ts")
     if thread_ts and not _bot_is_mentioned(client, text):
         wf = storage.workflow_by_thread(channel_id, thread_ts)
         if wf:
-            cleaned = _LEADING_MENTION_RE.sub("", text)
             done_word = _WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
-            specific_re = re.compile(rf"^\s*{re.escape(done_word)}\b", re.IGNORECASE)
-            if _CLOSE_REPLY_RE.match(cleaned) or specific_re.match(cleaned):
+            if _is_close_reply(text, done_word):
                 _complete_workflow(
                     client, wf, channel_id, thread_ts,
                     author=event.get("user", ""), via="reply",
