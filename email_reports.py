@@ -253,7 +253,9 @@ def build_bucket_email_html(bucket_label: str, window_desc: str,
         'either reply <code>done</code> / <code>complete</code> — or the word '
         'shown under <b>Waiting on</b> (e.g. <code>scheduled</code>, '
         '<code>confirmed</code>) — or react ✅ on the bot’s message. '
-        'It drops off this list right away.'
+        'It drops off this list right away. If the task no longer applies, '
+        'reply <code>case closed</code> or <code>no longer needed</code> instead '
+        '(it won’t count as completed).'
         '</div>'
     )
     return head + howto + table + '</div>'

@@ -96,6 +96,7 @@
     .pill-esc  { background:#fee2e2; color:#991b1b; }
     .pill-open { background:#fef9c3; color:#854d0e; }
     .pill-done { background:#dcfce7; color:#166534; }
+    .pill-dismissed { background:#f3f4f6; color:#4b5563; }
     .type-pill { background:#eef2ff; color:#3730a3; }
 
     .who { color:#374151; }
@@ -193,6 +194,7 @@
             <option value="open"      {% if status=='open' %}selected{% endif %}>Open (all)</option>
             <option value="escalated" {% if status=='escalated' %}selected{% endif %}>Escalated only</option>
             <option value="completed" {% if status=='completed' %}selected{% endif %}>Completed</option>
+            <option value="dismissed" {% if status=='dismissed' %}selected{% endif %}>Dismissed (no longer needed)</option>
             <option value="all"       {% if status=='all' %}selected{% endif %}>Everything</option>
           </select>
         </div>
@@ -302,7 +304,9 @@
             </td>
             <td><span class="pill type-pill">{{ r.type_label }}</span></td>
             <td>
-              {% if r.completed %}
+              {% if r.dismissed %}
+                <span class="pill pill-dismissed" title="{{ r.dismissed_reason }}">Dismissed</span>
+              {% elif r.completed %}
                 <span class="pill pill-done">Completed</span>
               {% elif r.escalated %}
                 <span class="pill pill-esc">Escalated</span>
@@ -318,7 +322,9 @@
               {% if r.age_days == 0 %}today{% else %}{{ r.age_days }}d{% endif %}
             </td>
             <td class="muted-sm">
-              {% if r.completed %}
+              {% if r.dismissed %}
+                {{ r.dismissed_reason }}
+              {% elif r.completed %}
                 —
               {% elif r.open_items %}
                 {{ r.open_items }} item(s) unchecked

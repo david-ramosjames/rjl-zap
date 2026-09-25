@@ -153,7 +153,10 @@ def _complete_workflow(
     label = WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
     done_word = WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
     who = f"<@{author}> — " if author else ""
-    if already:
+    if already and wf.get("dismissed_at"):
+        text = (f":no_entry_sign: {who}*{label}* was already closed as no longer "
+                f"needed. No more reminders for this one.")
+    elif already:
         text = (f":white_check_mark: {who}*{label}* was already marked complete. "
                 f"No more reminders for this one.")
     else:
@@ -165,6 +168,67 @@ def _complete_workflow(
     except Exception:
         log.exception("could not post completion confirmation")
     return not already
+
+
+# Replies that close a task as no longer needed rather than completed.
+# "case"-level phrases also switch off the channel's upcoming automatic tasks.
+_DISMISS_CASE_RE = re.compile(
+    r"\b(?:"
+    r"case\s+(?:is\s+|was\s+|has\s+been\s+)?(?:closed|withdrawn|dropped|dismissed|declined)"
+    r"|closed\s+case"
+    r"|no\s+longer\s+(?:a\s+|an\s+|our\s+|the\s+|my\s+)?(?:active\s+)?(?:case|client)"
+    r"|not\s+(?:a\s+|our\s+|my\s+)(?:case|client)"
+    r")\b",
+    re.IGNORECASE,
+)
+_DISMISS_TASK_RE = re.compile(
+    r"\b(?:"
+    r"no\s+longer\s+(?:needed|necessary|required|applicable|relevant)"
+    r"|not\s+(?:needed|necessary|required|applicable|relevant)"
+    r")\b"
+    r"|^\s*(?:n/?a|dismiss(?:ed)?)\W*$",
+    re.IGNORECASE,
+)
+
+
+def _dismiss_reply_kind(text: str) -> str | None:
+    """'case' / 'task' when a short reply says the task is no longer needed."""
+    cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
+    if not cleaned or len(re.findall(r"[a-z0-9'/]+", cleaned.lower())) > 12:
+        return None
+    if _DISMISS_CASE_RE.search(cleaned):
+        return "case"
+    if _DISMISS_TASK_RE.search(cleaned):
+        return "task"
+    return None
+
+
+def _dismiss_workflow(client, wf: dict, channel: str, thread_ts: str,
+                      kind: str, author: str = "", via: str = "reply") -> None:
+    """Close a workflow as no longer needed. It stops reminders like a
+    completion but isn't counted as created or completed in reports."""
+    label = WORKFLOW_LABELS.get(wf["trigger_name"], wf["trigger_name"])
+    who = f"<@{author}> — " if author else ""
+    cancelled = storage.cancel_pending_scheduled_for_thread(channel, thread_ts)
+    if wf.get("dismissed_at"):
+        text = (f":no_entry_sign: {who}*{label}* was already closed as no longer "
+                f"needed.")
+    else:
+        reason = "case closed" if kind == "case" else "no longer needed"
+        storage.dismiss_workflow(wf["id"], reason)
+        suppressed = storage.suppress_channel_automations(channel) if kind == "case" else 0
+        log.info("workflow %s (id=%s) dismissed (%s) via %s in channel=%s "
+                 "(cancelled %d pending, suppressed %d automations)",
+                 wf["trigger_name"], wf["id"], reason, via, channel,
+                 cancelled, suppressed)
+        text = (f":no_entry_sign: {who}*{label}* closed as *{reason}*. It won't "
+                f"count as completed, and there'll be no more reminders.")
+        if kind == "case":
+            text += " Upcoming automatic tasks for this channel are turned off too."
+    try:
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
+    except Exception:
+        log.exception("could not post dismissal confirmation")
 
 
 _CONTACT_ICONS = {
@@ -383,7 +447,13 @@ def handle_app_mention(event, client):
         wf = storage.workflow_by_thread(event["channel"], parent_ts)
         if wf:
             done_word = WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
-            if _is_close_reply(text, done_word):
+            dismiss_kind = _dismiss_reply_kind(text)
+            if dismiss_kind:
+                _dismiss_workflow(
+                    client, wf, event["channel"], parent_ts, dismiss_kind,
+                    author=event.get("user", ""), via="app_mention",
+                )
+            elif _is_close_reply(text, done_word):
                 _complete_workflow(
                     client, wf, event["channel"], parent_ts,
                     author=event.get("user", ""), via="app_mention",
@@ -2113,6 +2183,13 @@ def handle_message(event, client):
         wf = storage.workflow_by_thread(channel_id, thread_ts)
         if wf:
             done_word = _WORKFLOW_DONE_WORD.get(wf["trigger_name"], "done")
+            dismiss_kind = _dismiss_reply_kind(text)
+            if dismiss_kind:
+                _dismiss_workflow(
+                    client, wf, channel_id, thread_ts, dismiss_kind,
+                    author=event.get("user", ""), via="reply",
+                )
+                return
             if _is_close_reply(text, done_word):
                 _complete_workflow(
                     client, wf, channel_id, thread_ts,

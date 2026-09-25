@@ -115,6 +115,8 @@ def init_db() -> None:
             ("deferred_actions",   "attempts", "INTEGER NOT NULL DEFAULT 0"),
             ("workflows",          "participants", "TEXT"),
             ("workflows",          "channel_name", "TEXT"),
+            ("workflows",          "dismissed_at", "REAL"),
+            ("workflows",          "dismissed_reason", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -235,6 +237,44 @@ def mark_workflow_complete(workflow_id: int) -> None:
         )
 
 
+def dismiss_workflow(workflow_id: int, reason: str) -> None:
+    """Close a workflow as no longer needed (e.g. case closed).
+
+    completed_at is set too so every reminder / escalation path treats it as
+    closed; dismissed_at keeps it out of the created/completed counts.
+    """
+    now = time.time()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE workflows SET completed_at = COALESCE(completed_at, ?), "
+            "  dismissed_at = ?, dismissed_reason = ? WHERE id = ?",
+            (now, now, reason, workflow_id),
+        )
+
+
+def suppress_channel_automations(channel_id: str) -> int:
+    """Stop any not-yet-fired automatic triggers for a channel (new case,
+    case setup, doc verification, calendar SOL, client intake, deferred
+    intros). Returns how many were suppressed."""
+    now = time.time()
+    n = 0
+    with connect() as conn:
+        for col in _LIFECYCLE_COLS.values():
+            cur = conn.execute(
+                f"UPDATE channel_lifecycle SET {col} = ? "
+                f"WHERE channel_id = ? AND {col} IS NULL",
+                (now, channel_id),
+            )
+            n += cur.rowcount
+        cur = conn.execute(
+            "UPDATE deferred_actions SET fired_at = ? "
+            "WHERE channel_id = ? AND fired_at IS NULL",
+            (now, channel_id),
+        )
+        n += cur.rowcount
+    return n
+
+
 def reopen_itemless_completed(trigger_names: Iterable[str]) -> int:
     """Clear completed_at on item-less workflows of the given types.
 
@@ -318,10 +358,15 @@ _WORKFLOW_ANNOTATIONS = (
 def workflows_in_window(start_ts: float, end_ts: float,
                         status: str = "open") -> List[dict]:
     """Workflows created within [start_ts, end_ts], annotated the same way as
-    open_workflows_since. `status` is 'open', 'escalated', 'completed', or
-    'all'. Ordering is left to the caller (the Open Items page sorts)."""
+    open_workflows_since. `status` is 'open', 'escalated', 'completed',
+    'dismissed', or 'all'. Dismissed workflows (no longer needed) appear only
+    under 'dismissed'. Ordering is left to the caller."""
     where = ["w.created_at >= ?", "w.created_at < ?"]
     params: list = [start_ts, end_ts]
+    if status == "dismissed":
+        where.append("w.dismissed_at IS NOT NULL")
+    else:
+        where.append("w.dismissed_at IS NULL")
     if status == "open":
         where.append("w.completed_at IS NULL")
     elif status == "completed":
@@ -398,7 +443,8 @@ def completed_workflow_count_since(cutoff_ts: float) -> int:
     with connect() as conn:
         row = conn.execute(
             "SELECT COUNT(*) AS n FROM workflows "
-            "WHERE completed_at IS NOT NULL AND created_at >= ?",
+            "WHERE completed_at IS NOT NULL AND dismissed_at IS NULL "
+            "  AND created_at >= ?",
             (cutoff_ts,),
         ).fetchone()
         return int(row["n"]) if row else 0

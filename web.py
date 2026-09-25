@@ -418,7 +418,7 @@ def open_items():
         d_from, d_to = d_to, d_from
 
     status = request.args.get("status", "open")
-    if status not in ("open", "escalated", "completed", "all"):
+    if status not in ("open", "escalated", "completed", "dismissed", "all"):
         status = "open"
     f_attorney = (request.args.get("attorney", "") or "").strip()
     f_paralegal = (request.args.get("paralegal", "") or "").strip()
@@ -489,6 +489,8 @@ def open_items():
             "age_days": max(0, int((now - r["created_at"]) // 86400)),
             "escalated": bool(r.get("escalations_sent")),
             "completed": bool(r.get("completed_at")),
+            "dismissed": bool(r.get("dismissed_at")),
+            "dismissed_reason": r.get("dismissed_reason") or "no longer needed",
             "open_items": r.get("open_items") or 0,
             "done_word": WORKFLOW_DONE_WORD.get(r["trigger_name"], "done"),
             "people": [{"id": u, "name": names.get(u, u)} for u in pids],
