@@ -1780,6 +1780,12 @@ _CASE_NUMBER_RE     = re.compile(r"-\d+$")
 # Close-reply matching. Leading @-mentions are stripped first so
 # "@RJL-zap done" / "@RJL-zap already done" work.
 _LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
+# A check mark typed as a thread reply (Slack sends ":white_check_mark:" or
+# the raw character) counts as the word "done".
+_CHECK_EMOJI_RE = re.compile(
+    r":(?:white_check_mark|heavy_check_mark|ballot_box_with_check)"
+    r"(?:::skin-tone-\d)?:|[\u2705\u2714\u2611]\ufe0f?"
+)
 # Words that mean "not actually finished" when they appear before a close word.
 _CLOSE_NEGATORS = frozenset({
     "not", "no", "never", "almost", "nearly", "halfway", "half",
@@ -1805,6 +1811,7 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
     tomorrow", and longer status chatter.
     """
     cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
+    cleaned = _CHECK_EMOJI_RE.sub(" done ", cleaned)
     if not cleaned:
         return False
     words = re.findall(r"[a-z0-9']+", cleaned.lower())

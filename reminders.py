@@ -12,6 +12,10 @@ log = logging.getLogger(__name__)
 # Short affirmations containing done/complete/completed (or the workflow's
 # keyword) count; negated phrases ("not done", "almost complete") do not.
 _LEADING_MENTION_RE = re.compile(r"^\s*(?:<@[A-Z0-9]+(?:\|[^>]*)?>\s*)+")
+_CHECK_EMOJI_RE = re.compile(
+    r":(?:white_check_mark|heavy_check_mark|ballot_box_with_check)"
+    r"(?:::skin-tone-\d)?:|[\u2705\u2714\u2611]\ufe0f?"
+)
 _CLOSE_NEGATORS = frozenset({
     "not", "no", "never", "almost", "nearly", "halfway", "half",
     "partially", "partly", "mostly", "barely", "hardly",
@@ -26,6 +30,7 @@ _GENERIC_CLOSE_WORDS = frozenset({"done", "complete", "completed"})
 
 def _is_close_reply(text: str, done_word: str = "done") -> bool:
     cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
+    cleaned = _CHECK_EMOJI_RE.sub(" done ", cleaned)
     if not cleaned:
         return False
     words = re.findall(r"[a-z0-9']+", cleaned.lower())
