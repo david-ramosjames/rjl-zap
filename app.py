@@ -1615,16 +1615,20 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
              channel, parent_ts, trigger.name, len(item_records))
 
 
-def _workflow_for_message(client, channel: str, ts: str):
-    """Find the workflow for a message ts, or for the thread it belongs to.
+def _workflow_for_message(client, channel: str, ts: str, item_user: str = ""):
+    """Find the workflow a ✅ reaction should close.
 
-    Reactions on a thread *reply* (e.g. the 24h reminder) should still close
-    the parent task — Slack's reaction payload only has the reacted-to ts.
+    A ✅ on the task's own message closes it. A ✅ on a reply in the thread
+    only counts when that reply is the bot's (e.g. the 24h reminder) —
+    people use ✅ on each other's messages to mean "seen".
     Returns (workflow, parent_ts) or (None, ts).
     """
     wf = storage.workflow_by_thread(channel, ts)
     if wf:
         return wf, ts
+    bot_id = _bot_user_id(client)
+    if not (bot_id and item_user == bot_id):
+        return None, ts
     try:
         resp = client.conversations_history(
             channel=channel, latest=ts, oldest=ts, inclusive=True, limit=1,
@@ -1657,17 +1661,22 @@ def handle_reaction_added(event, client):
         _maybe_finalize(client, workflow_id)
         return
 
-    # 2) ✅ on a workflow's PARENT message (or any reply in that thread)
-    # → complete the whole workflow. Covers FollowUp tasks (intros, case
-    # setup, client intake, doc verification, check pickup, call back)
-    # that have no per-item reactions, so a ✅ closes them the same as
-    # replying done / complete / <keyword>.
+    # 2) ✅ on a workflow's PARENT message (or on the bot's own reminder in
+    # that thread) → complete the whole workflow. Covers FollowUp tasks
+    # (intros, case setup, client intake, doc verification, check pickup,
+    # call back) that have no per-item reactions, so a ✅ closes them the
+    # same as replying done / complete / <keyword>.
     if not (channel and ts):
         return
-    wf, parent_ts = _workflow_for_message(client, channel, ts)
+    wf, parent_ts = _workflow_for_message(
+        client, channel, ts, item_user=event.get("item_user", ""))
     if not wf:
-        log.info("✅ reaction on ts=%s channel=%s matched no workflow", ts, channel)
+        log.info("✅ reaction on ts=%s channel=%s by user=%s (item_user=%s) "
+                 "matched no workflow", ts, channel, event.get("user", ""),
+                 event.get("item_user", ""))
         return
+    log.info("✅ reaction by user=%s on ts=%s (parent=%s) closes workflow %s",
+             event.get("user", ""), ts, parent_ts, wf["trigger_name"])
     _complete_workflow(
         client, wf, channel, parent_ts,
         author=event.get("user", ""), via="reaction",
@@ -1797,6 +1806,11 @@ _CLOSE_FUTURE = frozenset({
     "will", "gonna", "going", "wanna", "want", "wants",
     "need", "needs", "should", "must", "shall", "be",
 })
+_CLOSE_QUESTION_STARTS = frozenset({
+    "is", "are", "was", "were", "has", "have", "had", "did", "does", "do",
+    "can", "could", "would", "when", "what", "why", "how", "who", "where",
+    "any", "anyone",
+})
 # Generic close words accepted for every workflow, plus the workflow's own
 # keyword (e.g. scheduled / confirmed) when provided.
 _GENERIC_CLOSE_WORDS = frozenset({"done", "complete", "completed"})
@@ -1812,13 +1826,16 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
     """
     cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
     cleaned = _CHECK_EMOJI_RE.sub(" done ", cleaned)
-    if not cleaned:
+    if not cleaned or "?" in cleaned:
         return False
     words = re.findall(r"[a-z0-9']+", cleaned.lower())
     if not words:
         return False
     # Keep this to short confirmations — longer messages are status chatter.
     if len(words) > 8:
+        return False
+    # "Is this done", "Did you complete it" — a question without the "?".
+    if words[0] in _CLOSE_QUESTION_STARTS:
         return False
 
     close_words = set(_GENERIC_CLOSE_WORDS)
@@ -2299,14 +2316,19 @@ def handle_message(event, client):
 _BOT_ID_CACHE: str | None = None
 
 
-def _bot_is_mentioned(client, text: str) -> bool:
+def _bot_user_id(client) -> str | None:
     global _BOT_ID_CACHE
     if _BOT_ID_CACHE is None:
         try:
             _BOT_ID_CACHE = client.auth_test()["user_id"]
         except Exception:
-            return False
-    return f"<@{_BOT_ID_CACHE}>" in text
+            return None
+    return _BOT_ID_CACHE
+
+
+def _bot_is_mentioned(client, text: str) -> bool:
+    bot_id = _bot_user_id(client)
+    return bool(bot_id) and f"<@{bot_id}>" in text
 
 
 @app.event("reaction_removed")

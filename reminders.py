@@ -25,16 +25,23 @@ _CLOSE_FUTURE = frozenset({
     "will", "gonna", "going", "wanna", "want", "wants",
     "need", "needs", "should", "must", "shall", "be",
 })
+_CLOSE_QUESTION_STARTS = frozenset({
+    "is", "are", "was", "were", "has", "have", "had", "did", "does", "do",
+    "can", "could", "would", "when", "what", "why", "how", "who", "where",
+    "any", "anyone",
+})
 _GENERIC_CLOSE_WORDS = frozenset({"done", "complete", "completed"})
 
 
 def _is_close_reply(text: str, done_word: str = "done") -> bool:
     cleaned = _LEADING_MENTION_RE.sub("", text or "").strip()
     cleaned = _CHECK_EMOJI_RE.sub(" done ", cleaned)
-    if not cleaned:
+    if not cleaned or "?" in cleaned:
         return False
     words = re.findall(r"[a-z0-9']+", cleaned.lower())
     if not words or len(words) > 8:
+        return False
+    if words[0] in _CLOSE_QUESTION_STARTS:
         return False
     close_words = set(_GENERIC_CLOSE_WORDS)
     if done_word:
@@ -76,8 +83,7 @@ def _parent_has_completion_reaction(parent: dict) -> bool:
 
 def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
     """Returns True if the thread is already confirmed — a non-bot reply
-    that looks like a close affirmation (or contains `keyword`), or a ✅ on
-    the parent message. False if it definitely is not. None if we couldn't
+    that looks like a close affirmation, or a ✅ on the parent message. False if it definitely is not. None if we couldn't
     tell (API error). Callers should treat None as 'don't escalate yet —
     try again next tick' so a transient Slack outage doesn't fire a false
     escalation."""
@@ -109,7 +115,7 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
             skipped_bot += 1
             continue
         text = m.get("text") or ""
-        if _is_close_reply(text, kw or "done") or (kw and kw in text.lower()):
+        if _is_close_reply(text, kw or "done"):
             matches.append(m.get("ts", "?"))
 
     log.info(
