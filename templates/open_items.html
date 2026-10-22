@@ -171,7 +171,7 @@
       <div class="sb-people">
         {% for t in b.open_types %}
         <a class="sb-person{% if t.selected %} is-selected{% endif %}"
-           href="/open-items?bucket={{ b.key }}&status=open{% for nt in t.next_types %}&type={{ nt }}{% endfor %}{{ daterange }}"
+           href="/open-items?bucket={{ b.key }}&status=open{% for nt in t.next_types %}&type={{ nt }}{% endfor %}{% if f_intake %}&intake={{ f_intake }}{% endif %}{{ daterange }}"
            title="{% if t.selected %}Remove from filter{% else %}Add to filter{% endif %}">
           <span class="sb-person-name">{% if t.selected %}✓ {% endif %}{{ t.label }}</span>
           <span class="sb-person-nums">{{ t.open }} open{% if t.escalated %} · <span class="esc">{{ t.escalated }} esc</span>{% endif %}</span>
@@ -186,7 +186,7 @@
   <div class="muted-sm" style="margin:-.5rem 0 1.25rem">
     Created = Open + Completed for items <strong>started in the selected date range</strong> (Escalated is the subset of Open that's been reminded). Click any number to see those items. Attorney/Paralegal cards break down by person
     — hide anyone from that list in <a href="/#settings" style="color:var(--accent)">admin settings</a>.
-    The Intake card lists open types — click one or more to filter the table.
+    The Intake card lists open types — click one or more to filter the table. Use <strong>Intake person</strong> to filter by who was tagged.
     Each bucket can also email its open-item details weekly — set recipients &amp; time on the same page.
   </div>
 
@@ -222,7 +222,7 @@
           {% if wtypes|length > 1 %}
           <div class="form-control" style="font-size:.8rem;min-height:38px;display:flex;align-items:center;flex-wrap:wrap;gap:.25rem;background:#f9fafb">
             <span>{{ wtypes|length }} selected</span>
-            <a href="/open-items?{% if bucket %}bucket={{ bucket }}&{% endif %}status={{ status }}{{ daterange }}"
+            <a href="/open-items?{% if bucket %}bucket={{ bucket }}&{% endif %}status={{ status }}{% if f_intake %}&intake={{ f_intake }}{% endif %}{{ daterange }}"
                style="color:var(--accent);font-weight:600;text-decoration:none;margin-left:auto">Clear ✕</a>
           </div>
           {% else %}
@@ -262,6 +262,15 @@
           </select>
         </div>
         <div class="col-6 col-md-2">
+          <label for="intake">Intake person</label>
+          <select class="form-select" id="intake" name="intake">
+            <option value="">Anyone tagged</option>
+            {% for uid, name in intake_people %}
+              <option value="{{ uid }}" {% if f_intake==uid %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
           <label for="sort">Sort by</label>
           <select class="form-select" id="sort" name="sort">
             <option value="type"      {% if sort=='type' %}selected{% endif %}>Type</option>
@@ -272,6 +281,7 @@
             <option value="attorney"  {% if sort=='attorney' %}selected{% endif %}>Attorney</option>
             <option value="paralegal" {% if sort=='paralegal' %}selected{% endif %}>Paralegal</option>
             <option value="la"        {% if sort=='la' %}selected{% endif %}>LA</option>
+            <option value="tagged"    {% if sort=='tagged' %}selected{% endif %}>Tagged person</option>
           </select>
         </div>
       </div>
@@ -292,14 +302,15 @@
   </div>
   {% endif %}
 
-  {% if bucket_label or wtypes %}
+  {% if bucket_label or wtypes or f_intake %}
   <div class="bucket-banner">
     <i class="bi bi-funnel-fill" style="color:var(--accent)"></i>
-    {% if bucket_label %}Showing the <strong>{{ bucket_label }}</strong> bucket{% if wtypes %} · {% endif %}{% endif %}
+    {% if bucket_label %}Showing the <strong>{{ bucket_label }}</strong> bucket{% if wtypes or f_intake %} · {% endif %}{% endif %}
     {% if wtypes %}
       type{% if wtypes|length > 1 %}s{% endif %}:
-      <strong>{{ wtype_labels|join(', ') }}</strong>
+      <strong>{{ wtype_labels|join(', ') }}</strong>{% if f_intake %} · {% endif %}
     {% endif %}
+    {% if f_intake %}tagged <strong>{{ f_intake_name }}</strong>{% endif %}
     <a href="/open-items?status={{ status }}&from={{ d_from }}&to={{ d_to }}">Clear filter ✕</a>
   </div>
   {% endif %}
@@ -317,6 +328,7 @@
             <th>Attorney</th>
             <th>Paralegal</th>
             <th>LA</th>
+            <th>Tagged</th>
             <th class="hide-sm">Opened</th>
             <th class="hide-sm">Age</th>
             <th>Waiting on</th>
@@ -348,6 +360,7 @@
             <td class="who">{% if r.attorney %}{{ r.attorney.name }}{% else %}<span class="none">—</span>{% endif %}</td>
             <td class="who">{% if r.paralegal %}{{ r.paralegal.name }}{% else %}<span class="none">—</span>{% endif %}</td>
             <td class="who">{% if r.la %}{{ r.la.name }}{% else %}<span class="none">—</span>{% endif %}</td>
+            <td class="who">{% if r.people %}{{ r.people|map(attribute='name')|join(', ') }}{% else %}<span class="none">—</span>{% endif %}</td>
             <td class="hide-sm muted-sm">{{ r.opened }}</td>
             <td class="hide-sm muted-sm">
               {% if r.age_days == 0 %}today{% else %}{{ r.age_days }}d{% endif %}

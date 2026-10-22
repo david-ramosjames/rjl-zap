@@ -12,6 +12,12 @@ from config import (
     WORKFLOW_LABELS,
 )
 
+# Intake zaps are tagged to the channel creator, so the Open Items page
+# filters those rows by the stored participant rather than a topic role.
+_INTAKE_TRIGGERS = frozenset(
+    t for key, _label, trigs, _role in WORKFLOW_BUCKETS if key == "intake" for t in trigs
+)
+
 
 def _hidden_scoreboard_ids() -> set[str]:
     raw = storage.get_config("scoreboard_hidden_user_ids", default="") or ""
@@ -444,6 +450,7 @@ def open_items():
     f_attorney = (request.args.get("attorney", "") or "").strip()
     f_paralegal = (request.args.get("paralegal", "") or "").strip()
     f_la = (request.args.get("la", "") or "").strip()
+    f_intake = (request.args.get("intake", "") or "").strip()
     # Multi-select: ?type=a&type=b (Intake card toggles). Drop blanks.
     wtypes = [t.strip() for t in request.args.getlist("type") if (t or "").strip()]
     # De-dupe while preserving order
@@ -483,10 +490,20 @@ def open_items():
         ids.discard(None)
         return sorted(ids, key=lambda u: names.get(u, u).lower())
 
+    def _pids(row) -> list[str]:
+        return [u.strip() for u in (row.get("participants") or "").split(",") if u.strip()]
+
     all_types = sorted({r["trigger_name"] for r in rows})
     attorneys = _people_by("attorney_id")
     paralegals = _people_by("paralegal_id")
     las = _people_by("la_id")
+    intake_ids: set[str] = set()
+    for r in rows:
+        if r["trigger_name"] in _INTAKE_TRIGGERS:
+            intake_ids.update(_pids(r))
+    if f_intake:
+        intake_ids.add(f_intake)
+    intake_people = sorted(intake_ids, key=lambda u: names.get(u, u).lower())
 
     # Scoreboard cards link here with ?bucket=<key> to show just that bucket's
     # workflow types.
@@ -503,6 +520,11 @@ def open_items():
         rows = [r for r in rows if _role_of(r["channel_id"], "paralegal_id") == f_paralegal]
     if f_la:
         rows = [r for r in rows if _role_of(r["channel_id"], "la_id") == f_la]
+    if f_intake:
+        rows = [
+            r for r in rows
+            if r["trigger_name"] in _INTAKE_TRIGGERS and f_intake in _pids(r)
+        ]
 
     def _named(uid):
         return {"id": uid, "name": names.get(uid, uid)} if uid else None
@@ -515,13 +537,14 @@ def open_items():
         # Best channel name: the one saved on the workflow, else the roles
         # table (backfilled from topics), else the raw ID.
         cname = r.get("channel_name") or cr.get("channel_name") or r["channel_id"]
+        opened_dt = datetime.fromtimestamp(r["created_at"])
         view.append({
             "channel_name": cname,
             "channel_id": r["channel_id"],
             "type": r["trigger_name"],
             "type_label": WORKFLOW_LABELS.get(r["trigger_name"], r["trigger_name"]),
             "opened_ts": r["created_at"],
-            "opened": datetime.fromtimestamp(r["created_at"]).strftime("%b %-d, %Y"),
+            "opened": f"{opened_dt.strftime('%b')} {opened_dt.day}, {opened_dt.year}",
             "age_days": max(0, int((now - r["created_at"]) // 86400)),
             "escalated": bool(r.get("escalations_sent")),
             "completed": bool(r.get("completed_at")),
@@ -548,6 +571,10 @@ def open_items():
         "attorney":  lambda v: (_rolename(v, "attorney"), -v["opened_ts"]),
         "paralegal": lambda v: (_rolename(v, "paralegal"), -v["opened_ts"]),
         "la":        lambda v: (_rolename(v, "la"), -v["opened_ts"]),
+        "tagged":    lambda v: (
+            (v["people"][0]["name"].lower() if v.get("people") else "~"),
+            -v["opened_ts"],
+        ),
     }
     view.sort(key=sorters.get(sort, sorters["type"]))
 
@@ -562,6 +589,9 @@ def open_items():
         bucket=bucket, bucket_label=bucket_label,
         wtype_labels=[WORKFLOW_LABELS.get(t, t) for t in wtypes],
         f_attorney=f_attorney, f_paralegal=f_paralegal, f_la=f_la,
+        f_intake=f_intake,
+        f_intake_name=names.get(f_intake, f_intake) if f_intake else "",
+        intake_people=[(u, names.get(u, u)) for u in intake_people],
         all_types=[(t, WORKFLOW_LABELS.get(t, t)) for t in all_types],
         attorneys=[(u, names.get(u, u)) for u in attorneys],
         paralegals=[(u, names.get(u, u)) for u in paralegals],
