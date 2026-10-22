@@ -464,7 +464,7 @@ WORKFLOW_BUCKETS = [
     ("paralegal",    "Paralegal",
      ["paralegal_intro", "disb_cancel_orders", "disb_medical_bills"], "paralegal_id"),
     ("intake",       "Intake",
-     ["case_setup", "client_intake", "doc_verification"], None),
+     ["case_setup", "calendar_sol", "client_intake", "doc_verification"], None),
     ("legal_assistant", "Legal Assistant",
      ["disb_case_settlement"], "la_id"),
     ("disbursement", "Disbursement",
