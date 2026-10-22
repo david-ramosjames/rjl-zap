@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS config (
 CREATE TABLE IF NOT EXISTS channel_lifecycle (
     channel_id TEXT PRIMARY KEY,
     created_at REAL NOT NULL,
+    creator_user_id TEXT,
     new_case_fired_at REAL,
     case_setup_fired_at REAL,
     doc_verification_fired_at REAL,
@@ -110,6 +111,7 @@ def init_db() -> None:
             ("channel_lifecycle",  "paralegal_intro_fired_for", "TEXT"),
             ("channel_lifecycle",  "calendar_sol_fired_at", "REAL"),
             ("channel_lifecycle",  "client_intake_fired_at", "REAL"),
+            ("channel_lifecycle",  "creator_user_id", "TEXT"),
             ("scheduled_messages", "skip_if_complete_parent_ts", "TEXT"),
             ("scheduled_messages", "create_workflow_as", "TEXT"),
             ("deferred_actions",   "attempts", "INTEGER NOT NULL DEFAULT 0"),
@@ -633,14 +635,29 @@ def get_all_config() -> dict:
         return {r["key"]: r["value"] for r in rows}
 
 
-def record_channel_created(channel_id: str, created_at: float | None = None) -> None:
-    """Idempotent — won't overwrite an existing row's timestamps."""
+def record_channel_created(
+    channel_id: str,
+    created_at: float | None = None,
+    creator_user_id: str | None = None,
+) -> None:
+    """Idempotent — won't overwrite an existing row's timestamps.
+    Fills in creator_user_id when we learn it later (e.g. member_joined
+    after a missed channel_created)."""
     ts = created_at if created_at is not None else time.time()
+    creator = (creator_user_id or "").strip() or None
     with connect() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO channel_lifecycle (channel_id, created_at) VALUES (?, ?)",
-            (channel_id, ts),
+            "INSERT OR IGNORE INTO channel_lifecycle "
+            "(channel_id, created_at, creator_user_id) VALUES (?, ?, ?)",
+            (channel_id, ts, creator),
         )
+        if creator:
+            conn.execute(
+                "UPDATE channel_lifecycle SET creator_user_id = ? "
+                "WHERE channel_id = ? AND "
+                "(creator_user_id IS NULL OR creator_user_id = '')",
+                (creator, channel_id),
+            )
 
 
 def channel_lifecycle(channel_id: str) -> Optional[dict]:

@@ -654,7 +654,7 @@
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-soon">+1 hr</span>
-            <strong>Client Intake</strong> request posts to the assigned collector.
+            <strong>Client Intake</strong> request posts to the channel creator.
           </div>
           <div class="tl-row">
             <span class="tl-badge badge-warn">+48 hrs</span>
@@ -677,7 +677,7 @@
 
         <div class="callout amber mt-3">
           <i class="bi bi-people me-1"></i>
-          <strong>Auto-tagged participants:</strong> When Case Setup and Doc Verification fire automatically there's no @-mention to pull from. Set <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings so the right people get pinged.
+          <strong>Assigned to the channel creator.</strong> Case Setup, Client Intake, and Document Verification auto-tag whoever created the Slack channel. Admin settings lists are only a fallback if Slack didn't report the creator.
         </div>
 
         <div class="callout">
@@ -709,7 +709,7 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires 15 minutes after a new public channel is created.</strong> Confirms intake documents have been saved. Can also be triggered manually any time:</p>
+        <p><strong>Auto-fires 15 minutes after a new public channel is created.</strong> Tags the person who created the channel and asks them to confirm intake documents have been saved. Can also be triggered manually any time:</p>
 
         <div class="type-label">Manual trigger (tag the person responsible)</div>
         <div class="type-this">@RJL-zap case setup @PersonName</div>
@@ -736,7 +736,7 @@
         <span class="trigger-tag both"><i class="bi bi-arrow-repeat"></i> Auto + Manual</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Auto-fires 1 hour after a new public channel is created.</strong> Tags the assigned collector and asks them to gather the new client's intake details in the thread. If no <span class="done-word">done</span> reply comes back within 24 hours, the bot reminds them and tags the escalation contacts.</p>
+        <p><strong>Auto-fires 1 hour after a new public channel is created.</strong> Tags the person who created the channel and asks them to gather the new client's intake details in the thread. If no <span class="done-word">done</span> reply comes back within 24 hours, the bot reminds them and tags the escalation contacts.</p>
 
         <div class="type-label">Manual trigger (tag the collector)</div>
         <div class="type-this">@RJL-zap client intake @PersonName</div>
@@ -757,13 +757,13 @@
         </div>
 
         <div class="timeline-strip">
-          <div class="tl-row"><span class="tl-badge badge-now">+1 hr from channel creation</span> Initial request posts in the channel tagging the assigned collector.</div>
+          <div class="tl-row"><span class="tl-badge badge-now">+1 hr from channel creation</span> Initial request posts in the channel tagging the channel creator.</div>
           <div class="tl-row"><span class="tl-badge badge-esc">+24 hrs after request</span> If no <span class="done-word">done</span> reply — escalation tags backup contacts.</div>
         </div>
 
         <div class="callout amber mt-3">
           <i class="bi bi-person me-1"></i>
-          <strong>Set the collector in admin settings.</strong> The auto-trigger only fires when at least one user ID is configured under <em>Client Intake — Assigned Collector(s)</em>.
+          <strong>Assigned to the channel creator.</strong> A fallback collector list in admin settings is used only if Slack didn't report who created the channel.
         </div>
       </div>
     </div>
@@ -793,7 +793,7 @@
         </div>
 
         <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.6rem">
-          The auto-trigger tags whoever is configured under <em>Case Setup / Doc Verification — Auto-Tagged Participants</em> in admin settings, and reminds them to alert the paralegal about any outstanding items.
+          The auto-trigger tags the person who created the channel (with the admin fallback list used only if the creator isn't known), and reminds them to alert the paralegal about any outstanding items.
         </p>
 
         <div class="timeline-strip">
@@ -1263,9 +1263,9 @@
           <ol style="margin:.5rem 0 .25rem;padding-left:1.3rem">
             <li><strong>Immediately:</strong> Bot joins the channel.</li>
             <li><strong>~180 seconds after creation:</strong> New Case Assignment fires — pings the configured assignee.</li>
-            <li><strong>+15 minutes:</strong> Case Setup checklist posts — confirm contract, intake, CTA saved — and the Calendar Statute of Limitations checklist posts so the SOL is calendared during the assignment phase.</li>
-            <li><strong>+1 hour:</strong> Client Intake request posts — assigned collector gathers client details.</li>
-            <li><strong>+48 hours:</strong> Legal Case Document Verification posts — verify everything is properly filed once the case has had a couple days to gather documents.</li>
+            <li><strong>+15 minutes:</strong> Case Setup checklist posts (tagged to the channel creator) — confirm contract, intake, CTA saved — and the Calendar Statute of Limitations checklist posts so the SOL is calendared during the assignment phase.</li>
+            <li><strong>+1 hour:</strong> Client Intake request posts — channel creator gathers client details.</li>
+            <li><strong>+48 hours:</strong> Legal Case Document Verification posts (tagged to the channel creator) — verify everything is properly filed once the case has had a couple days to gather documents.</li>
             <li><strong>When the channel description is set:</strong> If it includes <em>Attorney @X | Paralegal @Y</em>, Attorney Intro and Paralegal Intro fire for those specific people. Only fires the first time — later edits to the description do not re-fire.</li>
           </ol>
           The same workflows can also be triggered manually any time via @-mention — useful for private channels (where the bot needs to be <code style="background:#f3f4f6;border-radius:4px;padding:.05rem .4rem">/invite</code>'d) or to re-fire the checklist later.

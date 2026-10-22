@@ -5,7 +5,12 @@ from functools import wraps
 from flask import Flask, redirect, render_template, request, Response, send_from_directory, url_for
 
 import storage
-from config import WORKFLOW_BUCKETS, WORKFLOW_BUCKET_OF
+from config import (
+    WORKFLOW_BUCKETS,
+    WORKFLOW_BUCKET_OF,
+    WORKFLOW_DONE_WORD,
+    WORKFLOW_LABELS,
+)
 
 
 def _hidden_scoreboard_ids() -> set[str]:
@@ -79,6 +84,8 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
     role_of = {key: role for key, _l, _t, role in WORKFLOW_BUCKETS}
     # per-bucket: uid -> {open, escalated}
     people = {key: {} for key, _l, _t, role in WORKFLOW_BUCKETS if role}
+    # per-bucket open counts by trigger (used on cards with no people breakdown)
+    open_types = {key: {} for key, _l, _t, _r in WORKFLOW_BUCKETS}
 
     for r in rows:
         bkey = WORKFLOW_BUCKET_OF.get(r["trigger_name"])
@@ -91,6 +98,12 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
             t["open"] += 1
             if r.get("escalations_sent"):
                 t["escalated"] += 1
+            ot = open_types[bkey].setdefault(
+                r["trigger_name"], {"open": 0, "escalated": 0},
+            )
+            ot["open"] += 1
+            if r.get("escalations_sent"):
+                ot["escalated"] += 1
         else:
             t["completed"] += 1
 
@@ -104,13 +117,26 @@ def build_scoreboard(start_ts: float, end_ts: float) -> list:
                     p["escalated"] += 1
 
     out = []
-    for key, label, _t, role in WORKFLOW_BUCKETS:
-        card = {"key": key, "label": label, **tally[key], "people": []}
+    for key, label, trigs, role in WORKFLOW_BUCKETS:
+        card = {"key": key, "label": label, **tally[key], "people": [], "open_types": []}
         if role and people.get(key):
             card["people"] = sorted(
                 ({"uid": uid, "name": names.get(uid, uid), **counts}
                  for uid, counts in people[key].items()),
                 key=lambda p: (-p["open"], p["name"].lower()),
+            )
+        # Buckets without a people breakdown (Intake) list open types instead
+        # so the card isn't empty and types can be multi-selected to filter.
+        if not role:
+            by_trig = open_types.get(key) or {}
+            card["open_types"] = sorted(
+                ({"key": tn,
+                  "label": WORKFLOW_LABELS.get(tn, tn),
+                  "open": by_trig.get(tn, {}).get("open", 0),
+                  "escalated": by_trig.get(tn, {}).get("escalated", 0)}
+                 for tn in trigs
+                 if by_trig.get(tn, {}).get("open", 0)),
+                key=lambda t: (-t["open"], t["label"].lower()),
             )
         out.append(card)
     return out
@@ -179,10 +205,10 @@ SETTINGS = [
     },
     {
         "key": "case_setup_participant_user_ids",
-        "label": "Case Setup / Doc Verification — Auto-Tagged Participants",
-        "help": "Comma-separated Slack user IDs to @-mention when the bot "
-                "auto-fires Case Setup (15 min) and Document Verification "
-                "(24 hr) in newly created channels.",
+        "label": "Case Setup / Doc Verification — Fallback Assignees",
+        "help": "Used only when the channel creator wasn't recorded. "
+                "Normally Case Setup and Document Verification auto-tag "
+                "whoever created the Slack channel. Comma-separated user IDs.",
     },
     {
         "key": "paralegal_intro_escalation_user_ids",
@@ -212,10 +238,11 @@ SETTINGS = [
     },
     {
         "key": "client_intake_assignee_user_ids",
-        "label": "Client Intake — Assigned Collector(s)",
-        "help": "Slack user IDs tagged 1 hour after a new channel is created to collect "
-                "client intake details (e.g. U07SDBC2146). Comma-separated. "
-                "Leave empty to disable the auto Client Intake trigger.",
+        "label": "Client Intake — Fallback Collector(s)",
+        "help": "Used only when the channel creator wasn't recorded. "
+                "Normally Client Intake auto-tags whoever created the Slack "
+                "channel. Comma-separated user IDs. If both creator and this "
+                "list are empty, the auto-trigger stays pending.",
     },
     {
         "key": "client_intake_escalation_user_ids",
@@ -384,12 +411,6 @@ def index():
     )
 
 
-# trigger_name → label shown on the Open Items page. Kept here (rather than
-# imported from app) so the web thread never imports the Slack app module.
-# Label / close-word maps live in config (shared with app.py + emails).
-from config import WORKFLOW_LABELS, WORKFLOW_DONE_WORD  # noqa: E402
-
-
 def _slack_permalink(workspace_url: str, channel_id: str, parent_ts: str) -> str:
     """https://acme.slack.com/archives/C123/p1780000000000100 — Slack's
     permalink form is the ts with the dot removed, prefixed with 'p'."""
@@ -423,7 +444,12 @@ def open_items():
     f_attorney = (request.args.get("attorney", "") or "").strip()
     f_paralegal = (request.args.get("paralegal", "") or "").strip()
     f_la = (request.args.get("la", "") or "").strip()
-    wtype = (request.args.get("type", "") or "").strip()
+    # Multi-select: ?type=a&type=b (Intake card toggles). Drop blanks.
+    wtypes = [t.strip() for t in request.args.getlist("type") if (t or "").strip()]
+    # De-dupe while preserving order
+    seen = set()
+    wtypes = [t for t in wtypes if not (t in seen or seen.add(t))]
+    wtype = wtypes[0] if len(wtypes) == 1 else ""
     bucket = (request.args.get("bucket", "") or "").strip()
     sort = request.args.get("sort", "type")
 
@@ -432,6 +458,15 @@ def open_items():
     end_ts = datetime.combine(d_to + timedelta(days=1), dtime.min).timestamp()
 
     scoreboard = build_scoreboard(start_ts, end_ts)
+    # Attach multi-select toggle state for type rows on cards (Intake).
+    for b in scoreboard:
+        for t in b.get("open_types") or []:
+            selected = t["key"] in wtypes
+            t["selected"] = selected
+            if selected:
+                t["next_types"] = [x for x in wtypes if x != t["key"]]
+            else:
+                t["next_types"] = list(wtypes) + [t["key"]]
     rows = storage.workflows_in_window(start_ts, end_ts, status=status)
     names = storage.get_user_names()
     roles = storage.get_channel_roles()
@@ -459,8 +494,9 @@ def open_items():
     if bucket_trigs:
         rows = [r for r in rows if r["trigger_name"] in bucket_trigs]
     bucket_label = next((l for k, l, _t, _r in WORKFLOW_BUCKETS if k == bucket), "")
-    if wtype:
-        rows = [r for r in rows if r["trigger_name"] == wtype]
+    if wtypes:
+        wanted = set(wtypes)
+        rows = [r for r in rows if r["trigger_name"] in wanted]
     if f_attorney:
         rows = [r for r in rows if _role_of(r["channel_id"], "attorney_id") == f_attorney]
     if f_paralegal:
@@ -522,8 +558,9 @@ def open_items():
         scoreboard=scoreboard,
         escalated_count=sum(1 for v in view if v["escalated"]),
         d_from=d_from.isoformat(), d_to=d_to.isoformat(),
-        status=status, wtype=wtype, sort=sort,
+        status=status, wtype=wtype, wtypes=wtypes, sort=sort,
         bucket=bucket, bucket_label=bucket_label,
+        wtype_labels=[WORKFLOW_LABELS.get(t, t) for t in wtypes],
         f_attorney=f_attorney, f_paralegal=f_paralegal, f_la=f_la,
         all_types=[(t, WORKFLOW_LABELS.get(t, t)) for t in all_types],
         attorneys=[(u, names.get(u, u)) for u in attorneys],

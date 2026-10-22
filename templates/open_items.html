@@ -74,9 +74,12 @@
                  gap:.5rem; font-size:.8rem; text-decoration:none; color:#374151;
                  padding:.12rem .3rem; margin:0 -.3rem; border-radius:6px; }
     .sb-person:hover { background:#f9fafb; color:var(--accent); }
+    .sb-person.is-selected { background:var(--accent-light); color:var(--accent); }
+    .sb-person.is-selected .sb-person-nums { color:var(--accent); }
     .sb-person-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .sb-person-nums { color:var(--text-muted); white-space:nowrap; }
     .sb-person-nums .esc { color:#b91c1c; font-weight:600; }
+    .sb-types-hint { font-size:.68rem; color:var(--text-muted); margin-top:.35rem; }
     .bucket-banner { background:var(--accent-light); border:1px solid var(--accent-mid,#f9d0d8);
                      border-radius:10px; padding:.6rem .9rem; margin-bottom:1rem;
                      font-size:.875rem; display:flex; align-items:center; gap:.5rem; }
@@ -164,6 +167,18 @@
         </a>
         {% endfor %}
       </div>
+      {% elif b.open_types %}
+      <div class="sb-people">
+        {% for t in b.open_types %}
+        <a class="sb-person{% if t.selected %} is-selected{% endif %}"
+           href="/open-items?bucket={{ b.key }}&status=open{% for nt in t.next_types %}&type={{ nt }}{% endfor %}{{ daterange }}"
+           title="{% if t.selected %}Remove from filter{% else %}Add to filter{% endif %}">
+          <span class="sb-person-name">{% if t.selected %}✓ {% endif %}{{ t.label }}</span>
+          <span class="sb-person-nums">{{ t.open }} open{% if t.escalated %} · <span class="esc">{{ t.escalated }} esc</span>{% endif %}</span>
+        </a>
+        {% endfor %}
+      </div>
+      <div class="sb-types-hint">Click to filter · select more than one</div>
       {% endif %}
     </div>
     {% endfor %}
@@ -171,6 +186,7 @@
   <div class="muted-sm" style="margin:-.5rem 0 1.25rem">
     Created = Open + Completed for items <strong>started in the selected date range</strong> (Escalated is the subset of Open that's been reminded). Click any number to see those items. Attorney/Paralegal cards break down by person
     — hide anyone from that list in <a href="/#settings" style="color:var(--accent)">admin settings</a>.
+    The Intake card lists open types — click one or more to filter the table.
     Each bucket can also email its open-item details weekly — set recipients &amp; time on the same page.
   </div>
 
@@ -179,6 +195,9 @@
     <form class="filter-bar" method="get" action="/open-items"
           onchange="this.submit()">
       {% if bucket %}<input type="hidden" name="bucket" value="{{ bucket }}">{% endif %}
+      {% if wtypes|length > 1 %}
+        {% for t in wtypes %}<input type="hidden" name="type" value="{{ t }}">{% endfor %}
+      {% endif %}
       <div class="row g-3 align-items-end">
         <div class="col-6 col-md-2">
           <label for="from">From</label>
@@ -200,12 +219,20 @@
         </div>
         <div class="col-6 col-md-2">
           <label for="type">Type</label>
+          {% if wtypes|length > 1 %}
+          <div class="form-control" style="font-size:.8rem;min-height:38px;display:flex;align-items:center;flex-wrap:wrap;gap:.25rem;background:#f9fafb">
+            <span>{{ wtypes|length }} selected</span>
+            <a href="/open-items?{% if bucket %}bucket={{ bucket }}&{% endif %}status={{ status }}{{ daterange }}"
+               style="color:var(--accent);font-weight:600;text-decoration:none;margin-left:auto">Clear ✕</a>
+          </div>
+          {% else %}
           <select class="form-select" id="type" name="type">
             <option value="">All types</option>
             {% for value, label in all_types %}
               <option value="{{ value }}" {% if wtype==value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
+          {% endif %}
         </div>
         <div class="col-6 col-md-2">
           <label for="attorney">Attorney</label>
@@ -265,11 +292,15 @@
   </div>
   {% endif %}
 
-  {% if bucket_label %}
+  {% if bucket_label or wtypes %}
   <div class="bucket-banner">
     <i class="bi bi-funnel-fill" style="color:var(--accent)"></i>
-    Showing the <strong>{{ bucket_label }}</strong> bucket only.
-    <a href="/open-items?status={{ status }}&from={{ d_from }}&to={{ d_to }}">Clear bucket ✕</a>
+    {% if bucket_label %}Showing the <strong>{{ bucket_label }}</strong> bucket{% if wtypes %} · {% endif %}{% endif %}
+    {% if wtypes %}
+      type{% if wtypes|length > 1 %}s{% endif %}:
+      <strong>{{ wtype_labels|join(', ') }}</strong>
+    {% endif %}
+    <a href="/open-items?status={{ status }}&from={{ d_from }}&to={{ d_to }}">Clear filter ✕</a>
   </div>
   {% endif %}
 

@@ -720,8 +720,9 @@ def _auto_start_followup(
 ) -> None:
     """Like _start_followup_workflow but starts a brand-new top-level thread.
 
-    If `participants` is None we fall back to the 'case_setup_participant_user_ids'
-    setting (used by the auto Case Setup / Doc Verification triggers).
+    If `participants` is None we fall back to the
+    'case_setup_participant_user_ids' setting. Auto lifecycle fires normally
+    pass the channel creator (or that fallback) explicitly.
     """
     if participants is None:
         participants = _ids_from_config("case_setup_participant_user_ids")
@@ -1446,6 +1447,16 @@ def _format_client_contact_text(client, channel_id: str, row, threshold: int) ->
     )
 
 
+def _lifecycle_intake_participants(row: dict, fallback_setting_key: str) -> list[str]:
+    """Who to @-mention on auto intake zaps (Case Setup / Client Intake /
+    Doc Verification). Prefer the Slack user who created the channel; fall
+    back to the admin setting list when the creator wasn't recorded."""
+    creator = (row.get("creator_user_id") or "").strip()
+    if creator:
+        return [creator]
+    return _ids_from_config(fallback_setting_key)
+
+
 def fire_due_lifecycle_triggers(client) -> None:
     """Called from the reminder loop. Fires new_case (T+180s),
     case_setup (T+15min), calendar_sol (T+15min), client_intake (T+1h),
@@ -1462,15 +1473,14 @@ def fire_due_lifecycle_triggers(client) -> None:
     doc_ver_due    = storage.lifecycle_due(now, "doc_verification", DOC_VERIFICATION_DELAY_SECONDS, max_age_seconds=age)
     intake_due     = storage.lifecycle_due(now, "client_intake", CLIENT_INTAKE_DELAY_SECONDS, max_age_seconds=age)
     sol_due        = storage.lifecycle_due(now, "calendar_sol", CALENDAR_SOL_DELAY_SECONDS, max_age_seconds=age)
-    intake_assignees = _ids_from_config("client_intake_assignee_user_ids")
 
     if new_case_due or case_setup_due or doc_ver_due or intake_due or sol_due:
         log.info(
             "lifecycle sweep — new_case=%d case_setup=%d doc_verification=%d "
-            "client_intake=%d (assignees_configured=%s) calendar_sol=%d",
+            "client_intake=%d calendar_sol=%d",
             len(new_case_due),
             len(case_setup_due), len(doc_ver_due),
-            len(intake_due), bool(intake_assignees),
+            len(intake_due),
             len(sol_due),
         )
 
@@ -1485,43 +1495,71 @@ def fire_due_lifecycle_triggers(client) -> None:
                     log.exception("auto new_case failed for channel=%s", row["channel_id"])
 
     for row in case_setup_due:
+        participants = _lifecycle_intake_participants(
+            row, "case_setup_participant_user_ids",
+        )
         if storage.mark_lifecycle_fired(row["channel_id"], "case_setup"):
             try:
+                log.info(
+                    "auto-firing case_setup for #%s — assignee=%s",
+                    row["channel_id"],
+                    participants[0] if participants else "(none/team)",
+                )
                 _auto_start_followup(
                     client, row["channel_id"], CASE_SETUP,
                     "case_setup_escalation_user_ids", "case_setup",
+                    participants=participants if participants else None,
                 )
             except Exception:
                 log.exception("auto case_setup failed for channel=%s", row["channel_id"])
 
     for row in doc_ver_due:
+        participants = _lifecycle_intake_participants(
+            row, "case_setup_participant_user_ids",
+        )
         if storage.mark_lifecycle_fired(row["channel_id"], "doc_verification"):
             try:
+                log.info(
+                    "auto-firing doc_verification for #%s — assignee=%s",
+                    row["channel_id"],
+                    participants[0] if participants else "(none/team)",
+                )
                 _auto_start_followup(
                     client, row["channel_id"], DOC_VERIFICATION,
                     "doc_verification_escalation_user_ids", "doc_verification",
+                    participants=participants if participants else None,
                 )
             except Exception:
                 log.exception("auto doc_verification failed for channel=%s", row["channel_id"])
 
-    if intake_due and not intake_assignees:
-        log.warning(
-            "%d channel(s) past the 1-hour Client Intake delay, but "
-            "'client_intake_assignee_user_ids' is empty — auto-trigger disabled. "
-            "Set it in admin settings to enable.",
-            len(intake_due),
+    intake_skipped = 0
+    for row in intake_due:
+        participants = _lifecycle_intake_participants(
+            row, "client_intake_assignee_user_ids",
         )
-    if intake_assignees:
-        for row in intake_due:
-            if storage.mark_lifecycle_fired(row["channel_id"], "client_intake"):
-                try:
-                    _auto_start_followup(
-                        client, row["channel_id"], CLIENT_INTAKE,
-                        "client_intake_escalation_user_ids", "client_intake",
-                        participants=intake_assignees,
-                    )
-                except Exception:
-                    log.exception("auto client_intake failed for channel=%s", row["channel_id"])
+        if not participants:
+            intake_skipped += 1
+            continue
+        if storage.mark_lifecycle_fired(row["channel_id"], "client_intake"):
+            try:
+                log.info(
+                    "auto-firing client_intake for #%s — assignee=%s",
+                    row["channel_id"], participants[0],
+                )
+                _auto_start_followup(
+                    client, row["channel_id"], CLIENT_INTAKE,
+                    "client_intake_escalation_user_ids", "client_intake",
+                    participants=participants,
+                )
+            except Exception:
+                log.exception("auto client_intake failed for channel=%s", row["channel_id"])
+    if intake_skipped:
+        log.warning(
+            "%d channel(s) past the 1-hour Client Intake delay with no "
+            "channel creator recorded and no "
+            "'client_intake_assignee_user_ids' fallback — left pending.",
+            intake_skipped,
+        )
 
     sol_trigger = TRIGGERS.get("calendar_sol")
     if sol_trigger is not None:
@@ -1706,11 +1744,14 @@ def handle_member_joined(event, client):
         topic   = (ch.get("topic")   or {}).get("value", "") or ""
         purpose = (ch.get("purpose") or {}).get("value", "") or ""
         created_at = float(ch.get("created") or time.time())
+        creator = ch.get("creator") or ""
     except Exception:
         log.debug("conversations.info failed for %s", channel_id, exc_info=True)
         return
 
-    _ensure_channel_lifecycle(channel_id, created_at, channel_name=name)
+    _ensure_channel_lifecycle(
+        channel_id, created_at, channel_name=name, creator_user_id=creator,
+    )
 
     if topic:
         _maybe_fire_intros_from_topic(client, channel_id, topic, channel_name=name)
@@ -1726,7 +1767,12 @@ def handle_member_joined(event, client):
 _STALE_CHANNEL_SECONDS = 5 * 24 * 60 * 60  # 5 days
 
 
-def _ensure_channel_lifecycle(channel_id: str, created_at: float, channel_name: str = "") -> dict | None:
+def _ensure_channel_lifecycle(
+    channel_id: str,
+    created_at: float,
+    channel_name: str = "",
+    creator_user_id: str = "",
+) -> dict | None:
     """Idempotently record lifecycle for the channel. Pre-marks every
     lifecycle trigger as already fired in two cases:
 
@@ -1736,8 +1782,12 @@ def _ensure_channel_lifecycle(channel_id: str, created_at: float, channel_name: 
          case channels — e.g. lacayoarauzjose-1559). Channels without a
          case number still get the bot, but lifecycle automations stay
          silent until someone runs a manual command.
+
+    `creator_user_id` (when known) is who intake zaps get assigned to.
     """
-    storage.record_channel_created(channel_id, created_at)
+    storage.record_channel_created(
+        channel_id, created_at, creator_user_id=creator_user_id,
+    )
 
     is_stale = time.time() - created_at > _STALE_CHANNEL_SECONDS
     # Only suppress on case-number rule when we actually know the name.
@@ -1769,10 +1819,17 @@ def handle_channel_created(event, client):
         # Slack gives `created` as epoch seconds; fall back to now if missing.
         created_at = float(ch.get("created") or time.time())
         name = ch.get("name", "") or ""
-        _ensure_channel_lifecycle(channel_id, created_at, channel_name=name)
-        log.info("recorded channel lifecycle for #%s (%s) — case_number=%s, "
-                 "new_case will fire in %ds (suppressed if no case number)",
-                 name or "?", channel_id, _has_case_number(name), NEW_CASE_DELAY_SECONDS)
+        creator = ch.get("creator") or ""
+        _ensure_channel_lifecycle(
+            channel_id, created_at, channel_name=name, creator_user_id=creator,
+        )
+        log.info(
+            "recorded channel lifecycle for #%s (%s) — creator=%s, "
+            "case_number=%s, new_case will fire in %ds "
+            "(suppressed if no case number)",
+            name or "?", channel_id, creator or "?",
+            _has_case_number(name), NEW_CASE_DELAY_SECONDS,
+        )
 
 
 # Slack renders user mentions as either `<@U123>` or `<@U123|displayName>` —
@@ -2416,16 +2473,25 @@ def _log_startup_config() -> None:
     """One-line snapshot of which auto-triggers will actually fire, so
     misconfigured settings are visible on every deploy."""
     keys = [
-        ("client_intake_assignee_user_ids",  "Client Intake auto-trigger"),
+        ("client_intake_assignee_user_ids",  "Client Intake fallback (creator preferred)"),
         ("disbursement_authorized_user_ids", "Disbursement phrase trigger"),
         ("check_pickup_trigger_user_ids",    "Check Pickup phrase trigger"),
         ("review_request_trigger_user_ids",  "Review Request phrase trigger"),
-        ("case_setup_participant_user_ids",  "Case Setup / Doc Verification participants"),
+        ("case_setup_participant_user_ids",  "Case Setup / Doc Verification fallback (creator preferred)"),
     ]
     for key, label in keys:
         ids = _ids_from_config(key)
-        log.info("config check — %s: %s (key=%s)",
-                 label, f"{len(ids)} user(s) configured" if ids else "DISABLED (empty)", key)
+        if "fallback" in label.lower():
+            status = (
+                f"{len(ids)} fallback user(s)" if ids
+                else "no fallback (channel creator only)"
+            )
+        else:
+            status = (
+                f"{len(ids)} user(s) configured" if ids
+                else "DISABLED (empty)"
+            )
+        log.info("config check — %s: %s (key=%s)", label, status, key)
 
 
 if __name__ == "__main__":
