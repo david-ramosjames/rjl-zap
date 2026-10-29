@@ -514,5 +514,10 @@ WORKFLOW_LABELS = {
     "scheduling_order":    "Calendar — Scheduling Order",
 }
 
-# trigger_name → the reply word that closes it (default "done" otherwise).
-WORKFLOW_DONE_WORD = {"doc_verification": "confirmed", "check_pickup": "scheduled"}
+# trigger_name → the reply word(s) that close it (default "done" otherwise).
+# Use "a/b" when either word counts (shown that way in UI hints too).
+WORKFLOW_DONE_WORD = {
+    "doc_verification": "confirmed",
+    "check_pickup": "scheduled",
+    "review_request": "yes/no",
+}

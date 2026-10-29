@@ -44,19 +44,25 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
     if words[0] in _CLOSE_QUESTION_STARTS:
         return False
     close_words = set(_GENERIC_CLOSE_WORDS)
+    # "yes/no" (5-star review) → both words count; plain "done" stays one word.
     if done_word:
-        close_words.add(done_word.lower())
+        close_words.update(
+            p for p in re.split(r"[/\s]+", done_word.lower()) if p
+        )
     for i, w in enumerate(words):
         if w not in close_words:
             continue
         prev = words[i - 1] if i else ""
         prev2 = words[i - 2] if i >= 2 else ""
-        if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
-            continue
-        if prev.endswith("n't") or prev2.endswith("n't"):
-            continue
-        if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
-            continue
+        # Bare "no" is a valid close for review_request; only leading
+        # context ("not done") should negate.
+        if w not in _CLOSE_NEGATORS:
+            if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
+                continue
+            if prev.endswith("n't") or prev2.endswith("n't"):
+                continue
+            if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
+                continue
         return True
     return False
 

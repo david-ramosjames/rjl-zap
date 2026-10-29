@@ -1877,7 +1877,8 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
     """True for short affirmations that the task is finished.
 
     Accepts: "done", "Done.", "already done", "all done", "it's completed",
-    "this is done", "done already", "scheduled already", etc.
+    "this is done", "done already", "scheduled already", etc. For the 5-star
+    review decision (`done_word="yes/no"`), bare "yes" / "no" also count.
     Rejects: "not done", "almost complete", "halfway done", "will be done
     tomorrow", and longer status chatter.
     """
@@ -1896,8 +1897,11 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
         return False
 
     close_words = set(_GENERIC_CLOSE_WORDS)
+    # "yes/no" (5-star review) → both words count; plain "done" stays one word.
     if done_word:
-        close_words.add(done_word.lower())
+        close_words.update(
+            p for p in re.split(r"[/\s]+", done_word.lower()) if p
+        )
 
     for i, w in enumerate(words):
         if w not in close_words:
@@ -1905,13 +1909,16 @@ def _is_close_reply(text: str, done_word: str = "done") -> bool:
         prev = words[i - 1] if i else ""
         prev2 = words[i - 2] if i >= 2 else ""
         # "not done", "almost done", "not yet done", "haven't done"
-        if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
-            continue
-        if prev.endswith("n't") or prev2.endswith("n't"):
-            continue
-        # "will be done", "need to complete", "should be done"
-        if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
-            continue
+        # Skip when the close word itself is also a negator (e.g. bare "no"
+        # for the 5-star review decision) — only leading context negates.
+        if w not in _CLOSE_NEGATORS:
+            if prev in _CLOSE_NEGATORS or prev2 in _CLOSE_NEGATORS:
+                continue
+            if prev.endswith("n't") or prev2.endswith("n't"):
+                continue
+            # "will be done", "need to complete", "should be done"
+            if prev in _CLOSE_FUTURE or prev2 in _CLOSE_FUTURE:
+                continue
         return True
     return False
 
