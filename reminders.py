@@ -118,6 +118,15 @@ def _thread_has_reply(client, channel_id: str, thread_ts: str, keyword: str):
     skipped_bot = 0
     for m in messages[1:]:  # messages[0] is the parent
         if m.get("bot_id") or (bot_user_id and m.get("user") == bot_user_id):
+            # ✅ on the bot's own escalation/reminder in this thread also
+            # counts — same rule as handle_reaction_added.
+            if _parent_has_completion_reaction(m):
+                log.info(
+                    "thread reply check channel=%s ts=%s — bot reminder "
+                    "has ✅ reaction, treating as done",
+                    channel_id, thread_ts,
+                )
+                return True
             skipped_bot += 1
             continue
         text = m.get("text") or ""

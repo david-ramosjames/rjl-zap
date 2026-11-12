@@ -1653,33 +1653,65 @@ def _start_workflow(client, channel: str, parent_ts: str, trigger: TriggerConfig
              channel, parent_ts, trigger.name, len(item_records))
 
 
+def _fetch_message(client, channel: str, ts: str) -> dict | None:
+    """Fetch one message, including replies that live only inside a thread.
+
+    Escalation reminders are posted with thread_ts and never appear in
+    channel history, so conversations.history misses them. reactions.get
+    returns those messages (and their thread_ts) because a reaction is
+    what brought us here.
+    """
+    try:
+        resp = client.reactions_get(channel=channel, timestamp=ts, full=False)
+        msg = resp.get("message")
+        if msg:
+            return msg
+    except Exception:
+        log.debug("reactions.get failed channel=%s ts=%s", channel, ts, exc_info=True)
+    try:
+        resp = client.conversations_history(
+            channel=channel, latest=ts, oldest=ts, inclusive=True, limit=1,
+        )
+        return (resp.get("messages") or [None])[0]
+    except Exception:
+        log.debug("conversations.history failed channel=%s ts=%s",
+                  channel, ts, exc_info=True)
+    return None
+
+
 def _workflow_for_message(client, channel: str, ts: str, item_user: str = ""):
     """Find the workflow a ✅ reaction should close.
 
     A ✅ on the task's own message closes it. A ✅ on a reply in the thread
-    only counts when that reply is the bot's (e.g. the 24h reminder) —
-    people use ✅ on each other's messages to mean "seen".
+    only counts when that reply is the bot's (e.g. the 48h escalation
+    reminder) — people use ✅ on each other's messages to mean "seen".
     Returns (workflow, parent_ts) or (None, ts).
     """
     wf = storage.workflow_by_thread(channel, ts)
     if wf:
         return wf, ts
-    bot_id = _bot_user_id(client)
-    if not (bot_id and item_user == bot_id):
+
+    msg = _fetch_message(client, channel, ts)
+    if not msg:
         return None, ts
-    try:
-        resp = client.conversations_history(
-            channel=channel, latest=ts, oldest=ts, inclusive=True, limit=1,
-        )
-        msg = (resp.get("messages") or [None])[0] or {}
-        parent = msg.get("thread_ts")
-        if parent and parent != ts:
-            wf = storage.workflow_by_thread(channel, parent)
-            if wf:
-                return wf, parent
-    except Exception:
-        log.debug("could not resolve parent thread for ts=%s channel=%s",
-                  ts, channel, exc_info=True)
+
+    bot_id = _bot_user_id(client)
+    msg_user = msg.get("user") or ""
+    # Bot posts usually have user=<bot> and/or bot_id set; item_user from the
+    # reaction event is a backup when the fetch is sparse.
+    is_bot_msg = bool(
+        msg.get("bot_id")
+        or (bot_id and msg_user == bot_id)
+        or (bot_id and item_user == bot_id)
+    )
+    if not is_bot_msg:
+        return None, ts
+
+    parent = msg.get("thread_ts")
+    if parent and parent != ts:
+        wf = storage.workflow_by_thread(channel, parent)
+        if wf:
+            return wf, parent
     return None, ts
 
 
