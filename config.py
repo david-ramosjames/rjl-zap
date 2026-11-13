@@ -89,7 +89,7 @@ DISBURSEMENT_MASTER_CHECKLIST = """:spiral_calendar_pad: *DISBURSEMENT OVERVIEW*
 The following tasks need to be completed for the disbursement.
 
 :clipboard: *CASE SETTLEMENT*
-1) {legalassistants} Cancel & remove all future Lit Events and SOL deadlines from the calendar
+1) {la} Cancel & remove all future Lit Events and SOL deadlines from the calendar
 2) {paralegal} Cancel all pending orders (Skribe, mediation, experts)
 3) {paralegal} Gather any outstanding invoices
 
