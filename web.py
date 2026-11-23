@@ -329,20 +329,6 @@ SETTINGS = [
         "help": "How far back to look for still-open items. Default: 7.",
     },
     {
-        "key": "client_contact_spreadsheet_id",
-        "label": "Client Contact Status — Google Sheet ID",
-        "help": "Spreadsheet ID for the Client Contact Status tracker (case no in "
-                "column A, days-since-contact in column G). Found in the sheet URL "
-                "between /d/ and /edit. Read-only — same service account JSON as "
-                "Recent Contact. Sheet must be shared with the service account email.",
-    },
-    {
-        "key": "client_contact_sheet_name",
-        "label": "Client Contact Status — Tab Name",
-        "help": "Worksheet tab name within the spreadsheet. Default: Client Contact "
-                "Status.",
-    },
-    {
         "key": "email_sender_address",
         "label": "Bucket Emails — Send As (Google Workspace user)",
         "help": "The Workspace email address the reports are sent FROM. Overridden "

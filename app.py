@@ -1207,10 +1207,11 @@ def fire_bucket_emails(client) -> None:
             log.warning("bucket email '%s' send failed — will retry next tick", key)
 
 
-# How often the Client Contact Status sweep runs. Sheet only needs to be
-# polled occasionally — 24 h is plenty for "30-day no-contact" alerts.
+# How often the Client Contact Status sweep runs. Case Tracker only needs to
+# be polled occasionally — 24 h is plenty for "30-day no-contact" alerts.
 _CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 _CLIENT_CONTACT_LAST_SWEPT_KEY = "client_contact_last_swept_at"
+_CLIENT_CONTACT_TRACKER_URL = "https://rjl-case-tracker.vercel.app/client-contact"
 
 # Client Contact alerts only fire during firm-local business hours so the
 # team doesn't get pinged at midnight or on weekends. Mon-Fri, inclusive
@@ -1268,17 +1269,15 @@ def _channel_id_by_case_number(client) -> dict[str, str]:
 
 
 def fire_client_contact_alerts(client) -> None:
-    """Once-daily sweep over the Client Contact Status sheet. Posts a
-    30-day no-contact warning to each case channel that's lapsed, and a
-    45-day reminder when the lapse continues. Tags users named in the
-    channel topic. Deduped per (case, threshold, last_interaction) so a
-    fresh contact entry re-arms the alert."""
-    # Bail before touching the gate timestamp if the spreadsheet ID isn't
-    # configured — otherwise the first tick after deploy would record "just
-    # swept", and the sweep would stay silent for 24 h after the admin sets
-    # the ID. Silent here (no log) — startup config snapshot already shows
-    # whether the sheet is configured.
-    if not storage.get_config("client_contact_spreadsheet_id").strip():
+    """Once-daily sweep over Case Tracker client-contact data. Posts a
+    30-day no-contact warning to each active case channel that's lapsed,
+    and higher-threshold reminders as the lapse continues. Tags users
+    named in the channel topic. Deduped per (case, threshold, alert_key)
+    so a fresh qualifying contact (or status change) re-arms the alert."""
+    import client_contact_status as ccs
+
+    # Bail before touching the gate if Case Tracker Supabase isn't configured.
+    if not ccs.is_configured():
         return
 
     # Only fire alerts during firm-local business hours (Mon-Fri, 9 AM - 5 PM
@@ -1296,18 +1295,15 @@ def fire_client_contact_alerts(client) -> None:
     if now - last_swept < _CLIENT_CONTACT_SWEEP_INTERVAL_SECONDS:
         return
 
-    log.info("client contact status sweep starting")
-
-    import client_contact_status as ccs
+    log.info("client contact status sweep starting (Case Tracker)")
 
     rows = list(ccs.iter_rows())
     if not rows:
-        # Configured but unreadable (auth failure, wrong ID, sheet shared
-        # with the wrong account, empty data). Do NOT update the gate —
-        # we want the admin to be able to fix it and see results next tick.
+        # Configured but unreadable (bad key, network, empty). Do NOT update
+        # the gate — fix the env and the next tick should pick it up.
         log.warning(
-            "client contact sweep: 0 readable rows — sheet misconfigured, "
-            "shared with the wrong account, or empty. Will retry next tick."
+            "client contact sweep: 0 readable rows — Case Tracker Supabase "
+            "misconfigured or empty. Will retry next tick."
         )
         return
 
@@ -1315,69 +1311,69 @@ def fire_client_contact_alerts(client) -> None:
     # before the next sweep, regardless of whether anything was overdue.
     storage.set_config(_CLIENT_CONTACT_LAST_SWEPT_KEY, str(now))
 
-    # The sheet is the source of truth for what's "active". Any case the bot
-    # has alerted on in the past that's no longer in column A is treated as
-    # deactivated — no more alerts will ever fire for it (the sweep below
-    # only iterates rows that ARE in the sheet). We don't purge the dedup
-    # records: if the case is added back later with the same Last Interaction
-    # value, we'd rather stay quiet than fire a duplicate alert.
+    # Case Tracker is the source of truth for what's "active". Cases that
+    # left the open set (settled/disbursed, disengaged, referred) stop
+    # getting alerts automatically.
     active_case_nos = {r.case_no for r in rows}
     previously_alerted = storage.alerted_case_numbers()
     deactivated = previously_alerted - active_case_nos
     if deactivated:
         log.info(
-            "client contact: %d case(s) previously alerted on are no longer in "
-            "the sheet — treated as deactivated, no further alerts will fire",
+            "client contact: %d case(s) previously alerted on are no longer "
+            "active in Case Tracker — no further alerts will fire",
             len(deactivated),
         )
 
-    overdue = [r for r in rows if r.days_since_contact >= _CLIENT_CONTACT_THRESHOLDS[0]]
+    # Skip cases that Case Tracker still counts as recently contacted.
+    overdue = [
+        r for r in rows
+        if r.contact_status != "contacted"
+        and r.days_since_contact >= _CLIENT_CONTACT_THRESHOLDS[0]
+    ]
     if not overdue:
-        log.info("client contact sweep: %d row(s), none overdue", len(rows))
+        log.info("client contact sweep: %d active case(s), none overdue", len(rows))
         return
 
     by_case = _channel_id_by_case_number(client)
     log.info(
-        "client contact sweep: %d active case(s) in sheet, %d overdue, "
-        "%d case channels indexed",
+        "client contact sweep: %d active case(s) in Case Tracker, %d overdue, "
+        "%d case channels indexed from Slack",
         len(active_case_nos), len(overdue), len(by_case),
     )
 
-    # Track posts per threshold for the summary log
     posted: dict[int, int] = {t: 0 for t in _CLIENT_CONTACT_THRESHOLDS}
 
     for row in overdue:
-        channel_id = by_case.get(row.case_no)
+        channel_id = row.slack_channel_id or by_case.get(row.case_no)
         if not channel_id:
             log.info("client contact: no channel for case %s (%s)",
                      row.case_no, row.client_name)
             continue
 
         # The HIGHEST threshold the case has crossed is the one that fires.
-        # (e.g. at 62 days both 25/30/45/60 apply — fire 60.) All lower
-        # crossed thresholds are then back-recorded so they can never
-        # back-fire later for this same Last Interaction.
+        # Lower crossed thresholds are back-recorded so they can't back-fire
+        # later for this same alert_key.
         crossed = [t for t in _CLIENT_CONTACT_THRESHOLDS if row.days_since_contact >= t]
         if not crossed:
             continue
-        current = crossed[-1]  # _CLIENT_CONTACT_THRESHOLDS is ascending
+        current = crossed[-1]
 
         if not storage.should_send_client_contact_alert(
-            row.case_no, current, row.last_interaction
+            row.case_no, current, row.alert_key
         ):
             continue
 
         text = _format_client_contact_text(client, channel_id, row, threshold=current)
         try:
             client.chat_postMessage(channel=channel_id, text=text)
-            # Mark current AND all lower crossed thresholds as alerted, keyed
-            # on this Last Interaction. Re-arms automatically when column F
-            # updates in the sheet (new contact logged).
             for t in crossed:
-                storage.record_client_contact_alert(row.case_no, t, row.last_interaction)
+                storage.record_client_contact_alert(row.case_no, t, row.alert_key)
             posted[current] += 1
-            log.info("client contact %dd alert posted case=%s channel=%s days=%d",
-                     current, row.case_no, channel_id, row.days_since_contact)
+            log.info(
+                "client contact %dd alert posted case=%s channel=%s days=%d status=%s",
+                current, row.case_no, channel_id, row.days_since_contact,
+                row.contact_status,
+            )
         except Exception:
             log.exception("client contact %dd post failed case=%s channel=%s",
                           current, row.case_no, channel_id)
@@ -1396,55 +1392,70 @@ _CLIENT_CONTACT_THRESHOLDS = [25, 30, 45, 60, 75]
 
 def _format_client_contact_text(client, channel_id: str, row, threshold: int) -> str:
     """Render the alert body, tagging every user mentioned in the channel
-    topic. (The shared _topic_user_ids helper now reads the topic only —
-    description/purpose is ignored everywhere.) Severity language escalates
-    with the threshold."""
+    topic. Includes Case Tracker contact status (Attempted — No Response /
+    Not Attempted Recently). Severity language escalates with the threshold."""
     topic_users = _topic_user_ids(client, channel_id)
     mention = " ".join(f"<@{uid}>" for uid in topic_users) if topic_users else "team"
     client_label = f"*{row.client_name}*" if row.client_name else "the client"
     last_clause = f" since {row.last_interaction}" if row.last_interaction else ""
     days = row.days_since_contact
 
+    status_label = getattr(row, "contact_status_label", "") or ""
+    status_help = getattr(row, "contact_status_help", "") or ""
+    last_attempt = getattr(row, "last_attempt", "") or ""
+    details = getattr(row, "last_other_details", "") or ""
+
+    status_lines = []
+    if status_label:
+        help_bit = f" — {status_help}" if status_help else ""
+        status_lines.append(f"*Case Tracker status:* {status_label}{help_bit}")
+    if last_attempt and status_label == "Attempted — No Response":
+        status_lines.append(f"*Last attempt:* {last_attempt}")
+    if details:
+        status_lines.append(f"*Last logged note:* {details}")
+    status_lines.append(f"<{_CLIENT_CONTACT_TRACKER_URL}|Open Client Contact>")
+    status_block = "\n".join(status_lines)
+
     if threshold == 25:
-        return (
+        lead = (
             f":hourglass_flowing_sand: *Heads up: {days} days without contact* — {mention}\n\n"
-            f"{client_label} hasn't been contacted{last_clause}. Please reach out before the "
-            f"30-day mark to keep the case on track. Log the outreach with "
-            f"`@RJL-zap recent contact <type> - <details>`."
+            f"{client_label} hasn't had qualifying contact{last_clause}. Please reach out before the "
+            f"30-day mark to keep the case on track."
         )
-    if threshold == 30:
-        return (
+    elif threshold == 30:
+        lead = (
             f":warning: *Client not contacted in {days} days* — {mention}\n\n"
-            f"{client_label} has not been contacted{last_clause}. "
-            f"Please reach out and log the outcome with "
-            f"`@RJL-zap recent contact <type> - <details>`."
+            f"{client_label} has not had qualifying contact{last_clause}."
         )
-    if threshold == 45:
-        return (
+    elif threshold == 45:
+        lead = (
             f":rotating_light: *REMINDER: Client not contacted in {days} days* "
             f":rotating_light: — {mention}\n\n"
-            f"{client_label} still has not been contacted{last_clause}. "
-            f"Please reach out today and log the contact in the Recent Contact tracker."
+            f"{client_label} still has not had qualifying contact{last_clause}. "
+            f"Please reach out today."
         )
-    if threshold == 60:
-        return (
+    elif threshold == 60:
+        lead = (
             f":no_entry: *URGENT: {days} days without contact* — {mention}\n\n"
-            f"{client_label} has now gone {days} days without contact{last_clause}. "
-            f"This case needs immediate attention. Please reach out today and document any "
-            f"blockers in this thread."
+            f"{client_label} has now gone {days} days without qualifying contact{last_clause}. "
+            f"This case needs immediate attention."
         )
-    if threshold == 75:
-        return (
+    elif threshold == 75:
+        lead = (
             f":bangbang: *CRITICAL: {days} days without contact* :bangbang: — {mention}\n\n"
-            f"{client_label} has gone {days}+ days without contact{last_clause}. "
+            f"{client_label} has gone {days}+ days without qualifying contact{last_clause}. "
             f"Escalate to the supervising attorney and document why this case has lapsed."
         )
-    # Generic fallback for any future threshold added to _CLIENT_CONTACT_THRESHOLDS
-    # without dedicated copy.
+    else:
+        lead = (
+            f":warning: *Client not contacted in {days} days* — {mention}\n\n"
+            f"{client_label} has not had qualifying contact{last_clause}."
+        )
+
     return (
-        f":warning: *Client not contacted in {days} days* — {mention}\n\n"
-        f"{client_label} has not been contacted{last_clause}. Please reach out and log "
-        f"the outcome via `@RJL-zap recent contact`."
+        f"{lead}\n\n{status_block}\n\n"
+        f"Log non-phone outreach with `@RJL-zap recent contact <type> - <details>` "
+        f"(calls/texts sync from Quo automatically)."
     )
 
 
@@ -2532,6 +2543,12 @@ def _log_startup_config() -> None:
                 else "DISABLED (empty)"
             )
         log.info("config check — %s: %s (key=%s)", label, status, key)
+
+    import client_contact_status as ccs
+    log.info(
+        "config check — Client Contact (Case Tracker): %s",
+        "configured" if ccs.is_configured() else "DISABLED (set CASE_TRACKER_SUPABASE_URL + SECRET_KEY)",
+    )
 
 
 if __name__ == "__main__":

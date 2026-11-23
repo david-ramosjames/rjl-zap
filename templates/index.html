@@ -1010,19 +1010,24 @@
         <span class="trigger-tag auto"><i class="bi bi-arrow-repeat"></i> Auto</span>
       </div>
       <div class="cmd-body">
-        <p><strong>Once-a-day sweep of the Client Contact Status Google Sheet, weekdays during business hours.</strong> For every case whose <em>Days Since Contact</em> (column G) has reached a threshold, the bot posts to the matching case channel and tags users from the channel topic.</p>
+        <p><strong>Once-a-day sweep of <a href="https://rjl-case-tracker.vercel.app/client-contact" target="_blank" rel="noopener">Case Tracker → Client Contact</a>, weekdays during business hours.</strong> Uses the same active-case set and qualifying-contact rules as that page. For every open case whose days without qualifying contact has reached a threshold, the bot posts to the matching case channel, tags users from the channel topic, and includes the Case Tracker status (<em>Attempted — No Response</em> or <em>Not Attempted Recently</em>).</p>
 
         <div class="timeline-strip mt-1">
           <div class="tl-row"><span class="tl-badge badge-soon">25 days</span> <strong>:hourglass_flowing_sand: Heads up</strong> — early nudge to reach out before the 30-day mark.</div>
-          <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first formal reminder. Tags topic users with a prompt to log the next outreach via <code style="background:#f3f4f6;padding:.05rem .3rem;border-radius:3px">@RJL-zap recent contact</code>.</div>
+          <div class="tl-row"><span class="tl-badge badge-warn">30 days</span> <strong>:warning: Warning</strong> — first formal reminder, with Case Tracker status details.</div>
           <div class="tl-row"><span class="tl-badge badge-esc">45 days</span> <strong>:rotating_light: Reminder</strong> — escalation message that the lapse is still open.</div>
           <div class="tl-row"><span class="tl-badge badge-esc">60 days</span> <strong>:no_entry: Urgent</strong> — case needs immediate attention; blockers should be documented in-thread.</div>
           <div class="tl-row"><span class="tl-badge badge-esc">75 days</span> <strong>:bangbang: Critical</strong> — escalate to the supervising attorney, document why the case has lapsed.</div>
         </div>
 
         <div class="callout blue mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>What counts as contact:</strong> a qualifying call (60+ seconds, not Sona), a two-way text exchange within 7 days, or a manual recent-contact log. A short call, Sona, or a one-way text does <em>not</em> reset the clock — those show as <em>Attempted — No Response</em> when outreach happened recently.
+        </div>
+
+        <div class="callout blue mt-3">
           <i class="bi bi-arrow-up-circle me-1"></i>
-          <strong>Highest threshold wins.</strong> Only one alert fires per case per day — whichever threshold the case has crossed highest. All lower crossed thresholds are silently back-recorded so they can't back-fire later. A case that jumps from a fresh contact straight to 70 days (e.g. data gap) gets the 60-day alert, not 25/30/45 in sequence.
+          <strong>Highest threshold wins.</strong> Only one alert fires per case per day — whichever threshold the case has crossed highest. All lower crossed thresholds are silently back-recorded so they can't back-fire later.
         </div>
 
         <div class="callout blue mt-3">
@@ -1032,27 +1037,27 @@
 
         <div class="callout blue mt-2">
           <i class="bi bi-chat-square-text me-1"></i>
-          <strong>Topic-only tagging:</strong> the bot reads only the channel's <em>topic</em> for @-mentions — never the description. So if your topic says <em>Attorney @Kody | Paralegal @Adrian</em> and the description names someone different, only @Kody and @Adrian get pinged.
+          <strong>Topic-only tagging:</strong> the bot reads only the channel's <em>topic</em> for @-mentions — never the description.
         </div>
 
         <div class="callout amber mt-3">
           <i class="bi bi-link-45deg me-1"></i>
-          <strong>How channels are matched:</strong> the bot looks up the case channel by parsing the trailing <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">-&lt;case-number&gt;</code> from each public channel name. Case <code>232</code> in the sheet matches a channel named e.g. <code>charliebrown-232</code>. Cases without a matching channel are silently skipped (logged for diagnostics).
+          <strong>How channels are matched:</strong> prefers the Slack channel ID stored in Case Tracker, then falls back to parsing the trailing <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">-&lt;case-number&gt;</code> from public channel names.
         </div>
 
         <div class="callout green mt-2">
           <i class="bi bi-check2-circle me-1"></i>
-          <strong>Sheet is the source of truth.</strong> The bot only alerts on cases that are <em>currently in the sheet</em>. If a case number is removed from column A (case closed, settled, withdrawn), no further reminders fire — there's nothing to opt out of. The next sweep just won't see the case. The log line <code style="background:rgba(0,0,0,.06);border-radius:4px;padding:.05rem .35rem">N case(s) previously alerted on are no longer in the sheet</code> shows how many cases dropped off since the bot started.
+          <strong>Case Tracker is the source of truth.</strong> Only open cases that still need ongoing updates are alerted (same filter as the Client Contact page — excludes disengaged / terminated / referred / fully disbursed). When a case leaves that set, reminders stop.
         </div>
 
         <div class="callout blue mt-2">
           <i class="bi bi-arrow-repeat me-1"></i>
-          <strong>Re-arms after a logged contact.</strong> Each alert is keyed on the case + threshold + Last Interaction date. Once someone logs a new contact and the sheet's Last Interaction column updates, the case can fire the 30-day warning again the next time it lapses past 30 days.
+          <strong>Re-arms after qualifying contact.</strong> Each alert is keyed on the case + threshold + last qualifying contact / status. Once Case Tracker records a new qualifying contact, the case can alert again the next time it lapses.
         </div>
 
         <div class="callout amber mt-2">
           <i class="bi bi-gear me-1"></i>
-          <strong>Setup:</strong> requires the <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> env var (same one Recent Contact uses) and the spreadsheet ID set under <em>Client Contact Status — Google Sheet ID</em>. Share the sheet with the service account email. Read-only — the bot never writes to this tracker.
+          <strong>Setup:</strong> set <code>CASE_TRACKER_SUPABASE_URL</code> and <code>CASE_TRACKER_SUPABASE_SECRET_KEY</code> (service role) on Railway. Read-only — the bot never writes to Case Tracker.
         </div>
       </div>
     </div>
