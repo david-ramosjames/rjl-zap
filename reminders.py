@@ -4,6 +4,7 @@ import threading
 import time
 
 import storage
+import unanswered
 from config import COMPLETION_EMOJIS, DISB_STEP_TRIGGERS, REMINDER_CHECK_INTERVAL_SECONDS
 
 log = logging.getLogger(__name__)
@@ -174,6 +175,7 @@ def _tick(client) -> None:
         ("client-contact", app.fire_client_contact_alerts),
         ("weekly-report", app.fire_weekly_status_report),
         ("bucket-emails", app.fire_bucket_emails),
+        ("unanswered-report", unanswered.fire_daily_report),
         ("channel-roles-backfill", app.fire_channel_roles_backfill),
     ):
         try:

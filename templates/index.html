@@ -1410,11 +1410,11 @@
             <label class="form-label" for="{{ s.key }}">{{ s.label }}</label>
             <input
               type="text"
-              class="form-control font-monospace"
+              class="form-control{% if 'recipients' not in s.key and s.key != 'email_sender_address' %} font-monospace{% endif %}"
               id="{{ s.key }}"
               name="{{ s.key }}"
               value="{{ cfg.get(s.key, '') }}"
-              placeholder="{% if 'hours' in s.key %}24{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
+              placeholder="{% if s.placeholder is defined and s.placeholder %}{{ s.placeholder }}{% elif 'hours' in s.key %}24{% elif 'recipients' in s.key or s.key == 'email_sender_address' %}name@ramosjames.com, name@ramosjames.com{% elif s.key.endswith('_time') %}16:00{% elif s.key.endswith('_day') %}monday{% elif 'lookback' in s.key %}60{% else %}e.g. U026P9FUKHC, U05419CMZ5E{% endif %}"
               style="font-size:.875rem"
             >
             <div class="form-help">{{ s.help }}</div>

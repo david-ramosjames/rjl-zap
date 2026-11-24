@@ -97,6 +97,20 @@ CREATE TABLE IF NOT EXISTS client_contact_alerts (
 CREATE INDEX IF NOT EXISTS idx_workflows_open ON workflows(completed_at, last_reminded_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent_at, send_after);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_pending ON channel_lifecycle(created_at);
+
+CREATE TABLE IF NOT EXISTS unanswered_asks (
+    channel_id TEXT NOT NULL,
+    message_ts TEXT NOT NULL,
+    thread_ts TEXT NOT NULL,
+    author_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    channel_name TEXT,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (channel_id, message_ts, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_unanswered_created ON unanswered_asks(created_at);
 """
 
 
@@ -742,6 +756,51 @@ def set_intro_fired_for(channel_id: str, role: str, user_id: str) -> bool:
             (user_id, channel_id),
         )
         return cur.rowcount > 0
+
+
+def upsert_unanswered_asks(rows: list) -> None:
+    """Remember teammate asks so a thread reply on an older parent is still
+    in the daily report even though conversations.history won't return it."""
+    if not rows:
+        return
+    payload = [
+        (
+            r["channel_id"], r["message_ts"], r["thread_ts"], r["author_id"],
+            r["target_id"], (r.get("text") or "")[:2000], r.get("channel_name") or "",
+            float(r["created_at"]),
+        )
+        for r in rows
+    ]
+    with connect() as conn:
+        conn.executemany(
+            "INSERT INTO unanswered_asks "
+            "(channel_id, message_ts, thread_ts, author_id, target_id, text, "
+            " channel_name, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(channel_id, message_ts, target_id) DO UPDATE SET "
+            "  thread_ts = excluded.thread_ts, "
+            "  author_id = excluded.author_id, "
+            "  text = excluded.text, "
+            "  channel_name = COALESCE(excluded.channel_name, unanswered_asks.channel_name), "
+            "  created_at = excluded.created_at",
+            payload,
+        )
+
+
+def unanswered_asks_between(start: float, end: float) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM unanswered_asks "
+            "WHERE created_at >= ? AND created_at < ? "
+            "ORDER BY created_at",
+            (start, end),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def prune_unanswered_asks(before_ts: float) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM unanswered_asks WHERE created_at < ?", (before_ts,))
 
 
 def mark_lifecycle_fired(channel_id: str, kind: str) -> bool:

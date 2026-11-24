@@ -176,11 +176,22 @@ def _smtp_send(to_addrs: list, subject: str, html: str) -> bool:
         return False
 
 
-def permalink(workspace_url: str, channel_id: str, parent_ts: str) -> str:
-    """Slack deep link: <workspace>/archives/<channel>/p<ts-without-dot>."""
+def permalink(workspace_url: str, channel_id: str, parent_ts: str,
+              thread_ts: str = "") -> str:
+    """Slack deep link: <workspace>/archives/<channel>/p<ts-without-dot>.
+
+    A thread reply also carries thread_ts so the link opens that comment.
+    """
     if not (workspace_url and channel_id and parent_ts):
         return ""
-    return f"{workspace_url.rstrip('/')}/archives/{channel_id}/p{parent_ts.replace('.', '')}"
+    url = (
+        f"{workspace_url.rstrip('/')}/archives/{channel_id}/"
+        f"p{str(parent_ts).replace('.', '')}"
+    )
+    thread = str(thread_ts or "")
+    if thread and thread != str(parent_ts):
+        url += f"?thread_ts={thread}&cid={channel_id}"
+    return url
 
 
 _ESC = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}
@@ -259,6 +270,200 @@ def build_bucket_email_html(bucket_label: str, window_desc: str,
         '</div>'
     )
     return head + howto + table + '</div>'
+
+
+def build_unanswered_email_html(window_desc: str, rows: list,
+                                channels_scanned: int = 0,
+                                note: str = "") -> str:
+    """rows: channel_name, asked_by, waiting_name or waiting_names, when,
+    snippet, link, when_ts. A summary counts open items per person. The
+    detail table lists the person with the most open items first, then
+    that person's channels, then each comment. The comment text links to
+    the Slack message. A comment waiting on two people is listed under both.
+    """
+    accent = "#e8385a"
+    counts = unanswered_person_counts(rows)
+    open_items = sum(n for _name, n in counts)
+    head = (
+        f'<div style="font-family:Segoe UI,system-ui,Arial,sans-serif;color:#1a1a2e;'
+        f'max-width:760px;margin:0 auto">'
+        f'<h2 style="margin:0 0 .2rem">Unanswered Slack asks</h2>'
+        f'<div style="color:#6b7280;font-size:13px;margin-bottom:14px">{_e(window_desc)}</div>'
+        f'<div style="margin-bottom:16px">'
+        f'{_chip("Open", open_items, "#b91c1c" if rows else "#166534")}'
+        f'{_chip("People", len(counts), "#1a1a2e")}'
+        f'</div>'
+    )
+    intro = (
+        '<div style="margin:0 0 14px;padding:12px 14px;background:#eff6ff;'
+        'border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;'
+        'font-size:13px;color:#1e40af">'
+        'Totals are by the person who still owes a reply. Below that, the '
+        'person with the most open items is first, then their channels and '
+        'each comment. The comment opens that Slack message. A later message '
+        'from them anywhere in the channel clears it, and so does a reaction. '
+        'Thank-yous, FYI notes, and posts from apps or bots are left off.'
+        '</div>'
+    )
+    if not rows:
+        body = (
+            '<div style="padding:18px;background:#f0fdf4;border-radius:8px;'
+            'color:#166534;font-size:14px">Everyone who was asked has replied. '
+            'Nothing is waiting.</div>'
+        )
+    else:
+        body = _unanswered_summary_table(counts) + _unanswered_detail_table(rows, accent)
+    footer_bits = []
+    if channels_scanned:
+        footer_bits.append(f"Scanned {channels_scanned} case channels.")
+    if note:
+        footer_bits.append(note)
+    footer = ""
+    if footer_bits:
+        footer = (
+            '<div style="margin-top:18px;color:#6b7280;font-size:12px">'
+            + " ".join(_e(bit) for bit in footer_bits)
+            + "</div>"
+        )
+    return head + intro + body + footer + "</div>"
+
+
+def unanswered_person_counts(rows: list) -> list:
+    """[(person_name, open_count)] with the most open items first."""
+    counts = {}
+    order = []
+    for pid, name, _row in _unanswered_assignments(rows):
+        key = (pid, name)
+        if key not in counts:
+            counts[key] = 0
+            order.append(key)
+        counts[key] += 1
+    ranked = [(key[1], counts[key]) for key in order]
+    return sorted(ranked, key=lambda pair: (-pair[1], pair[0].lower()))
+
+
+def _unanswered_assignments(rows: list):
+    """(person_id, person_name, row) for each person who still owes a reply."""
+    out = []
+    for row in rows:
+        names = list(row.get("waiting_names") or [])
+        ids = list(row.get("waiting_ids") or [])
+        if not names:
+            names = [row.get("waiting_name") or "Someone"]
+            ids = [row.get("waiting_id") or names[0]]
+        for i, name in enumerate(names):
+            pid = ids[i] if i < len(ids) and ids[i] else name
+            out.append((pid, name or "Someone", row))
+    return out
+
+
+def _group_unanswered_by_person(rows: list) -> list:
+    """Person with the most open items first. Within a person, the channel
+    with the most open items first, then each comment by time."""
+    by_person = {}
+    for pid, name, row in _unanswered_assignments(rows):
+        by_person.setdefault((pid, name), []).append(row)
+    people = sorted(
+        by_person.items(),
+        key=lambda item: (-len(item[1]), item[0][1].lower()),
+    )
+    grouped = []
+    for person, items in people:
+        by_channel = {}
+        for row in items:
+            key = (row.get("channel_id") or "", row.get("channel_name") or "")
+            by_channel.setdefault(key, []).append(row)
+        channels = []
+        for key, ch_items in by_channel.items():
+            ch_items.sort(key=lambda r: float(r.get("when_ts") or 0))
+            channels.append((key, ch_items))
+        channels.sort(key=lambda pair: (-len(pair[1]), (pair[0][1] or "").lower()))
+        grouped.append((person, channels))
+    return grouped
+
+
+def _unanswered_summary_table(counts: list) -> str:
+    th = ('style="text-align:left;font-size:11px;text-transform:uppercase;'
+          'letter-spacing:.05em;color:#6b7280;padding:6px 8px;'
+          'border-bottom:1px solid #e5e7eb"')
+    td = ('style="font-size:14px;padding:8px;border-bottom:1px solid #f3f4f6;'
+          'vertical-align:top"')
+    num = ('style="font-size:14px;padding:8px;border-bottom:1px solid #f3f4f6;'
+           'vertical-align:top;font-weight:700;color:#b91c1c"')
+    body = []
+    for name, count in counts:
+        body.append(
+            f'<tr><td {td}>{_e(name)}</td>'
+            f'<td {num}>{count}</td></tr>'
+        )
+    return (
+        '<h3 style="margin:0 0 8px;font-size:15px">By person</h3>'
+        '<table style="border-collapse:collapse;width:280px;margin:0 0 22px">'
+        f'<thead><tr><th {th}>Person</th><th {th}>Open</th></tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table>'
+    )
+
+
+def _unanswered_detail_table(rows: list, accent: str) -> str:
+    th = ('style="text-align:left;font-size:11px;text-transform:uppercase;'
+          'letter-spacing:.05em;color:#6b7280;padding:6px 8px;'
+          'border-bottom:1px solid #e5e7eb"')
+    person_td = ('style="font-size:14px;padding:8px;border-bottom:1px solid #e5e7eb;'
+                 'vertical-align:top;font-weight:700;background:#f9fafb;width:120px"')
+    channel_td = ('style="font-size:13px;padding:8px;border-bottom:1px solid #f3f4f6;'
+                  'vertical-align:top;width:160px"')
+    item_td = ('style="font-size:13px;padding:8px;border-bottom:1px solid #f3f4f6;'
+               'vertical-align:top"')
+    body = []
+    for (_pid, name), channels in _group_unanswered_by_person(rows):
+        span = sum(len(items) for _key, items in channels)
+        first_person = True
+        for (channel_id, channel_name), items in channels:
+            label = "#" + (channel_name or channel_id or "channel")
+            channel = _e(label)
+            channel_link = (items[0].get("channel_link") or "") if items else ""
+            if channel_link:
+                channel = (
+                    f'<a href="{_e(channel_link)}" '
+                    f'style="color:#1a1a2e;text-decoration:none;font-weight:600">'
+                    f'{channel}</a>'
+                )
+            first_channel = True
+            for row in items:
+                comment = _e(row.get("snippet") or "Open this comment")
+                if row.get("link"):
+                    comment = (
+                        f'<a href="{_e(row["link"])}" '
+                        f'style="color:{accent};text-decoration:none">{comment}</a>'
+                    )
+                cells = []
+                if first_person:
+                    cells.append(
+                        f'<td rowspan="{span}" {person_td}>{_e(name)}'
+                        f'<div style="font-weight:600;font-size:12px;color:#b91c1c">'
+                        f'{span} open</div></td>'
+                    )
+                    first_person = False
+                if first_channel:
+                    cells.append(
+                        f'<td rowspan="{len(items)}" {channel_td}>{channel}</td>'
+                    )
+                    first_channel = False
+                cells.append(
+                    f'<td {item_td}>'
+                    f'<div style="color:#6b7280;font-size:12px">'
+                    f'{_e(row.get("asked_by") or "Someone")} · {_e(row.get("when") or "")}'
+                    f'</div>'
+                    f'<div style="margin-top:3px">{comment}</div></td>'
+                )
+                body.append("<tr>" + "".join(cells) + "</tr>")
+    return (
+        '<h3 style="margin:0 0 8px;font-size:15px">Open items</h3>'
+        '<table style="border-collapse:collapse;width:100%">'
+        f'<thead><tr><th {th}>Person</th><th {th}>Channel</th>'
+        f'<th {th}>Open item</th></tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table>'
+    )
 
 
 def _chip(label: str, value, color: str) -> str:

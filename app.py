@@ -12,6 +12,7 @@ import auto_join
 import recent_contact
 import reminders
 import storage
+import unanswered
 import web
 import email_reports
 from config import (
@@ -2266,6 +2267,17 @@ def handle_message(event, client):
     channel_id = event.get("channel")
     if not channel_id:
         return
+
+    # Case-channel asks for the 4pm unanswered report. Recorded off the
+    # handler thread. Bot posts and join/topic noise are ignored.
+    if (not event.get("bot_id")
+            and subtype in (None, "file_share", "thread_broadcast", "me_message")
+            and unanswered.may_be_ask(event.get("text") or "")):
+        try:
+            unanswered.note_live_message_async(
+                client, event, _channel_name_cached(client, channel_id))
+        except Exception:
+            log.exception("unanswered ask note failed channel=%s", channel_id)
 
     # Diagnostic: log every subtype event the bot receives. Normal user
     # messages (no subtype) are NOT logged here to avoid spam — they'll

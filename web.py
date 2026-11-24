@@ -344,6 +344,26 @@ SETTINGS = [
         "help": "How far back the bucket status emails look for still-open items. "
                 "Applies to all four emails. Default: 60.",
     },
+    {
+        "key": "unanswered_report_recipients",
+        "label": "Unanswered Asks Email — Recipients",
+        "placeholder": "jon@ramosjames.com, ana@ramosjames.com",
+        "help": "Comma-separated addresses for the weekday case-channel report. "
+                "Opens with a total per person, then lists the person with the "
+                "most open items first, with each channel and comment under them. "
+                "The comment links to that Slack message. "
+                "Posts from apps and bots are left off, as are thank-yous and "
+                "FYI or for-visibility notes. Leave empty to turn the email off.",
+    },
+    {
+        "key": "unanswered_report_time",
+        "label": "Unanswered Asks Email — Time (Central)",
+        "help": "Weekday send time, 24-hour or AM/PM — e.g. 16:00 or 4:00 PM. "
+                "Central Time. Default: 16:00. Covers everything since the "
+                "previous working day at this same time (Monday includes the "
+                "weekend). The scan starts at this time; the email arrives "
+                "once case channels have been read.",
+    },
 ]
 
 # Three settings per reporting bucket: who receives the email, and when it
