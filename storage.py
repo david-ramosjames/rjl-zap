@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS unanswered_asks (
     target_id TEXT NOT NULL,
     text TEXT NOT NULL,
     channel_name TEXT,
+    context_text TEXT,
     created_at REAL NOT NULL,
     PRIMARY KEY (channel_id, message_ts, target_id)
 );
@@ -133,6 +134,7 @@ def init_db() -> None:
             ("workflows",          "channel_name", "TEXT"),
             ("workflows",          "dismissed_at", "REAL"),
             ("workflows",          "dismissed_reason", "TEXT"),
+            ("unanswered_asks",    "context_text", "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -766,7 +768,8 @@ def upsert_unanswered_asks(rows: list) -> None:
     payload = [
         (
             r["channel_id"], r["message_ts"], r["thread_ts"], r["author_id"],
-            r["target_id"], (r.get("text") or "")[:2000], r.get("channel_name") or "",
+            r["target_id"], (r.get("text") or "")[:4000], r.get("channel_name") or "",
+            (r.get("context") or r.get("context_text") or "")[:4000],
             float(r["created_at"]),
         )
         for r in rows
@@ -775,13 +778,14 @@ def upsert_unanswered_asks(rows: list) -> None:
         conn.executemany(
             "INSERT INTO unanswered_asks "
             "(channel_id, message_ts, thread_ts, author_id, target_id, text, "
-            " channel_name, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            " channel_name, context_text, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(channel_id, message_ts, target_id) DO UPDATE SET "
             "  thread_ts = excluded.thread_ts, "
             "  author_id = excluded.author_id, "
             "  text = excluded.text, "
             "  channel_name = COALESCE(excluded.channel_name, unanswered_asks.channel_name), "
+            "  context_text = excluded.context_text, "
             "  created_at = excluded.created_at",
             payload,
         )

@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import os
+import re
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -272,45 +273,151 @@ def build_bucket_email_html(bucket_label: str, window_desc: str,
     return head + howto + table + '</div>'
 
 
+_MENTION_STYLE = (
+    "color:#1264a3;background-color:#e8f5fa;border-radius:3px;padding:0 3px"
+)
+_LINK_STYLE = "color:#1264a3;text-decoration:underline"
+_SLACK_TOKEN_RE = re.compile(r"<([^<>\n]+)>")
+
+
+def slack_message_html(text: str, directory=None) -> str:
+    """Render a Slack message without changing its wording.
+
+    User tags become names on a blue chip. Links, phone numbers, and the
+    small set of Slack formatting marks are rendered. Everything else is
+    escaped.
+    """
+    raw = text or ""
+    parts = []
+    pos = 0
+    for match in _SLACK_TOKEN_RE.finditer(raw):
+        parts.append(_mrkdwn_html(raw[pos:match.start()]))
+        parts.append(_slack_token_html(match.group(1), directory))
+        pos = match.end()
+    parts.append(_mrkdwn_html(raw[pos:]))
+    return "".join(parts)
+
+
+def _mrkdwn_html(text: str) -> str:
+    esc = _e(text)
+    esc = re.sub(
+        r"`([^`\n]+)`",
+        r'<code style="font-family:Consolas,monospace;background:#f3f4f6;'
+        r'padding:0 3px;border-radius:3px">\1</code>',
+        esc,
+    )
+    esc = re.sub(r"\*([^*\n]+)\*", r"<strong>\1</strong>", esc)
+    esc = re.sub(r"(?<![\w])_([^_\n]+)_(?![\w])", r"<em>\1</em>", esc)
+    esc = re.sub(r"~([^~\n]+)~", r"<s>\1</s>", esc)
+    return esc.replace("\n", "<br>")
+
+
+def _mention_html(name: str) -> str:
+    return f'<span style="{_MENTION_STYLE}">@{_e(name)}</span>'
+
+
+def _anchor(href: str, label: str) -> str:
+    return f'<a href="{_e(href)}" style="{_LINK_STYLE}">{_e(label)}</a>'
+
+
+def _slack_token_html(inner: str, directory) -> str:
+    if inner.startswith("@"):
+        body = inner[1:]
+        uid, _, label = body.partition("|")
+        name = label or (directory.name(uid) if directory is not None else uid)
+        return _mention_html(name)
+    if inner.startswith("!subteam^"):
+        body = inner.split("^", 1)[1]
+        _gid, _, label = body.partition("|")
+        return _mention_html((label or "group").lstrip("@"))
+    if inner.startswith("#"):
+        body = inner[1:]
+        _cid, _, label = body.partition("|")
+        return f'<span style="color:#1264a3">#{_e(label or "channel")}</span>'
+    if inner.startswith("tel:"):
+        body = inner[4:]
+        number, _, label = body.partition("|")
+        shown = label or number
+        href = "tel:" + re.sub(r"[^\d+]", "", number)
+        return _anchor(href, shown)
+    if inner.startswith("mailto:"):
+        body = inner[7:]
+        addr, _, label = body.partition("|")
+        return _anchor("mailto:" + addr, label or addr)
+    if inner.startswith("http://") or inner.startswith("https://"):
+        url, _, label = inner.partition("|")
+        return _anchor(url, label or url)
+    if inner in ("!here", "!channel", "!everyone"):
+        return _mention_html(inner[1:])
+    if inner.startswith("!"):
+        return ""
+    return _e(inner)
+
+
+def _request_identity(row: dict):
+    if row.get("request_key"):
+        return ("key", row["request_key"])
+    return (
+        "row",
+        row.get("channel_id") or "",
+        row.get("link") or "",
+        row.get("snippet") or "",
+        row.get("when_ts") or 0,
+    )
+
+
+def unique_open_count(rows: list) -> int:
+    """Shared requests count once, even when listed under two people."""
+    return len({_request_identity(row) for row in rows})
+
+
+def overdue_open_count(rows: list) -> int:
+    seen = {}
+    for row in rows:
+        ident = _request_identity(row)
+        seen[ident] = seen.get(ident, False) or bool(row.get("overdue"))
+    return sum(1 for flagged in seen.values() if flagged)
+
+
 def build_unanswered_email_html(window_desc: str, rows: list,
                                 channels_scanned: int = 0,
                                 note: str = "") -> str:
-    """rows: channel_name, asked_by, waiting_name or waiting_names, when,
-    snippet, link, when_ts. A summary counts open items per person. The
-    detail table lists the person with the most open items first, then
-    that person's channels, then each comment. The comment text links to
-    the Slack message. A comment waiting on two people is listed under both.
+    """Person-first list of the original Slack messages still waiting.
+
+    The header total is unique requests. A request tagged to two people
+    is shown under each of them and counted once.
     """
-    accent = "#e8385a"
     counts = unanswered_person_counts(rows)
-    open_items = sum(n for _name, n in counts)
+    unique = unique_open_count(rows)
+    overdue = overdue_open_count(rows)
+    overdue_color = "#b91c1c" if overdue else "#6b7280"
     head = (
-        f'<div style="font-family:Segoe UI,system-ui,Arial,sans-serif;color:#1a1a2e;'
-        f'max-width:760px;margin:0 auto">'
-        f'<h2 style="margin:0 0 .2rem">Unresolved Slack requests</h2>'
-        f'<div style="color:#6b7280;font-size:13px;margin-bottom:14px">{_e(window_desc)}</div>'
-        f'<div style="margin-bottom:16px">'
-        f'{_chip("Open", open_items, "#b91c1c" if rows else "#166534")}'
-        f'{_chip("People", len(counts), "#1a1a2e")}'
-        f'</div>'
-    )
-    intro = (
-        '<div style="margin:0 0 14px;padding:12px 14px;background:#eff6ff;'
-        'border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;'
-        'font-size:13px;color:#1e40af">'
-        'Each line is one outstanding request: who owns it and the action '
-        'still left. A request shared by two people counts once. Items are '
-        'grouped into awaiting a response, awaiting action, and acknowledged '
-        'but overdue. The action opens the Slack message.'
+        '<div style="font-family:Segoe UI,system-ui,Arial,sans-serif;'
+        'color:#1f2937;background:#ffffff;max-width:680px;margin:0 auto;'
+        'padding:8px 4px">'
+        '<h2 style="margin:0 0 4px;font-size:20px;font-weight:700;'
+        'color:#1f2937">Unresolved Slack Requests</h2>'
+        f'<div style="color:#6b7280;font-size:13px;margin:0 0 12px">'
+        f'{_e(window_desc)}</div>'
+        '<div style="margin:0 0 14px;line-height:1.4">'
+        f'<span style="display:inline-block;margin:0 18px 6px 0;font-size:13px;'
+        f'color:#6b7280"><b style="color:#1f2937;font-size:18px">{unique}</b> '
+        f'open</span>'
+        f'<span style="display:inline-block;margin:0 18px 6px 0;font-size:13px;'
+        f'color:#6b7280"><b style="color:#1f2937;font-size:18px">{len(counts)}</b> '
+        f'{"person" if len(counts) == 1 else "people"}</span>'
+        f'<span style="display:inline-block;margin:0 18px 6px 0;font-size:13px;'
+        f'color:#6b7280"><b style="color:{overdue_color};font-size:18px">'
+        f'{overdue}</b> overdue</span>'
         '</div>'
     )
     if not rows:
         body = (
-            '<div style="padding:18px;background:#f0fdf4;border-radius:8px;'
-            'color:#166534;font-size:14px">No unresolved requests.</div>'
+            '<div style="padding:8px 0;color:#166534;font-size:14px">'
+            'No unresolved requests.</div>'
         )
     else:
-        body = _unanswered_summary_table(counts) + _unanswered_sections(rows, accent)
+        body = _unanswered_summary_line(counts) + _unanswered_people(rows)
     footer_bits = []
     if channels_scanned:
         footer_bits.append(f"Scanned {channels_scanned} case channels.")
@@ -319,11 +426,11 @@ def build_unanswered_email_html(window_desc: str, rows: list,
     footer = ""
     if footer_bits:
         footer = (
-            '<div style="margin-top:18px;color:#6b7280;font-size:12px">'
+            '<div style="margin-top:16px;color:#6b7280;font-size:12px">'
             + " ".join(_e(bit) for bit in footer_bits)
             + "</div>"
         )
-    return head + intro + body + footer + "</div>"
+    return head + body + footer + "</div>"
 
 
 def unanswered_person_counts(rows: list) -> list:
@@ -341,21 +448,55 @@ def unanswered_person_counts(rows: list) -> list:
 
 
 def _unanswered_assignments(rows: list):
-    """One entry per outstanding request. A shared request stays one item."""
+    """One entry per person per request. A shared request is listed twice."""
     out = []
     for row in rows:
-        name = row.get("waiting_name")
-        if not name:
-            names = [n for n in (row.get("waiting_names") or []) if n]
-            name = " or ".join(names) if names else "Someone"
-        pid = row.get("waiting_id") or name
+        ids = list(row.get("waiting_ids") or [])
+        names = [n for n in (row.get("waiting_names") or []) if n]
+        if len(ids) > 1 or (len(names) > 1 and not row.get("waiting_name")):
+            for i, name in enumerate(names):
+                pid = ids[i] if i < len(ids) and ids[i] else name
+                out.append((pid, name, row))
+            continue
+        if row.get("waiting_name"):
+            name = row["waiting_name"]
+        elif names:
+            name = names[0]
+        else:
+            name = "Someone"
+        pid = row.get("waiting_id") or (ids[0] if ids else name)
         out.append((pid, name, row))
     return out
 
 
-def _group_unanswered_by_person(rows: list) -> list:
-    """Person with the most open items first. Within a person, the channel
-    with the most open items first, then each comment by time."""
+def _unanswered_summary_line(counts: list) -> str:
+    bits = [
+        f'<b style="color:#1f2937">{_e(name)}</b> '
+        f'<span style="color:#6b7280">{count}</span>'
+        for name, count in counts
+    ]
+    return (
+        '<div style="font-size:14px;line-height:1.7;color:#374151;'
+        'margin:0 0 8px">'
+        + " &nbsp;·&nbsp; ".join(bits)
+        + "</div>"
+    )
+
+
+def _message_block(row: dict) -> str:
+    if row.get("message_html"):
+        body = row["message_html"]
+    else:
+        body = _mrkdwn_html(row.get("snippet") or "Open this comment")
+    if row.get("link"):
+        body = (
+            f'<a href="{_e(row["link"])}" style="color:#1f2937;'
+            f'text-decoration:none">{body}</a>'
+        )
+    return body
+
+
+def _unanswered_people(rows: list) -> str:
     by_person = {}
     for pid, name, row in _unanswered_assignments(rows):
         by_person.setdefault((pid, name), []).append(row)
@@ -363,124 +504,66 @@ def _group_unanswered_by_person(rows: list) -> list:
         by_person.items(),
         key=lambda item: (-len(item[1]), item[0][1].lower()),
     )
-    grouped = []
-    for person, items in people:
-        by_channel = {}
-        for row in items:
-            key = (row.get("channel_id") or "", row.get("channel_name") or "")
-            by_channel.setdefault(key, []).append(row)
-        channels = []
-        for key, ch_items in by_channel.items():
-            ch_items.sort(key=lambda r: float(r.get("when_ts") or 0))
-            channels.append((key, ch_items))
-        channels.sort(key=lambda pair: (-len(pair[1]), (pair[0][1] or "").lower()))
-        grouped.append((person, channels))
-    return grouped
-
-
-def _unanswered_summary_table(counts: list) -> str:
-    th = ('style="text-align:left;font-size:11px;text-transform:uppercase;'
-          'letter-spacing:.05em;color:#6b7280;padding:6px 8px;'
-          'border-bottom:1px solid #e5e7eb"')
-    td = ('style="font-size:14px;padding:8px;border-bottom:1px solid #f3f4f6;'
-          'vertical-align:top"')
-    num = ('style="font-size:14px;padding:8px;border-bottom:1px solid #f3f4f6;'
-           'vertical-align:top;font-weight:700;color:#b91c1c"')
-    body = []
-    for name, count in counts:
-        body.append(
-            f'<tr><td {td}>{_e(name)}</td>'
-            f'<td {num}>{count}</td></tr>'
+    parts = []
+    for (_pid, name), items in people:
+        items = sorted(
+            items,
+            key=lambda r: (0 if r.get("overdue") else 1, float(r.get("when_ts") or 0)),
         )
-    return (
-        '<h3 style="margin:0 0 8px;font-size:15px">By person</h3>'
-        '<table style="border-collapse:collapse;width:280px;margin:0 0 22px">'
-        f'<thead><tr><th {th}>Person</th><th {th}>Open</th></tr></thead>'
-        f'<tbody>{"".join(body)}</tbody></table>'
-    )
-
-
-def _unanswered_detail_table(rows: list, accent: str) -> str:
-    th = ('style="text-align:left;font-size:11px;text-transform:uppercase;'
-          'letter-spacing:.05em;color:#6b7280;padding:6px 8px;'
-          'border-bottom:1px solid #e5e7eb"')
-    person_td = ('style="font-size:14px;padding:8px;border-bottom:1px solid #e5e7eb;'
-                 'vertical-align:top;font-weight:700;background:#f9fafb;width:120px"')
-    channel_td = ('style="font-size:13px;padding:8px;border-bottom:1px solid #f3f4f6;'
-                  'vertical-align:top;width:160px"')
-    item_td = ('style="font-size:13px;padding:8px;border-bottom:1px solid #f3f4f6;'
-               'vertical-align:top"')
-    body = []
-    for (_pid, name), channels in _group_unanswered_by_person(rows):
-        span = sum(len(items) for _key, items in channels)
-        first_person = True
-        for (channel_id, channel_name), items in channels:
-            label = "#" + (channel_name or channel_id or "channel")
+        blocks = []
+        for row in items:
+            label = "#" + (row.get("channel_name") or row.get("channel_id") or "channel")
             channel = _e(label)
-            channel_link = (items[0].get("channel_link") or "") if items else ""
-            if channel_link:
+            if row.get("channel_link"):
                 channel = (
-                    f'<a href="{_e(channel_link)}" '
-                    f'style="color:#1a1a2e;text-decoration:none;font-weight:600">'
+                    f'<a href="{_e(row["channel_link"])}" '
+                    f'style="color:#1264a3;text-decoration:none;font-weight:600">'
                     f'{channel}</a>'
                 )
-            first_channel = True
-            for row in items:
-                comment = _e(row.get("snippet") or "Open this comment")
-                if row.get("link"):
-                    comment = (
-                        f'<a href="{_e(row["link"])}" '
-                        f'style="color:{accent};text-decoration:none">{comment}</a>'
-                    )
-                cells = []
-                if first_person:
-                    cells.append(
-                        f'<td rowspan="{span}" {person_td}>{_e(name)}'
-                        f'<div style="font-weight:600;font-size:12px;color:#b91c1c">'
-                        f'{span} open</div></td>'
-                    )
-                    first_person = False
-                if first_channel:
-                    cells.append(
-                        f'<td rowspan="{len(items)}" {channel_td}>{channel}</td>'
-                    )
-                    first_channel = False
-                age = row.get("age") or ""
-                meta = " · ".join(
-                    part for part in (
-                        row.get("asked_by") or "Someone",
-                        row.get("when") or "",
-                        age,
-                    ) if part
+            else:
+                channel = (
+                    f'<span style="color:#1264a3;font-weight:600">{channel}</span>'
                 )
-                cells.append(
-                    f'<td {item_td}>'
-                    f'<div style="color:#6b7280;font-size:12px">{_e(meta)}</div>'
-                    f'<div style="margin-top:3px">{comment}</div></td>'
+            context = ""
+            if row.get("context_html"):
+                context = (
+                    '<div style="margin:4px 0;padding-left:8px;'
+                    'border-left:2px solid #e5e7eb;color:#6b7280;font-size:13px">'
+                    f'{row["context_html"]}</div>'
                 )
-                body.append("<tr>" + "".join(cells) + "</tr>")
-    return (
-        '<table style="border-collapse:collapse;width:100%">'
-        f'<thead><tr><th {th}>Person</th><th {th}>Channel</th>'
-        f'<th {th}>Open item</th></tr></thead>'
-        f'<tbody>{"".join(body)}</tbody></table>'
-    )
-
-
-def _unanswered_sections(rows: list, accent: str) -> str:
-    labels = (
-        ("response", "Awaiting response or approval"),
-        ("action", "Awaiting action"),
-        ("ack", "Acknowledged but overdue"),
-    )
-    parts = []
-    for key, title in labels:
-        chosen = [r for r in rows if (r.get("section") or "action") == key]
-        if not chosen:
-            continue
+            status = row.get("status_label") or "Awaiting action"
+            status_color = "#b91c1c" if row.get("overdue") or status == "Overdue" else "#6b7280"
+            meta = " · ".join(
+                part for part in (
+                    row.get("asked_by") or "Someone",
+                    row.get("when") or "",
+                    row.get("age") or "",
+                ) if part
+            )
+            link = ""
+            if row.get("link"):
+                link = (
+                    f' · <a href="{_e(row["link"])}" style="{_LINK_STYLE}">'
+                    f'Open in Slack</a>'
+                )
+            blocks.append(
+                '<div style="padding:10px 0;border-bottom:1px solid #e5e7eb">'
+                f'<div style="font-size:13px;word-break:break-word">{channel}</div>'
+                f'{context}'
+                f'<div style="margin:4px 0 2px;font-size:14px;line-height:1.45;'
+                f'color:#1f2937;word-break:break-word">{_message_block(row)}</div>'
+                f'<div style="font-size:12px;color:#6b7280;line-height:1.5">'
+                f'{_e(meta)} · <span style="color:{status_color}">{_e(status)}</span>'
+                f'{link}</div></div>'
+            )
         parts.append(
-            f'<h3 style="margin:22px 0 8px;font-size:15px">{_e(title)}</h3>'
-            + _unanswered_detail_table(chosen, accent)
+            '<div style="margin:18px 0 0;padding-top:12px;border-top:2px solid #1f2937">'
+            f'<div style="font-size:16px;font-weight:700;color:#1f2937">'
+            f'{_e(name)}'
+            f'<span style="font-weight:600;font-size:13px;color:#6b7280"> · '
+            f'{len(items)} open</span></div>'
+            + "".join(blocks)
+            + "</div>"
         )
     return "".join(parts)
 

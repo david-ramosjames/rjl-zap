@@ -4,12 +4,12 @@ Weekdays at 4pm Central, covering everything since the previous working
 day's 4pm. A case channel is a channel whose name ends in -digits
 (smith-1559) and is not a leads / phone / general / intake channel.
 
-A message is listed only when it asks a specific person for something:
-a question, a task, an approval, guidance, a blocker, or a follow-up on
-one of those. Status updates, completed work, FYI tags, and the sender's
-own next step stay off. A later unrelated channel message does not clear
-it. The request drops off when the thread shows it was answered, finished,
-approved, withdrawn, or done by someone else.
+A message is listed when the sender reasonably expects a response or an
+action from someone they tagged, and that has not happened yet. Questions,
+tasks, approvals, callbacks, review requests, and a caret or question mark
+that points at an earlier request all count. Completed work, thank-yous,
+and tags that only say "for viz" stay off. Age does not decide whether a
+request appears. It decides whether the request is overdue.
 
 conversations.history only returns top-level messages, so live message events
 also record asks. That picks up a tag posted inside an older thread.
@@ -184,7 +184,8 @@ _YOU_REQUEST_RE = re.compile(
     r"\b(?:can|could|would) you\b|"
     r"\b(?:please|pls|plz)\s+(?:produce|file|send|calendar|update|reopen|"
     r"draft|call|check|review|confirm|schedule|prepare|submit|notify|"
-    r"forward|sign|help|take|look|start|follow|make|get|pull|reach|"
+    r"forward|sign|help|assist|add|resolve|respond|obtain|provide|hold|"
+    r"take|look|start|follow|make|get|pull|reach|"
     r"contact|email|fax|mail|complete|finish|handle|assign|disengage|"
     r"approve|reassign)\b|"
     r"\bneed you to\b|"
@@ -280,10 +281,10 @@ def _request_kind(plain: str) -> str | None:
         return "guidance"
     if _BLOCKER_RE.search(text):
         return "blocker"
+    # A question mark aimed at a teammate is a prompt for a response,
+    # including a message that is only "@Michael?".
     if "?" in text or "¿" in text:
-        words = re.findall(r"[a-z]{3,}", text.lower())
-        if len([w for w in words if w not in _TOPIC_STOP]) >= 2:
-            return "question"
+        return "question"
     if _YOU_REQUEST_RE.search(text):
         return "action"
     # "follow up, for visibility" is a note. A follow-up with no visibility
@@ -294,15 +295,42 @@ def _request_kind(plain: str) -> str | None:
 
 
 def is_pointer(text: str) -> bool:
-    """A tag that only points at the previous message, like '@Ana @Bob ^'."""
-    plain = slack_to_plain(text or "")
+    """A tag that only points at the previous message.
+
+    '@Ana @Bob ^' and a message that is nothing but tags both count.
+    '@Michael?' does not: the question mark is the request.
+    """
+    raw = text or ""
+    plain = slack_to_plain(raw)
+    if "<@" not in raw and "<!subteam" not in raw and not re.search(r"@[\w.'|-]+", plain):
+        return False
     body = re.sub(r"@[\w.'|-]+", " ", plain)
+    if "?" in body or "¿" in body:
+        return False
     words = re.findall(r"[a-z0-9^]+", body.lower())
     if not words:
-        return False
+        return True
     allowed = {"^", "this", "above", "see", "here", "up"}
     return all(w in allowed for w in words) and any(
         w in {"^", "above", "up"} for w in words)
+
+
+def _needs_context(text: str) -> bool:
+    """True when the message is hard to understand without the previous one."""
+    if is_pointer(text) or _is_also(text):
+        return True
+    plain = slack_to_plain(text or "")
+    body = re.sub(r"@[\w.'|-]+", " ", plain)
+    body = re.sub(r"\s+", "", body)
+    return body in {"?", "¿", "??", "¿?"}
+
+
+def _aimed_here(fragment: str) -> bool:
+    """True when this side of a mention is the request, or just a question mark."""
+    plain = slack_to_plain(fragment or "").strip()
+    if _request_kind(plain):
+        return True
+    return bool(re.fullmatch(r"[?¿]+", plain))
 
 
 _ACTION_VERBS = frozenset({
@@ -360,12 +388,27 @@ def concrete_action(text: str) -> str | None:
     return action[0].upper() + action[1:]
 
 
-def is_action_ask(text: str, context_text: str = "") -> bool:
-    """True when the message is a request someone still has to handle.
+_ALSO_RE = re.compile(
+    r"^(?:this too|same|this as well|and this|this one too|same here)$",
+    re.I,
+)
 
-    A caret tag counts only when the message it points at is a request.
+
+def _is_also(text: str) -> bool:
+    """'@Aivet this too' continues the previous request."""
+    plain = slack_to_plain(text or "")
+    body = re.sub(r"@[\w.'|-]+", " ", plain)
+    body = re.sub(r"\s+", " ", body).strip(" .")
+    return bool(body) and bool(_ALSO_RE.match(body))
+
+
+def is_action_ask(text: str, context_text: str = "") -> bool:
+    """True when the sender is waiting on a tagged person.
+
+    A caret, a bare tag, or "this too" counts only when the message it
+    points at is a request.
     """
-    if is_pointer(text):
+    if is_pointer(text) or _is_also(text):
         return _request_kind(slack_to_plain(context_text or "")) is not None
     return _request_kind(slack_to_plain(text or "")) is not None
 
@@ -441,7 +484,7 @@ def request_owners(text: str, author_id: str, directory: TeamDirectory,
     itself a request.
     """
     raw = text or ""
-    if is_pointer(raw):
+    if is_pointer(raw) or _is_also(raw):
         if _request_kind(slack_to_plain(context_text or "")) is None:
             return []
         spans = list(_TAG_RE.finditer(raw))
@@ -453,15 +496,19 @@ def request_owners(text: str, author_id: str, directory: TeamDirectory,
     spans = list(_TAG_RE.finditer(raw))
     if not spans:
         return []
+    whole = _request_kind(slack_to_plain(raw))
     owners = []
+    eligible = []
     for i, span in enumerate(spans):
         before = raw[(spans[i - 1].end() if i else 0):span.start()]
         after = raw[span.end():(spans[i + 1].start() if i + 1 < len(spans) else len(raw))]
         if _visibility_mention(before, after) or _mention_is_object(before, after):
             continue
         head = slack_to_plain(_sentence_tail(before))
-        tail = slack_to_plain(re.split(r"[.!?\n]", after, maxsplit=1)[0])
-        owns = _request_kind(tail) is not None or _request_kind(head) is not None
+        # Keep a trailing ? so "@Michael?" is still aimed at Michael.
+        tail_raw = re.split(r"[.!\n]", after, maxsplit=1)[0]
+        tail = slack_to_plain(tail_raw)
+        owns = _aimed_here(tail) or _aimed_here(head)
         if not owns:
             j = i
             while j > 0 and _adjacent(raw[spans[j - 1].end():spans[j].start()]):
@@ -474,14 +521,23 @@ def request_owners(text: str, author_id: str, directory: TeamDirectory,
                 k += 1
             tail_end = spans[k + 1].start() if k + 1 < len(spans) else len(raw)
             cluster_tail = slack_to_plain(re.split(
-                r"[.!?\n]", raw[spans[k].end():tail_end], maxsplit=1)[0])
-            owns = (_request_kind(cluster_head) is not None
-                    or _request_kind(cluster_tail) is not None)
-        if not owns:
-            continue
-        for uid in _ids_for_tag(span, directory):
-            if uid not in owners:
-                owners.append(uid)
+                r"[.!\n]", raw[spans[k].end():tail_end], maxsplit=1)[0])
+            owns = _aimed_here(cluster_head) or _aimed_here(cluster_tail)
+        ids = _ids_for_tag(span, directory)
+        if owns:
+            for uid in ids:
+                if uid not in owners:
+                    owners.append(uid)
+        else:
+            for uid in ids:
+                if uid not in eligible:
+                    eligible.append(uid)
+    # A question can land a few sentences after the only tag:
+    # "@Erin spoke with the client. What would be the next steps?"
+    # When nobody was the local target, every tagged person who is not
+    # just being shown the note is waiting on it.
+    if not owners and whole:
+        owners = eligible
     return _filter_people(owners, author_id, directory)
 
 
@@ -617,17 +673,15 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
     if author in directory.bot_ids or author not in directory.team_ids:
         return []
     text = message.get("text") or ""
-    pointer = is_pointer(text)
     if not is_action_ask(text, context_text):
         return []
     owners = target_user_ids(text, author, directory, context_text)
     if not owners:
         return []
-    shown = context_text if pointer and context_text else text
-    action = concrete_action(shown)
-    if not action:
-        return []
-    kind = _request_kind(slack_to_plain(shown)) or "action"
+    borrow = (is_pointer(text) or _is_also(text)) and context_text
+    source = context_text if borrow else text
+    kind = _request_kind(slack_to_plain(source)) or "action"
+    context = context_text if _needs_context(text) else ""
     thread_ts = str(message.get("thread_ts") or ts)
     rows = []
     for uid in owners:
@@ -639,8 +693,9 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
             "author_id": author,
             "target_id": uid,
             "target_ids": [uid],
-            "text": shown,
-            "action": action,
+            "text": text,
+            "context": context,
+            "action": concrete_action(source) or "",
             "kind": kind,
             "status": "open",
             "created_at": float(ts),
@@ -653,10 +708,7 @@ def share_requests(rows: list) -> list:
     grouped = {}
     order = []
     for row in rows:
-        key = (
-            row["channel_id"], row["message_ts"],
-            (row.get("action") or "").strip().lower(),
-        )
+        key = (row["channel_id"], row["message_ts"])
         current = grouped.get(key)
         if current is None:
             current = dict(row)
@@ -721,6 +773,19 @@ def _same_topic(a: str, b: str) -> bool:
         return False
     shared = left & right
     return len(shared) / min(len(left), len(right)) >= 0.5
+
+
+def _ask_text(row: dict) -> str:
+    """The request a later reply has to answer.
+
+    A caret or a bare question mark keeps its own wording on the report and
+    borrows the previous message when deciding whether it was handled.
+    """
+    text = row.get("text") or ""
+    context = row.get("context") or ""
+    if context and _needs_context(text):
+        return f"{context}\n{text}"
+    return text
 
 
 def _reply_effect(text: str, ask_text: str) -> str:
@@ -800,9 +865,10 @@ def still_waiting(candidates: list, threads: dict,
             )
         owners = list(row.get("target_ids") or [row.get("target_id")])
         effect = "none"
+        ask_text = _ask_text(row)
         if ask:
             for uid in owners:
-                reaction = _reaction_effect(ask, uid, row.get("text") or "")
+                reaction = _reaction_effect(ask, uid, ask_text)
                 if reaction == "resolved":
                     effect = "resolved"
                     break
@@ -827,7 +893,7 @@ def still_waiting(candidates: list, threads: dict,
                     if not later or not is_human_message(message):
                         continue
                     reply_effect = _reply_effect(
-                        message.get("text") or "", row.get("text") or "")
+                        message.get("text") or "", ask_text)
                     in_thread = source_is_thread or _in_thread(
                         message, row["thread_ts"])
                     from_owner = message.get("user") in owners
@@ -840,13 +906,12 @@ def still_waiting(candidates: list, threads: dict,
                         effect = "acknowledged"
                         continue
                     callback_done = (
-                        _CALLBACK_RE.search(row.get("text") or "")
+                        _CALLBACK_RE.search(ask_text)
                         and _CALLBACK_DONE_RE.search(message.get("text") or "")
                     )
                     if (not in_thread and reply_effect == "resolved"
                             and (callback_done or _same_topic(
-                                message.get("text") or "",
-                                row.get("text") or ""))):
+                                message.get("text") or "", ask_text))):
                         effect = "resolved"
                         break
                 if effect == "resolved":
@@ -1030,16 +1095,169 @@ def _required_age(row: dict, thresholds: dict) -> int:
     return thresholds["action"]
 
 
-def include_in_report(row: dict, now: datetime, thresholds: dict | None = None) -> bool:
-    """False while the request is younger than its business-hour threshold."""
+_DEADLINE_RE = re.compile(
+    r"\b(?:by|before|due|no later than)\s+"
+    r"(?:(?P<eod>eod|end of (?:the )?day|close of business|cob)|"
+    r"(?P<tomorrow>tomorrow)|"
+    r"(?P<eow>eow|end of (?:the )?week)|"
+    r"(?P<nextweek>next week)|"
+    r"(?P<weekday>monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"(?P<date>\d{1,2}/\d{1,2}(?:/\d{2,4})?)|"
+    r"(?P<month>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+    r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|"
+    r"nov(?:ember)?|dec(?:ember)?)\s+(?P<day>\d{1,2}))\b",
+    re.I,
+)
+_WEEKDAY_INDEX = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+_MONTH_INDEX = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+
+
+def _at_close(day, tz, close_hm: tuple) -> datetime:
+    return datetime.combine(day, dtime(close_hm[0], close_hm[1]), tzinfo=tz)
+
+
+def _next_weekday(day):
+    nxt = day + timedelta(days=1)
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return nxt
+
+
+def explicit_deadline(text: str, created: datetime,
+                      close_hm: tuple = (18, 0)) -> datetime | None:
+    """When the message names a future time, that time is the due point.
+
+    A task is not overdue before then. Times without a year use the created
+    date's year, rolling forward if that moment has already passed.
+    """
+    if created.tzinfo is None:
+        return None
+    match = _DEADLINE_RE.search(slack_to_plain(text or ""))
+    if not match:
+        return None
+    tz = created.tzinfo
+    close = close_hm
+
+    def close_on(day):
+        return _at_close(day, tz, close)
+
+    if match.group("eod"):
+        deadline = close_on(created.date())
+        if deadline <= created:
+            deadline = close_on(_next_weekday(created.date()))
+        return deadline
+    if match.group("tomorrow"):
+        return close_on(_next_weekday(created.date()))
+    if match.group("eow"):
+        day = created.date()
+        while day.weekday() != 4:
+            day += timedelta(days=1)
+        deadline = close_on(day)
+        if deadline <= created:
+            deadline = close_on(day + timedelta(days=7))
+        return deadline
+    if match.group("nextweek"):
+        monday = created.date() - timedelta(days=created.weekday())
+        friday = monday + timedelta(days=11)
+        return close_on(friday)
+    if match.group("weekday"):
+        target = _WEEKDAY_INDEX[match.group("weekday").lower()]
+        day = created.date()
+        while day.weekday() != target:
+            day += timedelta(days=1)
+        deadline = close_on(day)
+        if deadline <= created:
+            deadline = close_on(day + timedelta(days=7))
+        return deadline
+    if match.group("date"):
+        parts = [int(p) for p in match.group("date").split("/")]
+        month, day = parts[0], parts[1]
+        if len(parts) == 3:
+            year = parts[2]
+            year = year + 2000 if year < 100 else year
+        else:
+            year = created.year
+        try:
+            found = datetime(year, month, day).date()
+        except ValueError:
+            return None
+        deadline = close_on(found)
+        if len(parts) == 2 and deadline <= created:
+            try:
+                deadline = close_on(datetime(year + 1, month, day).date())
+            except ValueError:
+                return None
+        return deadline
+    month_name = (match.group("month") or "").lower()
+    if month_name:
+        month = _MONTH_INDEX.get(month_name)
+        day_num = int(match.group("day") or 0)
+        if not month:
+            return None
+        try:
+            found = datetime(created.year, month, day_num).date()
+        except ValueError:
+            return None
+        deadline = close_on(found)
+        if deadline <= created:
+            try:
+                deadline = close_on(datetime(created.year + 1, month, day_num).date())
+            except ValueError:
+                return None
+        return deadline
+    return None
+
+
+def _status_label(row: dict) -> str:
+    if row.get("overdue"):
+        return "Overdue"
+    if row.get("status") == "acknowledged":
+        return "Acknowledged"
+    kind = row.get("kind") or ""
+    if kind == "approval":
+        return "Awaiting approval"
+    if kind in ("question", "guidance"):
+        return "Awaiting response"
+    return "Awaiting action"
+
+
+def mark_priority(row: dict, now: datetime, thresholds: dict | None = None) -> dict:
+    """Set age and overdue. A young request stays on the report."""
     thresholds = thresholds or default_thresholds()
+    row["age_minutes"] = 0
+    row["overdue"] = False
     if now.tzinfo is None:
-        return False
+        row["status_label"] = _status_label(row)
+        return row
     created = datetime.fromtimestamp(float(row["created_at"]), now.tzinfo)
-    age = business_minutes(
+    row["age_minutes"] = business_minutes(
         created, now, thresholds["open"], thresholds["close"])
-    row["age_minutes"] = age
-    return age >= _required_age(row, thresholds)
+    deadline = explicit_deadline(
+        row.get("text") or "", created, thresholds["close"])
+    if deadline is None and row.get("context"):
+        deadline = explicit_deadline(
+            row.get("context") or "", created, thresholds["close"])
+    if deadline is not None:
+        row["overdue"] = now >= deadline
+    else:
+        row["overdue"] = row["age_minutes"] >= _required_age(row, thresholds)
+    row["status_label"] = _status_label(row)
+    return row
+
+
+def include_in_report(row: dict, now: datetime, thresholds: dict | None = None) -> bool:
+    """Unresolved requests are listed at any age. Overdue is a status."""
+    mark_priority(row, now, thresholds)
+    return True
 
 
 def format_business_age(minutes: int) -> str:
@@ -1063,30 +1281,26 @@ def report_section(row: dict) -> str:
 def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                    tz, now: datetime | None = None,
                    thresholds: dict | None = None) -> list:
-    """One row per outstanding request. The snippet is the action, not the
-    raw Slack message. People asked for the same action stay on one row."""
+    """One email row per tagged person. The same request keeps one key so
+    the headline can count it once. The text is the original Slack message."""
+    thresholds = thresholds or default_thresholds()
     merged = {}
     for row in waiting:
         if not _people_only(row, directory):
             continue
-        action = row.get("action") or concrete_action(row.get("text") or "")
-        if not action:
-            continue
-        key = (row["channel_id"], row["message_ts"], action.strip().lower())
+        if now is not None and "status_label" not in row:
+            mark_priority(row, now, thresholds)
+        key = (row["channel_id"], row["message_ts"])
         item = merged.get(key)
         if item is None:
             channel_id = row["channel_id"]
             base = (workspace or "").rstrip("/")
+            text = row.get("text") or ""
+            context = row.get("context") or ""
             age = ""
-            if now is not None and row.get("age_minutes") is not None:
-                age = format_business_age(int(row["age_minutes"]))
-            elif now is not None:
-                created = datetime.fromtimestamp(float(row["created_at"]), now.tzinfo)
-                age = format_business_age(business_minutes(
-                    created, now,
-                    (thresholds or default_thresholds())["open"],
-                    (thresholds or default_thresholds())["close"],
-                ))
+            if row.get("age_minutes") is not None and (
+                    now is not None or "overdue" in row):
+                age = format_business_age(int(row.get("age_minutes") or 0))
             item = {
                 "channel_id": channel_id,
                 "channel_name": row.get("channel_name") or channel_id,
@@ -1097,20 +1311,31 @@ def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                 "author_id": row["author_id"],
                 "when": format_when(row["created_at"], tz),
                 "when_ts": float(row["created_at"]),
-                "snippet": action,
-                "action": action,
+                "text": text,
+                "context": context,
+                "snippet": personalized_excerpt(text, directory, limit=4000),
+                "message_html": email_reports.slack_message_html(text, directory),
+                "context_html": (
+                    email_reports.slack_message_html(context, directory)
+                    if context else ""
+                ),
                 "age": age,
                 "status": row.get("status") or "open",
+                "status_label": row.get("status_label") or _status_label(row),
+                "overdue": bool(row.get("overdue")),
                 "kind": row.get("kind") or "",
-                "section": report_section(row),
                 "link": email_reports.permalink(
                     workspace, channel_id, row["message_ts"],
                     row.get("thread_ts") or "",
                 ),
+                "request_key": f"{channel_id}:{row['message_ts']}",
                 "waiting_ids": [],
                 "waiting_names": [],
             }
             merged[key] = item
+        elif row.get("overdue"):
+            item["overdue"] = True
+            item["status_label"] = "Overdue"
         for target in row.get("target_ids") or [row["target_id"]]:
             if target not in item["waiting_ids"] and _people_only(
                     {**row, "target_id": target}, directory):
@@ -1118,10 +1343,20 @@ def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                 item["waiting_names"].append(directory.name(target))
     out = []
     for item in merged.values():
-        item["waiting_name"] = _join_names(item["waiting_names"])
-        item["waiting_id"] = item["waiting_ids"][0]
-        out.append(item)
-    out.sort(key=lambda r: ((r["channel_name"] or "").lower(), r["when_ts"]))
+        if not item["waiting_ids"]:
+            continue
+        for uid, name in zip(item["waiting_ids"], item["waiting_names"]):
+            copy = dict(item)
+            copy["waiting_id"] = uid
+            copy["waiting_name"] = name
+            copy["waiting_ids"] = [uid]
+            copy["waiting_names"] = [name]
+            out.append(copy)
+    out.sort(key=lambda r: (
+        r["waiting_name"].lower(),
+        0 if r.get("overdue") else 1,
+        r["when_ts"],
+    ))
     return out
 
 
@@ -1371,12 +1606,20 @@ def collect_candidates(client, directory: TeamDirectory,
     except Exception:
         log.exception("unanswered scan: could not read stored asks")
         stored = []
+    rejected = []
     for row in stored:
-        if concrete_action(row.get("text") or "") is None:
+        context = row.get("context_text") or row.get("context") or ""
+        text = row.get("text") or ""
+        if not is_action_ask(text, context):
+            rejected.append(
+                (row["channel_id"], row["message_ts"], row["target_id"]))
             continue
         if not _people_only(row, directory):
             continue
-        row["action"] = concrete_action(row.get("text") or "")
+        source = context if is_pointer(text) and context else text
+        row["context"] = context if _needs_context(text) else ""
+        row["kind"] = _request_kind(slack_to_plain(source)) or "action"
+        row["action"] = concrete_action(source) or ""
         row["target_ids"] = [row["target_id"]]
         key = (row["channel_id"], row["message_ts"], row["target_id"])
         by_key.setdefault(key, row)
@@ -1393,6 +1636,7 @@ def collect_candidates(client, directory: TeamDirectory,
         "channels_seen": len(channels),
         "channels_ok": ok,
         "channels_failed": failed,
+        "rejected_keys": rejected,
     }
 
 
@@ -1461,7 +1705,7 @@ def note_live_message(client, event: dict, channel_name: str) -> None:
     author = event.get("user") or ""
     if author in directory.bot_ids or author not in directory.team_ids:
         return
-    if not is_action_ask(text) or not concrete_action(text):
+    if not is_action_ask(text):
         return
     ts = str(event.get("ts") or "")
     if not ts:
@@ -1610,6 +1854,20 @@ def queue_test_report(client) -> str:
     return "started"
 
 
+def _rows_for_storage(rows: list) -> list:
+    """One stored row per tagged person, with the original message intact."""
+    out = []
+    for row in rows:
+        ids = row.get("target_ids") or [row.get("target_id")]
+        for uid in ids:
+            if not uid:
+                continue
+            item = dict(row)
+            item["target_id"] = uid
+            out.append(item)
+    return out
+
+
 def _send_report(client, slot: datetime, recipients: list, sender: str, *,
                  mark_sent: bool = True, subject_prefix: str = "",
                  window: tuple | None = None) -> None:
@@ -1631,12 +1889,11 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
         _ensure_threads(client, candidates, threads)
         waiting = consolidate_requests(collapse_threads(still_waiting(
             candidates, threads, gathered.get("channel_messages"))))
-        waiting = [r for r in waiting if r.get("action") or concrete_action(r.get("text") or "")]
-        for row in waiting:
-            row["action"] = row.get("action") or concrete_action(row.get("text") or "")
         thresholds = report_thresholds()
+        for row in waiting:
+            mark_priority(row, end, thresholds)
         try:
-            storage.upsert_unanswered_asks(waiting)
+            storage.upsert_unanswered_asks(_rows_for_storage(waiting))
             open_keys = {
                 (r["channel_id"], r["message_ts"], uid)
                 for r in waiting
@@ -1648,18 +1905,15 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
                 for uid in (r.get("target_ids") or [r["target_id"]])
                 if (r["channel_id"], r["message_ts"], uid) not in open_keys
             ]
-            storage.delete_unanswered_asks(stale)
+            storage.delete_unanswered_asks(
+                list(gathered.get("rejected_keys") or []) + stale)
             storage.prune_unanswered_asks(time.time() - 21 * 86400)
         except Exception:
             log.exception("unanswered report: could not persist asks")
 
-        reportable = [
-            r for r in waiting
-            if include_in_report(r, end, thresholds)
-        ]
         workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
         email_rows = rows_for_email(
-            reportable, directory, workspace, REPORT_TZ, end, thresholds)
+            waiting, directory, workspace, REPORT_TZ, end, thresholds)
         window_desc = f"{format_stamp(start)} – {format_stamp(end)} CT"
         failed = gathered["channels_failed"]
         note = ""
@@ -1675,7 +1929,7 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
             note=note,
         )
         counts = email_reports.unanswered_person_counts(email_rows)
-        open_items = sum(n for _name, n in counts)
+        open_items = email_reports.unique_open_count(email_rows)
         people = len(counts)
         if email_rows:
             subject = (

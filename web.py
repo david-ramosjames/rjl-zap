@@ -350,10 +350,9 @@ SETTINGS = [
         "label": "Unanswered Asks Email — Recipients",
         "placeholder": "jon@ramosjames.com, ana@ramosjames.com",
         "help": "Comma-separated addresses for the weekday case-channel report. "
-                "Opens with a total per person, then lists the person with the "
-                "most unresolved requests first. Only questions, tasks, "
-                "approvals, and guidance count, and only for the person who "
-                "owns the request. Leave empty to turn the email off. "
+                "The total is unique requests. A request tagged to two people "
+                "is listed under each of them. Age marks a request overdue; "
+                "it does not hide it. Leave empty to turn the email off. "
                 "Send test email uses these addresses and does not replace "
                 "the 4pm send.",
     },
@@ -374,32 +373,35 @@ SETTINGS = [
         "key": "unanswered_urgent_minutes",
         "label": "Unresolved Requests — Urgent wait (business minutes)",
         "placeholder": "30",
-        "help": "How long an asap or urgent request waits before it is listed. Default: 30.",
+        "help": "How long before an asap or urgent request is marked overdue. "
+                "It is still listed before then. Default: 30.",
     },
     {
         "key": "unanswered_callback_minutes",
         "label": "Unresolved Requests — Callback wait (business minutes)",
         "placeholder": "120",
-        "help": "Default: 120 (2 business hours).",
+        "help": "How long before a callback is marked overdue. Default: 120 (2 business hours).",
     },
     {
         "key": "unanswered_question_minutes",
-        "label": "Unresolved Requests — Question or approval wait (business minutes)",
+        "label": "Unresolved Requests — Question or approval overdue (business minutes)",
         "placeholder": "120",
-        "help": "Default: 120 (2 business hours).",
+        "help": "How long before a question or approval is marked overdue. "
+                "Default: 120 (2 business hours).",
     },
     {
         "key": "unanswered_action_minutes",
-        "label": "Unresolved Requests — Standard task wait (business minutes)",
+        "label": "Unresolved Requests — Standard task overdue (business minutes)",
         "placeholder": "240",
-        "help": "Default: 240 (4 business hours).",
+        "help": "How long before a standard task is marked overdue. "
+                "Default: 240 (4 business hours).",
     },
     {
         "key": "unanswered_ack_business_days",
-        "label": "Unresolved Requests — Acknowledged wait (business days)",
+        "label": "Unresolved Requests — Acknowledged overdue (business days)",
         "placeholder": "1",
-        "help": "An acknowledged task with no deadline is listed after this many "
-                "business days. Default: 1.",
+        "help": "An acknowledged task with no deadline is marked overdue after "
+                "this many business days. It stays on the report before then. Default: 1.",
     },
     {
         "key": "unanswered_report_time",

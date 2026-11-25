@@ -68,6 +68,8 @@ class AskTests(unittest.TestCase):
             "FYI <@B> can you review this today?",
             "<@B> por favor manda el contrato",
             "<@B> let me know when it's calendared",
+            "<@B> please review",
+            "<@B>?",
             "<@B> asap",
             "just a follow up <@B>",
             "<@B> take a look when you can",
@@ -100,7 +102,6 @@ class AskTests(unittest.TestCase):
             "please see the update <@B>",
             "",
             "<@B>",
-            "<@B>?",
             "moved <@B>",
             "Text message sent. <@B>",
             "Received this from State Farm. Already uploaded to DB <@B> <@C>",
@@ -119,6 +120,8 @@ class AskTests(unittest.TestCase):
         self.assertFalse(is_action_ask(pointer))
         self.assertFalse(is_action_ask(pointer, "Saved in correspondence"))
         self.assertTrue(is_action_ask(pointer, "Can you file the answer?"))
+        self.assertTrue(is_action_ask("<@B>", "Can you file the answer?"))
+        self.assertFalse(is_action_ask("<@B>", "Saved in correspondence"))
 
 
 class TargetTests(unittest.TestCase):
@@ -139,6 +142,15 @@ class TargetTests(unittest.TestCase):
     def test_approval_tags_each_person_asked(self):
         text = "Requesting approval <@B> <@C>"
         self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B", "C"])
+
+    def test_question_mark_asks_the_tagged_person(self):
+        self.assertEqual(target_user_ids("<@B>?", "A", DIRECTORY), ["B"])
+
+    def test_question_in_a_later_sentence_keeps_the_tag(self):
+        text = ("<@B> spoke w client - he wanted updates. "
+                "What would be the next steps?")
+        self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B"])
+        self.assertTrue(is_action_ask(text))
 
     def test_calendar_subject_is_not_the_owner(self):
         text = ("<@B> can you please assist me with adding holds to "
@@ -214,8 +226,8 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(due_slot(tuesday_9, 16, 0, 0)[0], "send")
         self.assertIsNone(due_slot(tuesday_9, 16, 0, monday_slot + 60))
 
-    def test_young_request_waits_out_the_business_hour_threshold(self):
-        from unanswered import default_thresholds, include_in_report
+    def test_recent_request_stays_listed_until_it_is_overdue(self):
+        from unanswered import default_thresholds, mark_priority
         created = datetime(2026, 11, 25, 10, 20, tzinfo=TZ)
         now = datetime(2026, 11, 25, 10, 29, tzinfo=TZ)
         row = {
@@ -223,11 +235,30 @@ class WindowTests(unittest.TestCase):
             "kind": "action",
             "status": "open",
             "text": "Can you file the answer?",
-            "action": "File the answer",
         }
-        self.assertFalse(include_in_report(row, now, default_thresholds()))
+        mark_priority(row, now, default_thresholds())
+        self.assertFalse(row["overdue"])
+        self.assertEqual(row["status_label"], "Awaiting action")
         later = datetime(2026, 11, 25, 15, 0, tzinfo=TZ)
-        self.assertTrue(include_in_report(row, later, default_thresholds()))
+        mark_priority(row, later, default_thresholds())
+        self.assertTrue(row["overdue"])
+        self.assertEqual(row["status_label"], "Overdue")
+
+    def test_explicit_deadline_is_not_overdue_early(self):
+        from unanswered import default_thresholds, mark_priority
+        created = datetime(2026, 11, 25, 10, 20, tzinfo=TZ)
+        row = {
+            "created_at": created.timestamp(),
+            "kind": "action",
+            "status": "open",
+            "text": "<@B> can you file this by Friday?",
+        }
+        same_afternoon = datetime(2026, 11, 25, 15, 0, tzinfo=TZ)
+        mark_priority(row, same_afternoon, default_thresholds())
+        self.assertFalse(row["overdue"])
+        after = datetime(2026, 11, 30, 10, 0, tzinfo=TZ)
+        mark_priority(row, after, default_thresholds())
+        self.assertTrue(row["overdue"])
 
     def test_parse_clock(self):
         self.assertEqual(parse_clock("4:00 PM"), (16, 0))
@@ -407,6 +438,17 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(sorted(r["target_id"] for r in rows), ["B", "C"])
         self.assertTrue(all(r["thread_ts"] == parent for r in rows))
 
+    def test_pointer_keeps_the_original_tags(self):
+        ts = _ts(2026, 11, 21, 12)
+        rows = candidates_from_message(
+            {"user": "A", "ts": ts, "text": "<@B> <@C> ^"},
+            DIRECTORY, WINDOW_START, WINDOW_END, "C1", "smith-1559",
+            "Can you file the answer?",
+        )
+        self.assertEqual(sorted(r["target_id"] for r in rows), ["B", "C"])
+        self.assertTrue(all(r["text"] == "<@B> <@C> ^" for r in rows))
+        self.assertTrue(all("file the answer" in r["context"] for r in rows))
+
 
 class EmailTests(unittest.TestCase):
     def test_html_summary_then_person_with_most_open(self):
@@ -458,23 +500,27 @@ class EmailTests(unittest.TestCase):
             }],
             channels_scanned=12,
         )
-        summary, detail = html.split("Awaiting action", 1)
+        summary, detail = html.split("2px solid #1f2937", 1)
         self.assertLess(summary.index(">Bob<"), summary.index(">Cara<"))
         self.assertIn(">3<", summary)
         self.assertIn(">1<", summary)
-        self.assertLess(detail.index("#smith-1559"), detail.index("#jones-100"))
-        self.assertLess(detail.index("#jones-100"), detail.index("#zeta-9"))
+        self.assertLess(detail.index("#jones-100"), detail.index("#smith-1559"))
         self.assertLess(detail.index("can you file this?"), detail.index("and this follow up"))
-        self.assertLess(detail.index("and this follow up"), detail.index("one for cara"))
+        self.assertLess(detail.index("and this follow up"), detail.index("#zeta-9"))
         self.assertIn(
             '<a href="https://ramosjames.slack.com/archives/C2/p100" '
-            'style="color:#e8385a;text-decoration:none">can you file this?</a>',
+            'style="color:#1f2937;text-decoration:none">can you file this?</a>',
             html,
         )
+        self.assertNotIn("#e8385a", html)
         self.assertIn("Scanned 12 case channels", html)
+        self.assertEqual(email_reports.unique_open_count([
+            {"request_key": "a"}, {"request_key": "a"}, {"request_key": "b"},
+        ]), 2)
 
     def test_shared_comment_is_listed_for_each_person(self):
         html = email_reports.build_unanswered_email_html("window", [{
+            "request_key": "C1:1",
             "waiting_ids": ["B", "C"],
             "waiting_names": ["Bob", "Cara"],
             "asked_by": "Ana",
@@ -485,8 +531,30 @@ class EmailTests(unittest.TestCase):
             "snippet": "both of you",
             "link": "https://ramosjames.slack.com/archives/C1/p100",
         }])
-        self.assertEqual(html.count("both of you"), 1)
-        self.assertIn("Bob or Cara", html)
+        self.assertEqual(html.count("both of you"), 2)
+        self.assertNotIn("Bob or Cara", html)
+        self.assertIn(">Bob<", html)
+        self.assertIn(">Cara<", html)
+        self.assertIn(">1<", html)
+        self.assertEqual(email_reports.unique_open_count([{
+            "request_key": "C1:1",
+        }, {
+            "request_key": "C1:1",
+        }]), 1)
+
+    def test_slack_mentions_phones_and_links_stay_readable(self):
+        html = email_reports.slack_message_html(
+            "Call <tel:+18442928615|+18442928615> <@B|Bob> "
+            "<https://example.com/file|the file>",
+            DIRECTORY,
+        )
+        self.assertIn("@Bob", html)
+        self.assertIn("background-color:#e8f5fa", html)
+        self.assertIn("tel:+18442928615", html)
+        self.assertIn("+18442928615", html)
+        self.assertIn("https://example.com/file", html)
+        self.assertIn("the file", html)
+        self.assertNotIn("<tel:", html)
 
     def test_rows_merge_one_comment_and_skip_bots(self):
         ts = _ts(2026, 11, 21, 12)
@@ -516,11 +584,21 @@ class EmailTests(unittest.TestCase):
         ]
         rows = rows_for_email(
             waiting, DIRECTORY, "https://ramosjames.slack.com", TZ)
-        self.assertEqual(len(rows), 1)
+        self.assertEqual(sorted(r["waiting_name"] for r in rows), ["Bob", "Cara"])
         self.assertEqual(rows[0]["asked_by"], "Ana")
-        self.assertEqual(rows[0]["waiting_name"], "Bob or Cara")
+        self.assertEqual({r["request_key"] for r in rows}, {f"C1:{ts}"})
+        self.assertIn("@Bob", rows[0]["message_html"])
+        self.assertIn("@Cara", rows[0]["message_html"])
+        self.assertIn("can you file this?", rows[0]["message_html"])
         self.assertIn("thread_ts=" + parent, rows[0]["link"])
         self.assertIn("/archives/C1/p", rows[0]["link"])
+        html = email_reports.build_unanswered_email_html("window", rows)
+        self.assertEqual(html.count("can you file this?"), 2)
+        self.assertEqual(email_reports.unique_open_count(rows), 1)
+        self.assertEqual(
+            email_reports.unanswered_person_counts(rows),
+            [("Bob", 1), ("Cara", 1)],
+        )
 
     def test_all_clear(self):
         html = email_reports.build_unanswered_email_html("window", [])
