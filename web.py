@@ -5,6 +5,7 @@ from functools import wraps
 from flask import Flask, redirect, render_template, request, Response, send_from_directory, url_for
 
 import storage
+import unanswered
 from config import (
     WORKFLOW_BUCKETS,
     WORKFLOW_BUCKET_OF,
@@ -353,7 +354,9 @@ SETTINGS = [
                 "most open items first, with each channel and comment under them. "
                 "The comment links to that Slack message. "
                 "Posts from apps and bots are left off, as are thank-yous and "
-                "FYI or for-visibility notes. Leave empty to turn the email off.",
+                "FYI or for-visibility notes. Leave empty to turn the email off. "
+                "Send test email uses these addresses and does not replace "
+                "the 4pm send.",
     },
     {
         "key": "unanswered_report_time",
@@ -413,12 +416,23 @@ def _requires_auth(f):
 def index():
     cfg = storage.get_all_config()
     saved = request.args.get("saved") == "1"
+    test_status = request.args.get("test") or ""
     _seed_hidden_scoreboard_people()
     return render_template(
         "index.html",
         settings=SETTINGS,
         cfg=cfg,
         saved=saved,
+        test_status=test_status,
+        test_message={
+            "started": "Test email started. It arrives after the case channels "
+                       "are scanned, about 20 minutes. The 4pm email still sends.",
+            "off": "Add at least one address under Unanswered Asks Email — "
+                   "Recipients, then send the test again.",
+            "no-email": "Email sending is not configured, so the test was not sent.",
+            "busy": "A scan is already running. Wait for that email, then send "
+                    "the test again.",
+        }.get(test_status, ""),
         scoreboard_people=_scoreboard_people_by_role(),
     )
 
@@ -618,7 +632,20 @@ def save_settings():
         hidden = [uid for uid in listed if uid and uid not in shown]
         storage.set_config("scoreboard_hidden_user_ids", ",".join(hidden))
         storage.set_config("scoreboard_hidden_seeded", "1")
-    return redirect(url_for("index", saved=1))
+    test_status = ""
+    if request.form.get("send_unanswered_test") == "1":
+        test_status = _queue_unanswered_test()
+    return redirect(url_for("index", saved=1, test=test_status or None))
+
+
+def _queue_unanswered_test() -> str:
+    """Start a test send from the running bot. The web page shares the process."""
+    try:
+        import app as botapp
+        client = botapp.app.client
+    except Exception:
+        return "no-email"
+    return unanswered.queue_test_report(client)
 
 
 def start():

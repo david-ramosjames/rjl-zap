@@ -361,6 +361,18 @@
       transition: background .15s;
     }
     .save-btn:hover { background: #c9304e; }
+    .send-test-btn {
+      background: #fff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: .4rem 1rem;
+      font-weight: 600;
+      font-size: .85rem;
+      cursor: pointer;
+      margin-top: .65rem;
+    }
+    .send-test-btn:hover { background: #fff5f7; }
 
     .saved-toast {
       position: fixed;
@@ -369,6 +381,7 @@
       z-index: 9999;
       animation: fadeout 4s forwards;
     }
+    .saved-toast.stay { animation-duration: 12s; }
     @keyframes fadeout { 0%,70%{opacity:1} 100%{opacity:0} }
   </style>
 </head>
@@ -1418,6 +1431,12 @@
               style="font-size:.875rem"
             >
             <div class="form-help">{{ s.help }}</div>
+            {% if s.key == 'unanswered_report_recipients' %}
+            <button type="submit" class="send-test-btn" name="send_unanswered_test" value="1">
+              Send test email
+            </button>
+            <div class="form-help">Sends to the addresses above. The scan takes about 20 minutes, then the email arrives. The weekday 4pm email still sends.</div>
+            {% endif %}
           </div>
           {% endfor %}
 
@@ -1431,7 +1450,13 @@
 
 </div>
 
-{% if saved %}
+{% if test_message %}
+<div class="saved-toast stay">
+  <div class="alert alert-success d-flex align-items-center shadow border-0 rounded-3" style="font-size:.9rem;max-width:420px">
+    <i class="bi bi-check-circle-fill me-2"></i> {{ test_message }}
+  </div>
+</div>
+{% elif saved %}
 <div class="saved-toast">
   <div class="alert alert-success d-flex align-items-center shadow border-0 rounded-3" style="font-size:.9rem">
     <i class="bi bi-check-circle-fill me-2"></i> Settings saved
@@ -1454,7 +1479,7 @@
   }
 
   // Auto-expand admin panel if we just saved (so user sees the confirmation)
-  {% if saved %}
+  {% if saved or test_status %}
   const panel = new bootstrap.Collapse(document.getElementById('admin-panel'), { toggle: false });
   panel.show();
   {% endif %}

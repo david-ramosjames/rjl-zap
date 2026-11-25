@@ -302,6 +302,24 @@ def due_slot(now: datetime, hour: int, minute: int, last_sent_ts: float):
     return ("send", slot)
 
 
+def window_start_before(now: datetime, hour: int, minute: int) -> datetime:
+    """Most recent weekday at hour:minute that is at or before now.
+
+    Wednesday morning points at Tuesday 4pm. Wednesday after 4pm points at
+    today's 4pm. Monday morning points at Friday 4pm.
+    """
+    if now.tzinfo is None:
+        return now
+    for back in range(0, 5):
+        day = (now - timedelta(days=back)).date()
+        if day.weekday() >= 5:
+            continue
+        cand = datetime.combine(day, dtime(hour, minute), tzinfo=now.tzinfo)
+        if cand <= now:
+            return cand
+    return now
+
+
 def window_for_slot(slot: datetime) -> tuple:
     """(start, end) from the previous weekday at the same clock time through
     this slot. Monday 4pm starts Friday 4pm, so weekend messages are included
@@ -923,10 +941,53 @@ def fire_daily_report(client) -> None:
     ).start()
 
 
-def _send_report(client, slot: datetime, recipients: list, sender: str) -> None:
+def queue_test_report(client) -> str:
+    """Send the report now to the saved recipients. Does not count as the
+    day's 4pm send. Returns started, off, no-email, or busy."""
+    global _scan_running
+    if REPORT_TZ is None:
+        return "no-email"
+    recipients = _recipients()
+    if not recipients:
+        return "off"
+    sender = storage.get_config(
+        "email_sender_address", env_fallback="GMAIL_SENDER").strip()
+    if not email_reports.configured(sender):
+        return "no-email"
+    with _scan_lock:
+        if _scan_running:
+            return "busy"
+        _scan_running = True
+    now = datetime.now(REPORT_TZ)
+    hour, minute = parse_clock(
+        storage.get_config("unanswered_report_time", default="16:00"))
+    start = window_start_before(now, hour, minute)
+    threading.Thread(
+        target=_send_report,
+        args=(client, now, recipients, sender),
+        kwargs={
+            "mark_sent": False,
+            "subject_prefix": "Test — ",
+            "window": (start, now),
+        },
+        daemon=True,
+    ).start()
+    log.info(
+        "unanswered test report queued for %d recipient(s), %s → %s",
+        len(recipients), start.strftime("%a %H:%M"), now.strftime("%a %H:%M"),
+    )
+    return "started"
+
+
+def _send_report(client, slot: datetime, recipients: list, sender: str, *,
+                 mark_sent: bool = True, subject_prefix: str = "",
+                 window: tuple | None = None) -> None:
     global _scan_running, _retry_not_before
     try:
-        start, end = window_for_slot(slot)
+        if window is not None:
+            start, end = window
+        else:
+            start, end = window_for_slot(slot)
         log.info(
             "unanswered report scanning %s → %s",
             start.strftime("%a %H:%M"), end.strftime("%a %H:%M"),
@@ -966,27 +1027,32 @@ def _send_report(client, slot: datetime, recipients: list, sender: str) -> None:
         people = len(counts)
         if email_rows:
             subject = (
-                f"Unanswered Slack asks — {slot.strftime('%a %b ')}{slot.day}"
+                f"{subject_prefix}Unanswered Slack asks — "
+                f"{slot.strftime('%a %b ')}{slot.day}"
                 f" — {open_items} open across {people} "
                 f"{'person' if people == 1 else 'people'}"
             )
         else:
             subject = (
-                f"Unanswered Slack asks — {slot.strftime('%a %b ')}{slot.day}"
+                f"{subject_prefix}Unanswered Slack asks — "
+                f"{slot.strftime('%a %b ')}{slot.day}"
                 f" — all clear"
             )
         if email_reports.send_email(recipients, subject, html, sender=sender):
-            storage.set_config(_LAST_SENT_KEY, str(time.time()))
-            _retry_not_before = 0.0
+            if mark_sent:
+                storage.set_config(_LAST_SENT_KEY, str(time.time()))
+                _retry_not_before = 0.0
             log.info(
                 "unanswered report sent to %d — %d ask(s), %d channel(s) scanned",
                 len(recipients), len(email_rows), gathered["channels_ok"],
             )
         else:
-            _retry_not_before = time.time() + 900
+            if mark_sent:
+                _retry_not_before = time.time() + 900
             log.warning("unanswered report send failed — will retry in 15 min")
     except Exception:
-        _retry_not_before = time.time() + 900
+        if mark_sent:
+            _retry_not_before = time.time() + 900
         log.exception("unanswered report failed — will retry in 15 min")
     finally:
         with _scan_lock:

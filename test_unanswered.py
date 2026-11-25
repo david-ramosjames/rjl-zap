@@ -19,6 +19,7 @@ from unanswered import (
     still_waiting,
     target_user_ids,
     window_for_slot,
+    window_start_before,
 )
 
 TZ = ZoneInfo("America/Chicago")
@@ -115,6 +116,23 @@ class WindowTests(unittest.TestCase):
         slot = datetime(2026, 11, 24, 16, 0, tzinfo=TZ)
         start, _end = window_for_slot(slot)
         self.assertEqual(start.date().isoformat(), "2026-11-23")
+
+    def test_test_window_starts_at_previous_send_time(self):
+        morning = datetime(2026, 11, 25, 9, 54, tzinfo=TZ)  # Wednesday
+        self.assertEqual(
+            window_start_before(morning, 16, 0),
+            datetime(2026, 11, 24, 16, 0, tzinfo=TZ),
+        )
+        evening = datetime(2026, 11, 25, 17, 0, tzinfo=TZ)
+        self.assertEqual(
+            window_start_before(evening, 16, 0),
+            datetime(2026, 11, 25, 16, 0, tzinfo=TZ),
+        )
+        monday = datetime(2026, 11, 23, 10, 0, tzinfo=TZ)
+        self.assertEqual(
+            window_start_before(monday, 16, 0),
+            datetime(2026, 11, 20, 16, 0, tzinfo=TZ),
+        )
 
     def test_friday_starts_thursday(self):
         slot = datetime(2026, 11, 20, 16, 0, tzinfo=TZ)
