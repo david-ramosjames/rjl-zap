@@ -56,7 +56,7 @@ _FYI_RE = re.compile(
     r"("
     r"\bfyi\b|"
     r"\bfor your (?:info|information|awareness|visibility|records)\b|"
-    r"\bfor (?:visibility|awareness)\b|"
+    r"\bfor (?:visibility|awareness|viz|vis)\b|"
     r"\bjust (?:a |an )?heads?\s?up\b|"
     r"\bheads?\s?up\b|"
     r"\blooping (?:you |y'?all )?in\b|"
@@ -197,6 +197,30 @@ _YOU_REQUEST_RE = re.compile(
     r")",
     re.I,
 )
+_CALLBACK_RE = re.compile(
+    r"\b(?:call\s*backs?|callbacks?|call me back|call me|give (?:me|us) a call)\b",
+    re.I,
+)
+_CALLBACK_DONE_RE = re.compile(
+    r"\b(?:called back|called (?:him|her|them|the client|client)|"
+    r"gave (?:him|her|them|the client) a call|spoke with)\b",
+    re.I,
+)
+_DONE_UPDATE_RE = re.compile(
+    r"\b(?:moved|sent|uploaded|calendared|emailed|approved|faxed|filed|"
+    r"saved|deposited|completed|received|text message sent|email sent|"
+    r"all sent|already uploaded)\b",
+    re.I,
+)
+_NEW_ASK_RE = re.compile(
+    r"(\b(?:can|could|would) you\b|\b(?:please|pls)\s+(?!note\b|see\b|be\b)\w+|"
+    r"\bneed you to\b|\blet me know\b|\?|¿)",
+    re.I,
+)
+_URGENT_RE = re.compile(
+    r"\b(?:asap|urgent|immediately|right away)\b",
+    re.I,
+)
 _FOLLOWUP_RE = re.compile(
     r"\b(?:follow(?:ing|ed)?\s*ups?|checking in|any update|just a reminder|"
     r"circling back|bump(?:ing)?|asap)\b",
@@ -208,11 +232,12 @@ _SENDER_OWNS_RE = re.compile(
 )
 _VIS_LEAD_RE = re.compile(
     r"^\s*(?:fyi|cc|for (?:your )?(?:info(?:rmation)?|visibility|awareness)|"
-    r"heads?\s?up|looping(?: you)? in|jsyk|just so you know)\b",
+    r"heads?\s?up|looping(?: you)? in|jsyk|just so you know|"
+    r"for (?:viz|vis|visibility))\b",
     re.I,
 )
 _VIS_TAIL_RE = re.compile(
-    r"(?:\bfyi\b|\bcc\b|\bfor visibility\b|\bfor your info(?:rmation)?\b|"
+    r"(?:\bfyi\b|\bcc\b|\bfor (?:visibility|viz|vis)\b|\bfor your info(?:rmation)?\b|"
     r"\bheads?\s?up\b)\s*$",
     re.I,
 )
@@ -239,9 +264,16 @@ def _request_kind(plain: str) -> str | None:
     text = re.sub(r"\s+", " ", text).strip(" -–—")
     if not text:
         return None
+    # A finished task or a visibility note is not a new request unless it
+    # also asks someone to do something else.
+    if (_DONE_UPDATE_RE.search(text) or _FYI_RE.search(plain or "")) \
+            and not _NEW_ASK_RE.search(text):
+        return None
     if _SENDER_OWNS_RE.search(text) and not _YOU_REQUEST_RE.search(text) \
             and "?" not in text and "¿" not in text:
         return None
+    if _CALLBACK_RE.search(text):
+        return "callback"
     if _APPROVAL_RE.search(text):
         return "approval"
     if _GUIDANCE_RE.search(text):
@@ -249,7 +281,9 @@ def _request_kind(plain: str) -> str | None:
     if _BLOCKER_RE.search(text):
         return "blocker"
     if "?" in text or "¿" in text:
-        return "question"
+        words = re.findall(r"[a-z]{3,}", text.lower())
+        if len([w for w in words if w not in _TOPIC_STOP]) >= 2:
+            return "question"
     if _YOU_REQUEST_RE.search(text):
         return "action"
     # "follow up, for visibility" is a note. A follow-up with no visibility
@@ -269,6 +303,61 @@ def is_pointer(text: str) -> bool:
     allowed = {"^", "this", "above", "see", "here", "up"}
     return all(w in allowed for w in words) and any(
         w in {"^", "above", "up"} for w in words)
+
+
+_ACTION_VERBS = frozenset({
+    "produce", "file", "send", "calendar", "update", "reopen", "draft", "call",
+    "check", "review", "confirm", "schedule", "prepare", "submit", "notify",
+    "forward", "sign", "help", "take", "look", "start", "follow", "make",
+    "pull", "reach", "contact", "email", "fax", "complete", "finish", "handle",
+    "assign", "disengage", "approve", "add", "adding", "assist", "resolve",
+    "respond", "answer", "obtain", "provide", "guidance", "holds", "hold",
+})
+
+
+def concrete_action(text: str) -> str | None:
+    """The outstanding action, or None when the message does not support one.
+
+    The report only keeps an item when this can name a specific action.
+    "Text message sent" and "for viz" do not.
+    """
+    plain = slack_to_plain(text or "")
+    plain = re.sub(r"@[\w.'|-]+", " ", plain)
+    plain = re.sub(r"https?://\S+", " ", plain)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    kind = _request_kind(plain)
+    if not kind:
+        return None
+    if kind == "question":
+        words = [w for w in re.findall(r"[a-z]{3,}", plain.lower())
+                 if w not in _TOPIC_STOP]
+        if len(words) < 2:
+            return None
+        return plain.rstrip(".")
+    action = re.sub(
+        r"^(?:(?:can|could|would) you (?:please |pls |plz )?|"
+        r"(?:please |pls |plz )|requesting (?:a |an )?|i need you to )",
+        "",
+        plain,
+        count=1,
+        flags=re.I,
+    ).strip(" .,-")
+    words = re.findall(r"[a-z']{3,}", action.lower())
+    vague = {"this", "that", "them", "those", "these", "something", "please"}
+    content = [w for w in words if w not in vague and w not in _TOPIC_STOP]
+    if kind in ("approval", "callback") and content:
+        if action:
+            return action[0].upper() + action[1:]
+        return None
+    if not any(w in _ACTION_VERBS or w.rstrip("ing") in _ACTION_VERBS
+               or w.rstrip("ed") in _ACTION_VERBS for w in words):
+        if len(content) < 2:
+            return None
+    if len(content) < 1:
+        return None
+    if not action:
+        return None
+    return action[0].upper() + action[1:]
 
 
 def is_action_ask(text: str, context_text: str = "") -> bool:
@@ -306,6 +395,23 @@ def _adjacent(fragment: str) -> bool:
     plain = slack_to_plain(fragment or "")
     plain = re.sub(r"\b(?:and|or)\b", " ", plain, flags=re.I)
     return not re.sub(r"[\s,;&/]+", "", plain)
+
+
+def _mention_is_object(before: str, after: str) -> bool:
+    """True when the person is what the task is about, not who must do it.
+
+    "adding holds to @Ryan calendar" mentions Ryan. Claudia is the one
+    being asked.
+    """
+    head = slack_to_plain(before).strip()
+    tail = slack_to_plain(after).strip()
+    if _request_kind(tail):
+        return False
+    if re.search(r"\b(?:to|onto|into|on|for)\s*$", head, re.I):
+        return True
+    if re.match(r"^(?:'s\s+)?(?:calendar|email|phone|voicemail)\b", tail, re.I):
+        return True
+    return False
 
 
 def _visibility_mention(before: str, after: str) -> bool:
@@ -351,7 +457,7 @@ def request_owners(text: str, author_id: str, directory: TeamDirectory,
     for i, span in enumerate(spans):
         before = raw[(spans[i - 1].end() if i else 0):span.start()]
         after = raw[span.end():(spans[i + 1].start() if i + 1 < len(spans) else len(raw))]
-        if _visibility_mention(before, after):
+        if _visibility_mention(before, after) or _mention_is_object(before, after):
             continue
         head = slack_to_plain(_sentence_tail(before))
         tail = slack_to_plain(re.split(r"[.!?\n]", after, maxsplit=1)[0])
@@ -518,8 +624,10 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
     if not owners:
         return []
     shown = context_text if pointer and context_text else text
-    kind = "pointer" if pointer else (
-        _request_kind(slack_to_plain(shown)) or "action")
+    action = concrete_action(shown)
+    if not action:
+        return []
+    kind = _request_kind(slack_to_plain(shown)) or "action"
     thread_ts = str(message.get("thread_ts") or ts)
     rows = []
     for uid in owners:
@@ -530,12 +638,36 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
             "thread_ts": thread_ts,
             "author_id": author,
             "target_id": uid,
+            "target_ids": [uid],
             "text": shown,
+            "action": action,
             "kind": kind,
             "status": "open",
             "created_at": float(ts),
         })
     return rows
+
+
+def share_requests(rows: list) -> list:
+    """One row when several people were asked for the same action."""
+    grouped = {}
+    order = []
+    for row in rows:
+        key = (
+            row["channel_id"], row["message_ts"],
+            (row.get("action") or "").strip().lower(),
+        )
+        current = grouped.get(key)
+        if current is None:
+            current = dict(row)
+            current["target_ids"] = list(row.get("target_ids") or [row["target_id"]])
+            grouped[key] = current
+            order.append(key)
+            continue
+        for uid in row.get("target_ids") or [row["target_id"]]:
+            if uid not in current["target_ids"]:
+                current["target_ids"].append(uid)
+    return [grouped[key] for key in order]
 
 
 _CHECK_REACTIONS = frozenset({
@@ -596,6 +728,8 @@ def _reply_effect(text: str, ask_text: str) -> str:
     plain = slack_to_plain(text or "")
     if not plain:
         return "none"
+    if _CALLBACK_RE.search(ask_text or "") and _CALLBACK_DONE_RE.search(plain):
+        return "resolved"
     if _STRONG_RESOLVE_RE.search(plain) and not _DEFER_RE.search(plain):
         return "resolved"
     if _request_kind(slack_to_plain(ask_text or "")) == "question" \
@@ -664,9 +798,16 @@ def still_waiting(candidates: list, threads: dict,
                 (m for m in channel_pool if str(m.get("ts")) == str(ask_ts)),
                 None,
             )
+        owners = list(row.get("target_ids") or [row.get("target_id")])
         effect = "none"
         if ask:
-            effect = _reaction_effect(ask, row["target_id"], row.get("text") or "")
+            for uid in owners:
+                reaction = _reaction_effect(ask, uid, row.get("text") or "")
+                if reaction == "resolved":
+                    effect = "resolved"
+                    break
+                if reaction == "acknowledged":
+                    effect = "acknowledged"
         if effect != "resolved":
             seen_ts = set()
             sources = []
@@ -689,7 +830,7 @@ def still_waiting(candidates: list, threads: dict,
                         message.get("text") or "", row.get("text") or "")
                     in_thread = source_is_thread or _in_thread(
                         message, row["thread_ts"])
-                    from_owner = message.get("user") == row["target_id"]
+                    from_owner = message.get("user") in owners
                     if in_thread and from_owner and reply_effect == "substantive":
                         reply_effect = "resolved"
                     if in_thread and reply_effect == "resolved":
@@ -698,9 +839,14 @@ def still_waiting(candidates: list, threads: dict,
                     if in_thread and from_owner and reply_effect == "acknowledged":
                         effect = "acknowledged"
                         continue
+                    callback_done = (
+                        _CALLBACK_RE.search(row.get("text") or "")
+                        and _CALLBACK_DONE_RE.search(message.get("text") or "")
+                    )
                     if (not in_thread and reply_effect == "resolved"
-                            and _same_topic(message.get("text") or "",
-                                            row.get("text") or "")):
+                            and (callback_done or _same_topic(
+                                message.get("text") or "",
+                                row.get("text") or ""))):
                         effect = "resolved"
                         break
                 if effect == "resolved":
@@ -795,30 +941,152 @@ def _people_only(row: dict, directory: TeamDirectory) -> bool:
     return True
 
 
-def _join_names(names: list) -> str:
+def _join_names(names: list, conj: str = "or") -> str:
     ordered = sorted({n for n in names if n}, key=str.lower)
     if not ordered:
         return ""
     if len(ordered) == 1:
         return ordered[0]
     if len(ordered) == 2:
-        return f"{ordered[0]} and {ordered[1]}"
-    return ", ".join(ordered[:-1]) + ", and " + ordered[-1]
+        return f"{ordered[0]} {conj} {ordered[1]}"
+    return ", ".join(ordered[:-1]) + f", {conj} " + ordered[-1]
+
+
+def business_minutes(start: datetime, end: datetime,
+                     open_hm: tuple = (8, 0), close_hm: tuple = (18, 0)) -> int:
+    """Weekday minutes between the two times, inside the business-hour clock."""
+    if start.tzinfo is None or end.tzinfo is None or end <= start:
+        return 0
+    total = 0
+    day = start.date()
+    last = end.date()
+    while day <= last:
+        if day.weekday() < 5:
+            opened = datetime.combine(
+                day, dtime(open_hm[0], open_hm[1]), tzinfo=start.tzinfo)
+            closed = datetime.combine(
+                day, dtime(close_hm[0], close_hm[1]), tzinfo=start.tzinfo)
+            span_start = max(start, opened)
+            span_end = min(end, closed)
+            if span_end > span_start:
+                total += int((span_end - span_start).total_seconds() // 60)
+        day += timedelta(days=1)
+    return total
+
+
+def default_thresholds() -> dict:
+    return {
+        "open": (8, 0),
+        "close": (18, 0),
+        "urgent": 30,
+        "callback": 120,
+        "question": 120,
+        "action": 240,
+        "ack": 600,
+    }
+
+
+def report_thresholds() -> dict:
+    """Admin settings, with the suggested starting thresholds."""
+    base = default_thresholds()
+
+    def minutes(key: str, fallback: int) -> int:
+        raw = storage.get_config(key, default=str(fallback)) or str(fallback)
+        try:
+            value = int(str(raw).strip())
+        except ValueError:
+            return fallback
+        return value if value >= 0 else fallback
+
+    base["open"] = parse_clock(
+        storage.get_config("unanswered_biz_start", default="08:00"), (8, 0))
+    base["close"] = parse_clock(
+        storage.get_config("unanswered_biz_end", default="18:00"), (18, 0))
+    base["urgent"] = minutes("unanswered_urgent_minutes", 30)
+    base["callback"] = minutes("unanswered_callback_minutes", 120)
+    base["question"] = minutes("unanswered_question_minutes", 120)
+    base["action"] = minutes("unanswered_action_minutes", 240)
+    day = business_minutes(
+        datetime(2026, 11, 25, base["open"][0], base["open"][1], tzinfo=REPORT_TZ),
+        datetime(2026, 11, 25, base["close"][0], base["close"][1], tzinfo=REPORT_TZ),
+        base["open"], base["close"],
+    ) if REPORT_TZ else 600
+    days = minutes("unanswered_ack_business_days", 1)
+    base["ack"] = max(day, 1) * max(days, 1)
+    return base
+
+
+def _required_age(row: dict, thresholds: dict) -> int:
+    text = f"{row.get('text') or ''} {row.get('action') or ''}"
+    if row.get("status") == "acknowledged":
+        return thresholds["ack"]
+    if _URGENT_RE.search(text):
+        return thresholds["urgent"]
+    kind = row.get("kind") or ""
+    if kind == "callback" or _CALLBACK_RE.search(text):
+        return thresholds["callback"]
+    if kind in ("question", "approval", "guidance"):
+        return thresholds["question"]
+    return thresholds["action"]
+
+
+def include_in_report(row: dict, now: datetime, thresholds: dict | None = None) -> bool:
+    """False while the request is younger than its business-hour threshold."""
+    thresholds = thresholds or default_thresholds()
+    if now.tzinfo is None:
+        return False
+    created = datetime.fromtimestamp(float(row["created_at"]), now.tzinfo)
+    age = business_minutes(
+        created, now, thresholds["open"], thresholds["close"])
+    row["age_minutes"] = age
+    return age >= _required_age(row, thresholds)
+
+
+def format_business_age(minutes: int) -> str:
+    if minutes < 60:
+        return f"{minutes} biz min"
+    hours = minutes / 60
+    if hours < 10:
+        shown = f"{hours:.1f}".rstrip("0").rstrip(".")
+        return f"{shown} biz hrs"
+    return f"{int(round(hours))} biz hrs"
+
+
+def report_section(row: dict) -> str:
+    if row.get("status") == "acknowledged":
+        return "ack"
+    if (row.get("kind") or "") in ("question", "approval", "guidance"):
+        return "response"
+    return "action"
 
 
 def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
-                   tz) -> list:
-    """One row per comment, grouped later by channel. Several people tagged
-    on the same message stay on that one comment."""
+                   tz, now: datetime | None = None,
+                   thresholds: dict | None = None) -> list:
+    """One row per outstanding request. The snippet is the action, not the
+    raw Slack message. People asked for the same action stay on one row."""
     merged = {}
     for row in waiting:
         if not _people_only(row, directory):
             continue
-        key = (row["channel_id"], row["message_ts"])
+        action = row.get("action") or concrete_action(row.get("text") or "")
+        if not action:
+            continue
+        key = (row["channel_id"], row["message_ts"], action.strip().lower())
         item = merged.get(key)
         if item is None:
             channel_id = row["channel_id"]
             base = (workspace or "").rstrip("/")
+            age = ""
+            if now is not None and row.get("age_minutes") is not None:
+                age = format_business_age(int(row["age_minutes"]))
+            elif now is not None:
+                created = datetime.fromtimestamp(float(row["created_at"]), now.tzinfo)
+                age = format_business_age(business_minutes(
+                    created, now,
+                    (thresholds or default_thresholds())["open"],
+                    (thresholds or default_thresholds())["close"],
+                ))
             item = {
                 "channel_id": channel_id,
                 "channel_name": row.get("channel_name") or channel_id,
@@ -829,8 +1097,12 @@ def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                 "author_id": row["author_id"],
                 "when": format_when(row["created_at"], tz),
                 "when_ts": float(row["created_at"]),
-                "snippet": personalized_excerpt(row.get("text") or "", directory),
+                "snippet": action,
+                "action": action,
+                "age": age,
                 "status": row.get("status") or "open",
+                "kind": row.get("kind") or "",
+                "section": report_section(row),
                 "link": email_reports.permalink(
                     workspace, channel_id, row["message_ts"],
                     row.get("thread_ts") or "",
@@ -839,10 +1111,11 @@ def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                 "waiting_names": [],
             }
             merged[key] = item
-        target = row["target_id"]
-        if target not in item["waiting_ids"]:
-            item["waiting_ids"].append(target)
-            item["waiting_names"].append(directory.name(target))
+        for target in row.get("target_ids") or [row["target_id"]]:
+            if target not in item["waiting_ids"] and _people_only(
+                    {**row, "target_id": target}, directory):
+                item["waiting_ids"].append(target)
+                item["waiting_names"].append(directory.name(target))
     out = []
     for item in merged.values():
         item["waiting_name"] = _join_names(item["waiting_names"])
@@ -1094,14 +1367,17 @@ def collect_candidates(client, directory: TeamDirectory,
     # Thread replies on parents older than the window are not in history.
     # Live capture stored them.
     try:
-        stored = storage.unanswered_asks_between(
-            start.timestamp(), end.timestamp())
+        stored = storage.unanswered_asks_between(0, end.timestamp())
     except Exception:
         log.exception("unanswered scan: could not read stored asks")
         stored = []
     for row in stored:
+        if concrete_action(row.get("text") or "") is None:
+            continue
         if not _people_only(row, directory):
             continue
+        row["action"] = concrete_action(row.get("text") or "")
+        row["target_ids"] = [row["target_id"]]
         key = (row["channel_id"], row["message_ts"], row["target_id"])
         by_key.setdefault(key, row)
 
@@ -1185,7 +1461,7 @@ def note_live_message(client, event: dict, channel_name: str) -> None:
     author = event.get("user") or ""
     if author in directory.bot_ids or author not in directory.team_ids:
         return
-    if not is_action_ask(text):
+    if not is_action_ask(text) or not concrete_action(text):
         return
     ts = str(event.get("ts") or "")
     if not ts:
@@ -1350,19 +1626,40 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
         directory = load_directory(client)
         gathered = collect_candidates(
             client, directory, start, end, seen_through=time.time())
-        candidates = gathered["candidates"]
+        candidates = share_requests(gathered["candidates"])
         threads = gathered["threads"]
         _ensure_threads(client, candidates, threads)
         waiting = consolidate_requests(collapse_threads(still_waiting(
             candidates, threads, gathered.get("channel_messages"))))
+        waiting = [r for r in waiting if r.get("action") or concrete_action(r.get("text") or "")]
+        for row in waiting:
+            row["action"] = row.get("action") or concrete_action(row.get("text") or "")
+        thresholds = report_thresholds()
         try:
-            storage.upsert_unanswered_asks(candidates)
+            storage.upsert_unanswered_asks(waiting)
+            open_keys = {
+                (r["channel_id"], r["message_ts"], uid)
+                for r in waiting
+                for uid in (r.get("target_ids") or [r["target_id"]])
+            }
+            stale = [
+                (r["channel_id"], r["message_ts"], uid)
+                for r in candidates
+                for uid in (r.get("target_ids") or [r["target_id"]])
+                if (r["channel_id"], r["message_ts"], uid) not in open_keys
+            ]
+            storage.delete_unanswered_asks(stale)
             storage.prune_unanswered_asks(time.time() - 21 * 86400)
         except Exception:
             log.exception("unanswered report: could not persist asks")
 
+        reportable = [
+            r for r in waiting
+            if include_in_report(r, end, thresholds)
+        ]
         workspace = storage.get_config("slack_workspace_url", default="").rstrip("/")
-        email_rows = rows_for_email(waiting, directory, workspace, REPORT_TZ)
+        email_rows = rows_for_email(
+            reportable, directory, workspace, REPORT_TZ, end, thresholds)
         window_desc = f"{format_stamp(start)} – {format_stamp(end)} CT"
         failed = gathered["channels_failed"]
         note = ""

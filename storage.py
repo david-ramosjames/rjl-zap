@@ -798,6 +798,18 @@ def unanswered_asks_between(start: float, end: float) -> list:
         return [dict(r) for r in rows]
 
 
+def delete_unanswered_asks(keys: list) -> None:
+    """Drop asks that were reviewed and are no longer outstanding."""
+    if not keys:
+        return
+    with connect() as conn:
+        conn.executemany(
+            "DELETE FROM unanswered_asks "
+            "WHERE channel_id = ? AND message_ts = ? AND target_id = ?",
+            list(keys),
+        )
+
+
 def prune_unanswered_asks(before_ts: float) -> None:
     with connect() as conn:
         conn.execute("DELETE FROM unanswered_asks WHERE created_at < ?", (before_ts,))

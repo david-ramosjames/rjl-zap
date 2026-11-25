@@ -298,12 +298,10 @@ def build_unanswered_email_html(window_desc: str, rows: list,
         '<div style="margin:0 0 14px;padding:12px 14px;background:#eff6ff;'
         'border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;'
         'font-size:13px;color:#1e40af">'
-        'Totals are by the person who still owns a request. Below that, the '
-        'person with the most open items is first, then their channels and '
-        'each request. The request opens that Slack message. It stays open '
-        'until the thread shows it was answered, finished, or approved. '
-        'Acknowledged means someone saw it and the work is still pending. '
-        'Status updates, FYI tags, and posts from apps or bots are left off.'
+        'Each line is one outstanding request: who owns it and the action '
+        'still left. A request shared by two people counts once. Items are '
+        'grouped into awaiting a response, awaiting action, and acknowledged '
+        'but overdue. The action opens the Slack message.'
         '</div>'
     )
     if not rows:
@@ -312,7 +310,7 @@ def build_unanswered_email_html(window_desc: str, rows: list,
             'color:#166534;font-size:14px">No unresolved requests.</div>'
         )
     else:
-        body = _unanswered_summary_table(counts) + _unanswered_detail_table(rows, accent)
+        body = _unanswered_summary_table(counts) + _unanswered_sections(rows, accent)
     footer_bits = []
     if channels_scanned:
         footer_bits.append(f"Scanned {channels_scanned} case channels.")
@@ -343,17 +341,15 @@ def unanswered_person_counts(rows: list) -> list:
 
 
 def _unanswered_assignments(rows: list):
-    """(person_id, person_name, row) for each person who still owes a reply."""
+    """One entry per outstanding request. A shared request stays one item."""
     out = []
     for row in rows:
-        names = list(row.get("waiting_names") or [])
-        ids = list(row.get("waiting_ids") or [])
-        if not names:
-            names = [row.get("waiting_name") or "Someone"]
-            ids = [row.get("waiting_id") or names[0]]
-        for i, name in enumerate(names):
-            pid = ids[i] if i < len(ids) and ids[i] else name
-            out.append((pid, name or "Someone", row))
+        name = row.get("waiting_name")
+        if not name:
+            names = [n for n in (row.get("waiting_names") or []) if n]
+            name = " or ".join(names) if names else "Someone"
+        pid = row.get("waiting_id") or name
+        out.append((pid, name, row))
     return out
 
 
@@ -449,23 +445,44 @@ def _unanswered_detail_table(rows: list, accent: str) -> str:
                         f'<td rowspan="{len(items)}" {channel_td}>{channel}</td>'
                     )
                     first_channel = False
-                state = "Acknowledged" if row.get("status") == "acknowledged" else "Awaiting response"
+                age = row.get("age") or ""
+                meta = " · ".join(
+                    part for part in (
+                        row.get("asked_by") or "Someone",
+                        row.get("when") or "",
+                        age,
+                    ) if part
+                )
                 cells.append(
                     f'<td {item_td}>'
-                    f'<div style="color:#6b7280;font-size:12px">'
-                    f'{_e(row.get("asked_by") or "Someone")} · {_e(row.get("when") or "")}'
-                    f' · {_e(state)}'
-                    f'</div>'
+                    f'<div style="color:#6b7280;font-size:12px">{_e(meta)}</div>'
                     f'<div style="margin-top:3px">{comment}</div></td>'
                 )
                 body.append("<tr>" + "".join(cells) + "</tr>")
     return (
-        '<h3 style="margin:0 0 8px;font-size:15px">Open items</h3>'
         '<table style="border-collapse:collapse;width:100%">'
         f'<thead><tr><th {th}>Person</th><th {th}>Channel</th>'
         f'<th {th}>Open item</th></tr></thead>'
         f'<tbody>{"".join(body)}</tbody></table>'
     )
+
+
+def _unanswered_sections(rows: list, accent: str) -> str:
+    labels = (
+        ("response", "Awaiting response or approval"),
+        ("action", "Awaiting action"),
+        ("ack", "Acknowledged but overdue"),
+    )
+    parts = []
+    for key, title in labels:
+        chosen = [r for r in rows if (r.get("section") or "action") == key]
+        if not chosen:
+            continue
+        parts.append(
+            f'<h3 style="margin:22px 0 8px;font-size:15px">{_e(title)}</h3>'
+            + _unanswered_detail_table(chosen, accent)
+        )
+    return "".join(parts)
 
 
 def _chip(label: str, value, color: str) -> str:

@@ -358,6 +358,50 @@ SETTINGS = [
                 "the 4pm send.",
     },
     {
+        "key": "unanswered_biz_start",
+        "label": "Unresolved Requests — Business day starts",
+        "placeholder": "08:00",
+        "help": "Central Time. Age is counted only inside these hours, on weekdays. "
+                "Default: 08:00.",
+    },
+    {
+        "key": "unanswered_biz_end",
+        "label": "Unresolved Requests — Business day ends",
+        "placeholder": "18:00",
+        "help": "Central Time. Default: 18:00.",
+    },
+    {
+        "key": "unanswered_urgent_minutes",
+        "label": "Unresolved Requests — Urgent wait (business minutes)",
+        "placeholder": "30",
+        "help": "How long an asap or urgent request waits before it is listed. Default: 30.",
+    },
+    {
+        "key": "unanswered_callback_minutes",
+        "label": "Unresolved Requests — Callback wait (business minutes)",
+        "placeholder": "120",
+        "help": "Default: 120 (2 business hours).",
+    },
+    {
+        "key": "unanswered_question_minutes",
+        "label": "Unresolved Requests — Question or approval wait (business minutes)",
+        "placeholder": "120",
+        "help": "Default: 120 (2 business hours).",
+    },
+    {
+        "key": "unanswered_action_minutes",
+        "label": "Unresolved Requests — Standard task wait (business minutes)",
+        "placeholder": "240",
+        "help": "Default: 240 (4 business hours).",
+    },
+    {
+        "key": "unanswered_ack_business_days",
+        "label": "Unresolved Requests — Acknowledged wait (business days)",
+        "placeholder": "1",
+        "help": "An acknowledged task with no deadline is listed after this many "
+                "business days. Default: 1.",
+    },
+    {
         "key": "unanswered_report_time",
         "label": "Unanswered Asks Email — Time (Central)",
         "help": "Weekday send time, 24-hour or AM/PM — e.g. 16:00 or 4:00 PM. "

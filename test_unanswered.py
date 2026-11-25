@@ -65,7 +65,6 @@ class AskTests(unittest.TestCase):
             "Can you update assignment and reopen case? <@B>",
             "<@B> can you file the answer?",
             "please confirm the SOL <@B>",
-            "<@B>?",
             "FYI <@B> can you review this today?",
             "<@B> por favor manda el contrato",
             "<@B> let me know when it's calendared",
@@ -101,6 +100,16 @@ class AskTests(unittest.TestCase):
             "please see the update <@B>",
             "",
             "<@B>",
+            "<@B>?",
+            "moved <@B>",
+            "Text message sent. <@B>",
+            "Received this from State Farm. Already uploaded to DB <@B> <@C>",
+            "<@B> <@C> for viz",
+            "Calendared her for today at 1:00PM <@B>",
+            "All sent via email to client, 1P insurance and chiro <@B> <@C>",
+            "<@B> email sent to Holly",
+            "Approved -ty <@B>",
+            "Liz emailed him yesterday afternoon to schedule zoom signing <@B>",
         ]
         for text in notes:
             self.assertFalse(is_action_ask(text), text)
@@ -130,6 +139,24 @@ class TargetTests(unittest.TestCase):
     def test_approval_tags_each_person_asked(self):
         text = "Requesting approval <@B> <@C>"
         self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B", "C"])
+
+    def test_calendar_subject_is_not_the_owner(self):
+        text = ("<@B> can you please assist me with adding holds to "
+                "<@C> calendar until we have a confirmed date.")
+        self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B"])
+
+    def test_shared_request_is_one_item(self):
+        from unanswered import share_requests
+        ts = _ts(2026, 11, 21, 12)
+        text = "Requesting a callback <@B> <@C>"
+        rows = candidates_from_message(
+            {"user": "A", "ts": ts, "text": text},
+            DIRECTORY, WINDOW_START, WINDOW_END, "C1", "smith-1559",
+        )
+        shared = share_requests(rows)
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(shared[0]["target_ids"], ["B", "C"])
+        self.assertTrue(shared[0]["action"])
 
     def test_expands_user_groups_once(self):
         text = "<!subteam^S1> <@B> please confirm"
@@ -187,6 +214,21 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(due_slot(tuesday_9, 16, 0, 0)[0], "send")
         self.assertIsNone(due_slot(tuesday_9, 16, 0, monday_slot + 60))
 
+    def test_young_request_waits_out_the_business_hour_threshold(self):
+        from unanswered import default_thresholds, include_in_report
+        created = datetime(2026, 11, 25, 10, 20, tzinfo=TZ)
+        now = datetime(2026, 11, 25, 10, 29, tzinfo=TZ)
+        row = {
+            "created_at": created.timestamp(),
+            "kind": "action",
+            "status": "open",
+            "text": "Can you file the answer?",
+            "action": "File the answer",
+        }
+        self.assertFalse(include_in_report(row, now, default_thresholds()))
+        later = datetime(2026, 11, 25, 15, 0, tzinfo=TZ)
+        self.assertTrue(include_in_report(row, later, default_thresholds()))
+
     def test_parse_clock(self):
         self.assertEqual(parse_clock("4:00 PM"), (16, 0))
         self.assertEqual(parse_clock("16:00"), (16, 0))
@@ -240,6 +282,15 @@ class ResponseTests(unittest.TestCase):
         channel_reply = {"ts": later, "user": "B", "text": "I'll take a look at the depo"}
         self.assertEqual(len(still_waiting(
             [row], {key: [ask]}, {"C1": [ask, channel_reply]})), 1)
+        called = {"ts": later, "user": "C", "text": "Called the client back at 9:29"}
+        callback = dict(row)
+        callback["text"] = "Requesting a callback about the signing"
+        callback["kind"] = "callback"
+        callback["action"] = "Callback about the signing"
+        self.assertEqual(
+            still_waiting([callback], {key: [ask]}, {"C1": [ask, called]}),
+            [],
+        )
         finished = {"ts": later, "user": "C", "text": "Filed the answer this morning"}
         self.assertEqual(
             still_waiting([row], {key: [ask]}, {"C1": [ask, finished]}),
@@ -407,7 +458,7 @@ class EmailTests(unittest.TestCase):
             }],
             channels_scanned=12,
         )
-        summary, detail = html.split("Open items", 1)
+        summary, detail = html.split("Awaiting action", 1)
         self.assertLess(summary.index(">Bob<"), summary.index(">Cara<"))
         self.assertIn(">3<", summary)
         self.assertIn(">1<", summary)
@@ -434,10 +485,8 @@ class EmailTests(unittest.TestCase):
             "snippet": "both of you",
             "link": "https://ramosjames.slack.com/archives/C1/p100",
         }])
-        self.assertEqual(html.count("both of you"), 2)
-        summary, detail = html.split("Open items", 1)
-        self.assertLess(summary.index(">Bob<"), summary.index(">Cara<"))
-        self.assertLess(detail.index(">Bob<"), detail.index(">Cara<"))
+        self.assertEqual(html.count("both of you"), 1)
+        self.assertIn("Bob or Cara", html)
 
     def test_rows_merge_one_comment_and_skip_bots(self):
         ts = _ts(2026, 11, 21, 12)
@@ -469,7 +518,7 @@ class EmailTests(unittest.TestCase):
             waiting, DIRECTORY, "https://ramosjames.slack.com", TZ)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["asked_by"], "Ana")
-        self.assertEqual(rows[0]["waiting_name"], "Bob and Cara")
+        self.assertEqual(rows[0]["waiting_name"], "Bob or Cara")
         self.assertIn("thread_ts=" + parent, rows[0]["link"])
         self.assertIn("/archives/C1/p", rows[0]["link"])
 
