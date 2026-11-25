@@ -56,29 +56,36 @@ class CaseChannelTests(unittest.TestCase):
 
 
 class AskTests(unittest.TestCase):
-    def test_asks(self):
+    def test_requests(self):
         asks = [
+            "Requesting approval <@B> <@C>",
+            "Can you please produce this?",
+            "Please see my notes and provide guidance <@B>",
+            "Are we working on the Medicare portion? <@B>",
+            "Can you update assignment and reopen case? <@B>",
             "<@B> can you file the answer?",
             "please confirm the SOL <@B>",
             "<@B>?",
             "FYI <@B> can you review this today?",
             "<@B> por favor manda el contrato",
             "<@B> let me know when it's calendared",
-            "<@B> please confirm the releases\n\n<@C> for visibility",
             "<@B> asap",
             "just a follow up <@B>",
             "<@B> take a look when you can",
             "¿Puedes revisar esto <@B>?",
-            "<@B> the check was deposited",
-            "<@B> medical records are in the folder",
-            "client called about the deposition <@B>",
-            "please see the update <@B>",
         ]
         for text in asks:
             self.assertTrue(is_action_ask(text), text)
 
-    def test_visibility(self):
+    def test_not_requests(self):
         notes = [
+            "Saved in correspondence <@B>",
+            "3P Demand was faxed to Progressive <@B>",
+            "I will follow up before EOW <@B>",
+            "Nice. Off to a good start <@B>",
+            "Calendared! <@B>",
+            "I think we will get 20k next week <@B>",
+            "Yes and yes <@B>",
             "FYI <@B> records came in",
             "<@B> <@C> for visibility",
             "Thanks <@B>",
@@ -88,17 +95,41 @@ class AskTests(unittest.TestCase):
             "looping you in <@B>",
             "follow up <@B> for visibility",
             "for your awareness <@B> https://example.com/file?id=1",
+            "<@B> the check was deposited",
+            "<@B> medical records are in the folder",
+            "client called about the deposition <@B>",
+            "please see the update <@B>",
             "",
             "<@B>",
         ]
         for text in notes:
             self.assertFalse(is_action_ask(text), text)
 
+    def test_caret_depends_on_the_previous_message(self):
+        pointer = "<@B> <@C> ^"
+        self.assertFalse(is_action_ask(pointer))
+        self.assertFalse(is_action_ask(pointer, "Saved in correspondence"))
+        self.assertTrue(is_action_ask(pointer, "Can you file the answer?"))
+
 
 class TargetTests(unittest.TestCase):
     def test_filters_author_bot_and_guests(self):
         text = "<@A> <@B> <@BOT> <@GUEST> can you file this?"
         self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B"])
+
+    def test_fyi_mention_is_not_an_owner(self):
+        text = ("<@B>, can you check in with the client on this? "
+                "I can be on the call too, if needed. FYI <@C>")
+        self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B"])
+
+    def test_informed_mention_is_not_an_owner(self):
+        text = ("<@C> client confirmed <@B> can you pls calendar "
+                "Ryan and Client call 11/30/26 12:00PM")
+        self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B"])
+
+    def test_approval_tags_each_person_asked(self):
+        text = "Requesting approval <@B> <@C>"
+        self.assertEqual(target_user_ids(text, "A", DIRECTORY), ["B", "C"])
 
     def test_expands_user_groups_once(self):
         text = "<!subteam^S1> <@B> please confirm"
@@ -182,7 +213,9 @@ class ResponseTests(unittest.TestCase):
         reply = {"ts": _ts(2026, 11, 21, 13), "user": "B", "text": "on it"}
         row = self._row(ask_ts)
         key = ("C1", ask_ts)
-        self.assertEqual(still_waiting([row], {key: [ask, reply]}), [])
+        held = still_waiting([row], {key: [ask, reply]})
+        self.assertEqual(len(held), 1)
+        self.assertEqual(held[0]["status"], "acknowledged")
 
         other = {"ts": _ts(2026, 11, 21, 13), "user": "C", "text": "I can"}
         self.assertEqual(still_waiting([row], {key: [ask, other]}), [row])
@@ -196,16 +229,20 @@ class ResponseTests(unittest.TestCase):
         # Thread loaded and the message is gone.
         self.assertEqual(still_waiting([row], {key: [other]}), [])
 
-    def test_channel_reply_clears_without_a_thread_reply(self):
+    def test_unrelated_channel_reply_stays_open(self):
         ask_ts = _ts(2026, 11, 21, 12)
         later = _ts(2026, 11, 21, 14)
         earlier = _ts(2026, 11, 21, 11)
-        ask = {"ts": ask_ts, "user": "A", "text": "<@B> the records are in the folder"}
+        ask = {"ts": ask_ts, "user": "A", "text": "<@B> can you file the answer?"}
         row = self._row(ask_ts)
+        row["text"] = ask["text"]
         key = ("C1", ask_ts)
-        channel_reply = {"ts": later, "user": "B", "text": "I'll take a look"}
+        channel_reply = {"ts": later, "user": "B", "text": "I'll take a look at the depo"}
+        self.assertEqual(len(still_waiting(
+            [row], {key: [ask]}, {"C1": [ask, channel_reply]})), 1)
+        finished = {"ts": later, "user": "C", "text": "Filed the answer this morning"}
         self.assertEqual(
-            still_waiting([row], {key: [ask]}, {"C1": [ask, channel_reply]}),
+            still_waiting([row], {key: [ask]}, {"C1": [ask, finished]}),
             [],
         )
         # A later message from someone else leaves Bob on the list.
@@ -241,6 +278,31 @@ class ResponseTests(unittest.TestCase):
         collapsed = collapse_threads(rows)
         self.assertEqual(len(collapsed), 1)
         self.assertEqual(collapsed[0]["message_ts"], second)
+
+    def test_same_subject_collapses_to_one_item(self):
+        from unanswered import consolidate_requests
+        first = _ts(2026, 11, 21, 12)
+        second = _ts(2026, 11, 21, 15)
+        rows = [
+            self._row(first),
+            {
+                **self._row(second),
+                "thread_ts": second,
+                "text": "Please send the disengagement letter",
+                "kind": "action",
+            },
+            {
+                **self._row(second),
+                "message_ts": _ts(2026, 11, 21, 16),
+                "thread_ts": _ts(2026, 11, 21, 16),
+                "text": "Need approval to disengage",
+                "kind": "approval",
+                "created_at": float(_ts(2026, 11, 21, 16)),
+            },
+        ]
+        rows[0]["text"] = "Send the disengagement letter today"
+        merged = consolidate_requests(rows)
+        self.assertEqual(len(merged), 1)
 
 
 class CandidateTests(unittest.TestCase):
@@ -413,7 +475,7 @@ class EmailTests(unittest.TestCase):
 
     def test_all_clear(self):
         html = email_reports.build_unanswered_email_html("window", [])
-        self.assertIn("Nothing is waiting", html)
+        self.assertIn("No unresolved requests", html)
 
     def test_escapes_snippet(self):
         html = email_reports.build_unanswered_email_html("window", [{

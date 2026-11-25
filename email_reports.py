@@ -287,7 +287,7 @@ def build_unanswered_email_html(window_desc: str, rows: list,
     head = (
         f'<div style="font-family:Segoe UI,system-ui,Arial,sans-serif;color:#1a1a2e;'
         f'max-width:760px;margin:0 auto">'
-        f'<h2 style="margin:0 0 .2rem">Unanswered Slack asks</h2>'
+        f'<h2 style="margin:0 0 .2rem">Unresolved Slack requests</h2>'
         f'<div style="color:#6b7280;font-size:13px;margin-bottom:14px">{_e(window_desc)}</div>'
         f'<div style="margin-bottom:16px">'
         f'{_chip("Open", open_items, "#b91c1c" if rows else "#166534")}'
@@ -298,18 +298,18 @@ def build_unanswered_email_html(window_desc: str, rows: list,
         '<div style="margin:0 0 14px;padding:12px 14px;background:#eff6ff;'
         'border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;'
         'font-size:13px;color:#1e40af">'
-        'Totals are by the person who still owes a reply. Below that, the '
+        'Totals are by the person who still owns a request. Below that, the '
         'person with the most open items is first, then their channels and '
-        'each comment. The comment opens that Slack message. A later message '
-        'from them anywhere in the channel clears it, and so does a reaction. '
-        'Thank-yous, FYI notes, and posts from apps or bots are left off.'
+        'each request. The request opens that Slack message. It stays open '
+        'until the thread shows it was answered, finished, or approved. '
+        'Acknowledged means someone saw it and the work is still pending. '
+        'Status updates, FYI tags, and posts from apps or bots are left off.'
         '</div>'
     )
     if not rows:
         body = (
             '<div style="padding:18px;background:#f0fdf4;border-radius:8px;'
-            'color:#166534;font-size:14px">Everyone who was asked has replied. '
-            'Nothing is waiting.</div>'
+            'color:#166534;font-size:14px">No unresolved requests.</div>'
         )
     else:
         body = _unanswered_summary_table(counts) + _unanswered_detail_table(rows, accent)
@@ -449,10 +449,12 @@ def _unanswered_detail_table(rows: list, accent: str) -> str:
                         f'<td rowspan="{len(items)}" {channel_td}>{channel}</td>'
                     )
                     first_channel = False
+                state = "Acknowledged" if row.get("status") == "acknowledged" else "Awaiting response"
                 cells.append(
                     f'<td {item_td}>'
                     f'<div style="color:#6b7280;font-size:12px">'
                     f'{_e(row.get("asked_by") or "Someone")} · {_e(row.get("when") or "")}'
+                    f' · {_e(state)}'
                     f'</div>'
                     f'<div style="margin-top:3px">{comment}</div></td>'
                 )

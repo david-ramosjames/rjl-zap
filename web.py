@@ -351,10 +351,9 @@ SETTINGS = [
         "placeholder": "jon@ramosjames.com, ana@ramosjames.com",
         "help": "Comma-separated addresses for the weekday case-channel report. "
                 "Opens with a total per person, then lists the person with the "
-                "most open items first, with each channel and comment under them. "
-                "The comment links to that Slack message. "
-                "Posts from apps and bots are left off, as are thank-yous and "
-                "FYI or for-visibility notes. Leave empty to turn the email off. "
+                "most unresolved requests first. Only questions, tasks, "
+                "approvals, and guidance count, and only for the person who "
+                "owns the request. Leave empty to turn the email off. "
                 "Send test email uses these addresses and does not replace "
                 "the 4pm send.",
     },

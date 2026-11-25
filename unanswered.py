@@ -1,14 +1,15 @@
-"""Daily email of unanswered teammate asks in case channels.
+"""Daily email of unresolved Slack requests in case channels.
 
-Jon’s rule: weekdays at 4pm Central, covering everything since the previous
-working day's 4pm. A case channel is a channel whose name ends in -digits
+Weekdays at 4pm Central, covering everything since the previous working
+day's 4pm. A case channel is a channel whose name ends in -digits
 (smith-1559) and is not a leads / phone / general / intake channel.
 
-A message is listed when one teammate @mentions another and the message is
-more than a thank-you or an FYI. The tagged person drops off once they reply
-anywhere later in that case channel — in the thread, or as a new channel
-message — or react on the asking message. FYI and for-visibility notes stay
-off the list.
+A message is listed only when it asks a specific person for something:
+a question, a task, an approval, guidance, a blocker, or a follow-up on
+one of those. Status updates, completed work, FYI tags, and the sender's
+own next step stay off. A later unrelated channel message does not clear
+it. The request drops off when the thread shows it was answered, finished,
+approved, withdrawn, or done by someone else.
 
 conversations.history only returns top-level messages, so live message events
 also record asks. That picks up a tag posted inside an older thread.
@@ -50,8 +51,7 @@ _SKIP_SUBTYPES = frozenset({
     "bot_message",
 })
 
-# Explicit "don't act on this" notes. A tag with ordinary substance is an ask
-# even when nobody wrote please / can you. These phrases are the exception.
+# Visibility wording. A mention in one of these clauses is not an owner.
 _FYI_RE = re.compile(
     r"("
     r"\bfyi\b|"
@@ -69,28 +69,6 @@ _FYI_RE = re.compile(
     r"\bcc'?ing\b|"
     r"\bplease (?:note|be advised)\b|"
     r"\bpara (?:tu |su )?(?:info|informaci[oó]n|visibilidad)\b"
-    r")",
-    re.I,
-)
-# A visibility note that also asks something still counts
-# ("FYI @ana — can you file this?").
-_DIRECT_REQUEST_RE = re.compile(
-    r"("
-    r"\?|¿|"
-    r"\b(?:please|pls|plz)\b|"
-    r"\bpor favor\b|\bfavor de\b|"
-    r"\b(?:can|could|would|will) you\b|"
-    r"\b(?:can|could) (?:we|someone)\b|"
-    r"\b(?:puedes|podrias|podrías|puede)\b|"
-    r"\bneed you\b|"
-    r"\b(?:necesito|necesitamos) que\b|"
-    r"\blet me know\b|\blmk\b|"
-    r"\b(?:avisame|avísame|me confirmas|me puedes)\b|"
-    r"\basap\b|"
-    r"\bwhen you (?:get a chance|can|have)\b|"
-    r"\bcuando puedas\b|"
-    r"\bdon'?t forget\b|\bdo not forget\b|"
-    r"\baction (?:needed|item)\b"
     r")",
     re.I,
 )
@@ -182,29 +160,125 @@ def _only_acknowledgement(body: str) -> bool:
     return bool(words) and all(w in _ACK_WORDS for w in words)
 
 
-def is_action_ask(text: str) -> bool:
-    """True when a tagged teammate was given something to act on.
+# A request has to look like one. Everything else — status, completion,
+# feedback, the sender's own plan — stays off the list.
+_APPROVAL_RE = re.compile(
+    r"\b(?:requesting approval|need(?:s|ed)? approval|please approve|"
+    r"awaiting approval|approval (?:to|from|needed|required)|"
+    r"can you approve|sign(?:ing)? off)\b",
+    re.I,
+)
+_GUIDANCE_RE = re.compile(
+    r"\b(?:provide guidance|your guidance|need guidance|how should|"
+    r"what do you think|your thoughts|please advise|direction on|"
+    r"how (?:do|should) (?:i|we) proceed)\b",
+    re.I,
+)
+_BLOCKER_RE = re.compile(
+    r"\b(?:blocked|stuck|can'?t (?:proceed|move forward)|waiting on you|"
+    r"need(?:s)? you to|until you|holding us up)\b",
+    re.I,
+)
+_YOU_REQUEST_RE = re.compile(
+    r"("
+    r"\b(?:can|could|would) you\b|"
+    r"\b(?:please|pls|plz)\s+(?:produce|file|send|calendar|update|reopen|"
+    r"draft|call|check|review|confirm|schedule|prepare|submit|notify|"
+    r"forward|sign|help|take|look|start|follow|make|get|pull|reach|"
+    r"contact|email|fax|mail|complete|finish|handle|assign|disengage|"
+    r"approve|reassign)\b|"
+    r"\bneed you to\b|"
+    r"\b(?:can|could) (?:we|someone)\b|"
+    r"\bpor favor\b|\bfavor de\b|"
+    r"\b(?:puedes|podr[ií]as|puede)\b|"
+    r"\blet me know\b|\blmk\b|"
+    r"\btake a look\b|"
+    r"\bwhen you (?:can|get a chance|have)\b"
+    r")",
+    re.I,
+)
+_FOLLOWUP_RE = re.compile(
+    r"\b(?:follow(?:ing|ed)?\s*ups?|checking in|any update|just a reminder|"
+    r"circling back|bump(?:ing)?|asap)\b",
+    re.I,
+)
+_SENDER_OWNS_RE = re.compile(
+    r"\b(?:i will|i'll|i’ll|i can|i am going to|i'm going to|let me)\b",
+    re.I,
+)
+_VIS_LEAD_RE = re.compile(
+    r"^\s*(?:fyi|cc|for (?:your )?(?:info(?:rmation)?|visibility|awareness)|"
+    r"heads?\s?up|looping(?: you)? in|jsyk|just so you know)\b",
+    re.I,
+)
+_VIS_TAIL_RE = re.compile(
+    r"(?:\bfyi\b|\bcc\b|\bfor visibility\b|\bfor your info(?:rmation)?\b|"
+    r"\bheads?\s?up\b)\s*$",
+    re.I,
+)
+_TAG_RE = re.compile(
+    r"<@([A-Z0-9]+)(?:\|[^>]*)?>|<!subteam\^([A-Z0-9]+)(?:\|[^>]*)?>"
+)
+_TOPIC_STOP = frozenset({
+    "this", "that", "with", "from", "your", "have", "will", "just", "been",
+    "please", "pls", "plz", "when", "what", "need", "needs", "about", "into",
+    "they", "them", "then", "than", "also", "only", "some", "here", "there",
+    "were", "would", "could", "should", "next", "week", "today", "tomorrow",
+})
 
-    Any substantive tag counts. The message does not have to say please,
-    can you, or follow up. Left off: a bare thank-you, and notes that are
-    only FYI / for visibility / heads up / no action needed. A visibility
-    note that also asks a question or makes a direct request still counts.
+
+def _request_kind(plain: str) -> str | None:
+    """question, action, approval, guidance, blocker, followup, or None.
+
+    The default is None. A status update, a finished task, feedback, or
+    the sender's own plan is not a request.
     """
-    raw = _USER_MENTION_RE.sub(" ", text or "")
-    raw = _SUBTEAM_RE.sub(" ", raw)
-    raw = re.sub(r"<#[A-Z0-9]+(?:\|[^>]*)?>", " ", raw)
-    plain = slack_to_plain(raw)
-    if not plain:
+    text = _FYI_RE.sub(" ", plain or "")
+    text = re.sub(r"@[\w.'|-]+", " ", text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" -–—")
+    if not text:
+        return None
+    if _SENDER_OWNS_RE.search(text) and not _YOU_REQUEST_RE.search(text) \
+            and "?" not in text and "¿" not in text:
+        return None
+    if _APPROVAL_RE.search(text):
+        return "approval"
+    if _GUIDANCE_RE.search(text):
+        return "guidance"
+    if _BLOCKER_RE.search(text):
+        return "blocker"
+    if "?" in text or "¿" in text:
+        return "question"
+    if _YOU_REQUEST_RE.search(text):
+        return "action"
+    # "follow up, for visibility" is a note. A follow-up with no visibility
+    # wording is still an open request.
+    if _FOLLOWUP_RE.search(text) and not _FYI_RE.search(plain or ""):
+        return "followup"
+    return None
+
+
+def is_pointer(text: str) -> bool:
+    """A tag that only points at the previous message, like '@Ana @Bob ^'."""
+    plain = slack_to_plain(text or "")
+    body = re.sub(r"@[\w.'|-]+", " ", plain)
+    words = re.findall(r"[a-z0-9^]+", body.lower())
+    if not words:
         return False
-    plain = re.sub(r"https?://\S+", " ", plain)
-    body = _message_body(plain)
-    if not body or _only_acknowledgement(body):
-        return False
-    # Drop the visibility wording first, so "please note" is not mistaken
-    # for a request just because it contains "please".
-    if _FYI_RE.search(plain) and not _DIRECT_REQUEST_RE.search(_FYI_RE.sub(" ", plain)):
-        return False
-    return True
+    allowed = {"^", "this", "above", "see", "here", "up"}
+    return all(w in allowed for w in words) and any(
+        w in {"^", "above", "up"} for w in words)
+
+
+def is_action_ask(text: str, context_text: str = "") -> bool:
+    """True when the message is a request someone still has to handle.
+
+    A caret tag counts only when the message it points at is a request.
+    """
+    if is_pointer(text):
+        return _request_kind(slack_to_plain(context_text or "")) is not None
+    return _request_kind(slack_to_plain(text or "")) is not None
 
 
 def is_human_message(message: dict) -> bool:
@@ -221,24 +295,106 @@ def is_human_message(message: dict) -> bool:
     return bool(message.get("user"))
 
 
-def target_user_ids(text: str, author_id: str, directory: TeamDirectory) -> list:
-    """Teammates tagged on this message, excluding the author and bots."""
-    seen = []
+def _sentence_tail(fragment: str) -> str:
+    """Text after the last sentence break. Empty when the mention starts fresh."""
+    parts = re.split(r"[.!?\n¿]", fragment or "")
+    return parts[-1] if parts else ""
 
-    def add(uid: str) -> None:
+
+def _adjacent(fragment: str) -> bool:
+    """True when nothing but a joiner sits between two mentions."""
+    plain = slack_to_plain(fragment or "")
+    plain = re.sub(r"\b(?:and|or)\b", " ", plain, flags=re.I)
+    return not re.sub(r"[\s,;&/]+", "", plain)
+
+
+def _visibility_mention(before: str, after: str) -> bool:
+    head = slack_to_plain(_sentence_tail(before)).strip()
+    tail = slack_to_plain(after).strip()
+    if _VIS_LEAD_RE.search(tail) or _VIS_TAIL_RE.search(head):
+        return True
+    if _FYI_RE.search(tail) and _request_kind(tail) is None:
+        return True
+    return False
+
+
+def _ids_for_tag(match, directory: TeamDirectory) -> list:
+    user_id, group_id = match.group(1), match.group(2)
+    if user_id:
+        return [user_id]
+    return list(directory.groups.get(group_id) or [])
+
+
+def request_owners(text: str, author_id: str, directory: TeamDirectory,
+                   context_text: str = "") -> list:
+    """People the request is directed at.
+
+    A mention is an owner only when a question, task, approval, guidance,
+    blocker, or follow-up is aimed at that person. FYI and cc mentions are
+    left off. A caret tag owns the previous message when that message is
+    itself a request.
+    """
+    raw = text or ""
+    if is_pointer(raw):
+        if _request_kind(slack_to_plain(context_text or "")) is None:
+            return []
+        spans = list(_TAG_RE.finditer(raw))
+        return _filter_people(
+            [uid for span in spans for uid in _ids_for_tag(span, directory)],
+            author_id, directory,
+        )
+
+    spans = list(_TAG_RE.finditer(raw))
+    if not spans:
+        return []
+    owners = []
+    for i, span in enumerate(spans):
+        before = raw[(spans[i - 1].end() if i else 0):span.start()]
+        after = raw[span.end():(spans[i + 1].start() if i + 1 < len(spans) else len(raw))]
+        if _visibility_mention(before, after):
+            continue
+        head = slack_to_plain(_sentence_tail(before))
+        tail = slack_to_plain(re.split(r"[.!?\n]", after, maxsplit=1)[0])
+        owns = _request_kind(tail) is not None or _request_kind(head) is not None
+        if not owns:
+            j = i
+            while j > 0 and _adjacent(raw[spans[j - 1].end():spans[j].start()]):
+                j -= 1
+            cluster_head = slack_to_plain(_sentence_tail(
+                raw[(spans[j - 1].end() if j else 0):spans[j].start()]))
+            k = i
+            while k + 1 < len(spans) and _adjacent(
+                    raw[spans[k].end():spans[k + 1].start()]):
+                k += 1
+            tail_end = spans[k + 1].start() if k + 1 < len(spans) else len(raw)
+            cluster_tail = slack_to_plain(re.split(
+                r"[.!?\n]", raw[spans[k].end():tail_end], maxsplit=1)[0])
+            owns = (_request_kind(cluster_head) is not None
+                    or _request_kind(cluster_tail) is not None)
+        if not owns:
+            continue
+        for uid in _ids_for_tag(span, directory):
+            if uid not in owners:
+                owners.append(uid)
+    return _filter_people(owners, author_id, directory)
+
+
+def _filter_people(ids: list, author_id: str, directory: TeamDirectory) -> list:
+    seen = []
+    for uid in ids:
         if not uid or uid == author_id or uid in directory.bot_ids:
-            return
+            continue
         if uid not in directory.team_ids:
-            return
+            continue
         if uid not in seen:
             seen.append(uid)
-
-    for uid in _USER_MENTION_RE.findall(text or ""):
-        add(uid)
-    for gid in _SUBTEAM_RE.findall(text or ""):
-        for uid in directory.groups.get(gid) or []:
-            add(uid)
     return seen
+
+
+def target_user_ids(text: str, author_id: str, directory: TeamDirectory,
+                    context_text: str = "") -> list:
+    """Teammates who own the request, excluding the author and bots."""
+    return request_owners(text, author_id, directory, context_text)
 
 
 def excerpt(text: str, limit: int = 180) -> str:
@@ -343,8 +499,9 @@ def _in_window(ts: str, start: datetime, end: datetime) -> bool:
 
 def candidates_from_message(message: dict, directory: TeamDirectory,
                             start: datetime, end: datetime,
-                            channel_id: str, channel_name: str) -> list:
-    """Ask rows for this single message, or [] if it isn't one."""
+                            channel_id: str, channel_name: str,
+                            context_text: str = "") -> list:
+    """Request rows for this single message, or [] if it isn't one."""
     if not is_human_message(message):
         return []
     ts = str(message.get("ts") or "")
@@ -354,11 +511,18 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
     if author in directory.bot_ids or author not in directory.team_ids:
         return []
     text = message.get("text") or ""
-    if not is_action_ask(text):
+    pointer = is_pointer(text)
+    if not is_action_ask(text, context_text):
         return []
+    owners = target_user_ids(text, author, directory, context_text)
+    if not owners:
+        return []
+    shown = context_text if pointer and context_text else text
+    kind = "pointer" if pointer else (
+        _request_kind(slack_to_plain(shown)) or "action")
     thread_ts = str(message.get("thread_ts") or ts)
     rows = []
-    for uid in target_user_ids(text, author, directory):
+    for uid in owners:
         rows.append({
             "channel_id": channel_id,
             "channel_name": channel_name,
@@ -366,55 +530,128 @@ def candidates_from_message(message: dict, directory: TeamDirectory,
             "thread_ts": thread_ts,
             "author_id": author,
             "target_id": uid,
-            "text": text,
+            "text": shown,
+            "kind": kind,
+            "status": "open",
             "created_at": float(ts),
         })
     return rows
 
 
-def _reacted(user_id: str, message: dict) -> bool:
-    for rx in message.get("reactions") or []:
+_CHECK_REACTIONS = frozenset({
+    "white_check_mark", "heavy_check_mark", "ballot_box_with_check",
+})
+_EYES_REACTIONS = frozenset({"eyes"})
+_YES_REACTIONS = frozenset({"+1", "thumbsup", "thumbs_up"})
+_NO_REACTIONS = frozenset({"-1", "thumbsdown", "thumbs_down"})
+_DEFER_RE = re.compile(
+    r"\b(?:i'll|i’ll|i will|tomorrow|later today|next week|before eow|"
+    r"end of (?:the )?week|on it|will do|working on it|in progress|"
+    r"let me (?:get|do|handle|check)|i can do (?:that|this|it))\b",
+    re.I,
+)
+_STRONG_RESOLVE_RE = re.compile(
+    r"("
+    r"\b(?:done|completed|complete|approved|calendared|filed|faxed|sent|"
+    r"emailed|mailed|deposited|saved|uploaded|submitted|signed|notified|"
+    r"disengaged|reopened|produced|finished|handled)\b|"
+    r"\b(?:here (?:it|they) (?:is|are)|attached|see attached)\b|"
+    r"\bnever ?mind\b|\bdisregard\b|\bno longer needed\b|\bwithdrawn?\b"
+    r")",
+    re.I,
+)
+_ANSWER_RE = re.compile(
+    r"\b(?:yes|yep|yeah|no|nope|correct|confirmed)\b",
+    re.I,
+)
+
+
+def _topic_tokens(text: str) -> set:
+    words = re.findall(r"[a-z]{4,}", slack_to_plain(text or "").lower())
+    stems = set()
+    for word in words:
+        if word in _TOPIC_STOP:
+            continue
+        stem = word
+        for suffix in ("ment", "ing", "ed", "es"):
+            if len(stem) > len(suffix) + 2 and stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        if len(stem) > 5 and stem.endswith("e"):
+            stem = stem[:-1]
+        stems.add(stem)
+    return stems
+
+
+def _same_topic(a: str, b: str) -> bool:
+    left, right = _topic_tokens(a), _topic_tokens(b)
+    if not left or not right:
+        return False
+    shared = left & right
+    return len(shared) / min(len(left), len(right)) >= 0.5
+
+
+def _reply_effect(text: str, ask_text: str) -> str:
+    """resolved, acknowledged, substantive, or none."""
+    plain = slack_to_plain(text or "")
+    if not plain:
+        return "none"
+    if _STRONG_RESOLVE_RE.search(plain) and not _DEFER_RE.search(plain):
+        return "resolved"
+    if _request_kind(slack_to_plain(ask_text or "")) == "question" \
+            and _ANSWER_RE.search(plain):
+        return "resolved"
+    if _DEFER_RE.search(plain):
+        return "acknowledged"
+    if _only_acknowledgement(plain):
+        return "acknowledged"
+    body = _message_body(plain)
+    if body and len(re.findall(r"[a-z0-9']+", body.lower())) >= 3:
+        return "substantive"
+    return "none"
+
+
+def _reaction_effect(ask: dict, user_id: str, ask_text: str) -> str:
+    """How this person's reactions on the request itself land."""
+    names = set()
+    for rx in ask.get("reactions") or []:
         if user_id in (rx.get("users") or []):
-            return True
-    return False
+            names.add(rx.get("name") or "")
+    if names & _CHECK_REACTIONS:
+        return "resolved"
+    if names & _NO_REACTIONS and _request_kind(slack_to_plain(ask_text)) == "question":
+        return "resolved"
+    if names & _YES_REACTIONS:
+        if _request_kind(slack_to_plain(ask_text)) == "question":
+            return "resolved"
+        return "acknowledged"
+    if names & _EYES_REACTIONS:
+        return "acknowledged"
+    return "none"
 
 
-def _reply_after(message: dict, user_id: str, ask_ts: str) -> bool:
-    if not is_human_message(message) or message.get("user") != user_id:
-        return False
-    try:
-        return float(message.get("ts") or 0) > float(ask_ts)
-    except (TypeError, ValueError):
-        return False
-
-
-def _messages_by_channel(threads: dict, channel_messages: dict | None) -> dict:
-    """Every message we saw in a channel: top-level posts and thread replies."""
-    by_channel: dict = {}
-    for (channel_id, _thread_ts), messages in (threads or {}).items():
-        by_channel.setdefault(channel_id, []).extend(messages or [])
-    for channel_id, messages in (channel_messages or {}).items():
-        by_channel.setdefault(channel_id, []).extend(messages or [])
-    return by_channel
+def _in_thread(message: dict, thread_ts: str) -> bool:
+    parent = str(message.get("thread_ts") or message.get("ts") or "")
+    return parent == str(thread_ts)
 
 
 def still_waiting(candidates: list, threads: dict,
                   channel_messages: dict | None = None) -> list:
-    """Drop a candidate when the tagged person has responded.
+    """Keep a request until the thread shows it was handled.
 
-    A response is a reaction on the asking message, a later reply in that
-    thread, or any later message from them in the same channel (including
-    a new channel message that was never threaded). threads maps
-    (channel_id, thread_ts) → message dicts. A missing thread is kept, so a
-    Slack error doesn't hide an ask. A thread that loaded but no longer
-    contains the message is dropped.
+    Resolved: the owner answers in the thread, someone confirms the task
+    is done, the request is withdrawn, or ✅ is on the message. A 👀 or
+    "I'll do it tomorrow" stays on the list as acknowledged. A later
+    message elsewhere in the channel leaves it open unless that message
+    clearly finishes the same task. A missing thread is kept. A thread
+    that loaded without the message is dropped.
     """
-    by_channel = _messages_by_channel(threads, channel_messages)
     kept = []
     for row in candidates:
         key = (row["channel_id"], row["thread_ts"])
         messages = threads.get(key)
         ask_ts = row["message_ts"]
+        channel_pool = (channel_messages or {}).get(row["channel_id"]) or []
         if messages is not None:
             ask = next(
                 (m for m in messages if str(m.get("ts")) == str(ask_ts)),
@@ -424,30 +661,112 @@ def still_waiting(candidates: list, threads: dict,
                 continue
         else:
             ask = next(
-                (m for m in (channel_messages or {}).get(row["channel_id"]) or []
-                 if str(m.get("ts")) == str(ask_ts)),
+                (m for m in channel_pool if str(m.get("ts")) == str(ask_ts)),
                 None,
             )
-        uid = row["target_id"]
-        if ask and _reacted(uid, ask):
+        effect = "none"
+        if ask:
+            effect = _reaction_effect(ask, row["target_id"], row.get("text") or "")
+        if effect != "resolved":
+            seen_ts = set()
+            sources = []
+            if messages is not None:
+                sources.append((messages, True))
+            sources.append((channel_pool, False))
+            for source, source_is_thread in sources:
+                for message in source:
+                    mid = str(message.get("ts") or "")
+                    if mid in seen_ts:
+                        continue
+                    seen_ts.add(mid)
+                    try:
+                        later = float(message.get("ts") or 0) > float(ask_ts)
+                    except (TypeError, ValueError):
+                        later = False
+                    if not later or not is_human_message(message):
+                        continue
+                    reply_effect = _reply_effect(
+                        message.get("text") or "", row.get("text") or "")
+                    in_thread = source_is_thread or _in_thread(
+                        message, row["thread_ts"])
+                    from_owner = message.get("user") == row["target_id"]
+                    if in_thread and from_owner and reply_effect == "substantive":
+                        reply_effect = "resolved"
+                    if in_thread and reply_effect == "resolved":
+                        effect = "resolved"
+                        break
+                    if in_thread and from_owner and reply_effect == "acknowledged":
+                        effect = "acknowledged"
+                        continue
+                    if (not in_thread and reply_effect == "resolved"
+                            and _same_topic(message.get("text") or "",
+                                            row.get("text") or "")):
+                        effect = "resolved"
+                        break
+                if effect == "resolved":
+                    break
+        if effect == "resolved":
             continue
-        if any(_reply_after(m, uid, ask_ts)
-               for m in by_channel.get(row["channel_id"]) or []):
-            continue
-        kept.append(row)
+        updated = dict(row)
+        if effect == "acknowledged":
+            updated["status"] = "acknowledged"
+        kept.append(updated)
     return kept
 
 
 def collapse_threads(rows: list) -> list:
-    """One row per person per thread: the latest ask they still haven't
-    answered. A single reply already cleared the earlier ones."""
+    """One row per person per thread. A later follow-up keeps the original
+    request text so a reminder does not become a second item."""
     best = {}
     for row in rows:
         key = (row["channel_id"], row["thread_ts"], row["target_id"])
         prev = best.get(key)
-        if prev is None or float(row["created_at"]) >= float(prev["created_at"]):
+        if prev is None:
             best[key] = row
+            continue
+        newer = row if float(row["created_at"]) >= float(prev["created_at"]) else prev
+        older = prev if newer is row else row
+        if newer.get("kind") == "followup":
+            kept = dict(older)
+            if newer.get("status") == "acknowledged":
+                kept["status"] = "acknowledged"
+            best[key] = kept
+        else:
+            best[key] = newer
     return sorted(best.values(), key=lambda r: (r["target_id"], r["created_at"]))
+
+
+def consolidate_requests(rows: list) -> list:
+    """Fold reminders and same-subject requests into one item per person
+    per case channel. Distinct tasks in that channel stay separate."""
+    grouped = {}
+    for row in sorted(rows, key=lambda r: float(r["created_at"])):
+        grouped.setdefault((row["channel_id"], row["target_id"]), []).append(row)
+    kept = []
+    for items in grouped.values():
+        merged = []
+        for row in items:
+            host = next((prev for prev in merged if _same_request(prev, row)), None)
+            if host is None:
+                merged.append(dict(row))
+                continue
+            extra = _topic_tokens(row.get("text") or "") - _topic_tokens(
+                host.get("text") or "")
+            if extra:
+                host["text"] = (host.get("text") or "").rstrip() + "\n" + (
+                    row.get("text") or "")
+            if row.get("status") == "acknowledged":
+                host["status"] = "acknowledged"
+        kept.extend(merged)
+    return kept
+
+
+def _same_request(prev: dict, row: dict) -> bool:
+    if row.get("kind") == "followup" or prev.get("kind") == "followup":
+        return True
+    if prev.get("thread_ts") and prev.get("thread_ts") == row.get("thread_ts"):
+        return True
+    return _same_topic(prev.get("text") or "", row.get("text") or "")
 
 
 def format_clock(dt: datetime) -> str:
@@ -511,6 +830,7 @@ def rows_for_email(waiting: list, directory: TeamDirectory, workspace: str,
                 "when": format_when(row["created_at"], tz),
                 "when_ts": float(row["created_at"]),
                 "snippet": personalized_excerpt(row.get("text") or "", directory),
+                "status": row.get("status") or "open",
                 "link": email_reports.permalink(
                     workspace, channel_id, row["message_ts"],
                     row.get("thread_ts") or "",
@@ -743,9 +1063,12 @@ def collect_candidates(client, directory: TeamDirectory,
         if i % 100 == 0:
             log.info("unanswered scan: %d/%d case channels", i, len(channels))
         parents_needing_replies = []
-        for message in history:
+        ordered = sorted(history, key=lambda m: float(m.get("ts") or 0))
+        for message in ordered:
+            context = _prior_text(message, ordered)
             for row in candidates_from_message(
-                    message, directory, start, end, ch["id"], ch["name"]):
+                    message, directory, start, end, ch["id"], ch["name"],
+                    context):
                 by_key[(row["channel_id"], row["message_ts"], row["target_id"])] = row
             if int(message.get("reply_count") or 0) > 0 and message.get("ts"):
                 parents_needing_replies.append(str(message["ts"]))
@@ -759,9 +1082,13 @@ def collect_candidates(client, directory: TeamDirectory,
                 )
                 continue
             threads[(ch["id"], parent_ts)] = replies
-            for message in replies:
+            ordered_replies = sorted(
+                replies, key=lambda m: float(m.get("ts") or 0))
+            for message in ordered_replies:
+                context = _prior_text(message, ordered_replies)
                 for row in candidates_from_message(
-                        message, directory, start, end, ch["id"], ch["name"]):
+                        message, directory, start, end, ch["id"], ch["name"],
+                        context):
                     by_key[(row["channel_id"], row["message_ts"], row["target_id"])] = row
 
     # Thread replies on parents older than the window are not in history.
@@ -791,6 +1118,34 @@ def collect_candidates(client, directory: TeamDirectory,
         "channels_ok": ok,
         "channels_failed": failed,
     }
+
+
+def _prior_text(message: dict, ordered: list) -> str:
+    """The message this one points at: the previous reply in its thread,
+    otherwise the previous message in the channel."""
+    try:
+        ts = float(message.get("ts") or 0)
+    except (TypeError, ValueError):
+        return ""
+    prior = []
+    for older in ordered:
+        try:
+            older_ts = float(older.get("ts") or 0)
+        except (TypeError, ValueError):
+            continue
+        if older_ts < ts and (older.get("text") or ""):
+            prior.append(older)
+    if not prior:
+        return ""
+    thread = str(message.get("thread_ts") or "")
+    if thread:
+        same = [
+            older for older in prior
+            if str(older.get("thread_ts") or older.get("ts") or "") == thread
+        ]
+        if same:
+            return same[-1].get("text") or ""
+    return prior[-1].get("text") or ""
 
 
 def _ensure_threads(client, candidates: list, threads: dict) -> None:
@@ -998,8 +1353,8 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
         candidates = gathered["candidates"]
         threads = gathered["threads"]
         _ensure_threads(client, candidates, threads)
-        waiting = collapse_threads(still_waiting(
-            candidates, threads, gathered.get("channel_messages")))
+        waiting = consolidate_requests(collapse_threads(still_waiting(
+            candidates, threads, gathered.get("channel_messages"))))
         try:
             storage.upsert_unanswered_asks(candidates)
             storage.prune_unanswered_asks(time.time() - 21 * 86400)
@@ -1027,14 +1382,14 @@ def _send_report(client, slot: datetime, recipients: list, sender: str, *,
         people = len(counts)
         if email_rows:
             subject = (
-                f"{subject_prefix}Unanswered Slack asks — "
+                f"{subject_prefix}Unresolved Slack requests — "
                 f"{slot.strftime('%a %b ')}{slot.day}"
                 f" — {open_items} open across {people} "
                 f"{'person' if people == 1 else 'people'}"
             )
         else:
             subject = (
-                f"{subject_prefix}Unanswered Slack asks — "
+                f"{subject_prefix}Unresolved Slack requests — "
                 f"{slot.strftime('%a %b ')}{slot.day}"
                 f" — all clear"
             )
